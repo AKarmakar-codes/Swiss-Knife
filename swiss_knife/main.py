@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--blade", type=str, default="helpfulness",
-        choices=["helpfulness", "truthfulness"],
+        choices=["helpfulness", "harmlessness", "truthfulness"],
         help="Active alignment blade (default: helpfulness).",
     )
     p.add_argument(
@@ -72,6 +72,27 @@ def parse_args() -> argparse.Namespace:
         help="Compute dtype (default: float16).",
     )
     p.add_argument(
+        "--blade-bias", type=float, default=0.0,
+        help="Additive offset on every blade score before the tournament. "
+             "Use to test calibration invariance — the chosen text should "
+             "not change as this value varies.",
+    )
+    p.add_argument(
+        "--no-normalize", dest="normalize_scores", action="store_false",
+        default=True,
+        help="Disable per-round z-score normalisation of the draft and "
+             "blade score tensors. By default normalisation is ON; it "
+             "fixes the scale mismatch that otherwise drowns out the "
+             "blade signal. Use --no-normalize for the pristine kernel-"
+             "level calibration-invariance test.",
+    )
+    p.add_argument(
+        "--scores-log", type=str, default="",
+        help="Optional JSONL path. When set, each tournament round appends "
+             "one line with raw + post-normalisation score vectors and the "
+             "winner index. Used for plotting.",
+    )
+    p.add_argument(
         "--verbose", action="store_true",
         help="Print per-round tournament details.",
     )
@@ -99,6 +120,9 @@ def main():
         temperature=args.temperature,
         seed=args.seed,
         dtype=args.dtype,
+        blade_bias=args.blade_bias,
+        normalize_scores=args.normalize_scores,
+        scores_log=args.scores_log,
     )
 
     # ── Reproducibility ────────────────────────────────────────────────

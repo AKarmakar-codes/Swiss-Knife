@@ -4,14 +4,19 @@ Swiss Knife — Configuration
 All hyperparameters and model identifiers in one place.
 
 NOTE ON BASE MODEL:
-    The DPO adapters at MGPGRAD/Swiss-Knife were trained on a
-    Qwen2.5-based SFT-merged checkpoint, NOT on Llama-3.2-1B.
-    The adapter_config.json specifies:
-        base_model_name_or_path: ./ndna_data/SFT/Qwen_SFT_merged
-    which is a Qwen2ForCausalLM (hidden=3584, 28 layers, vocab=152064).
-    This SFT-merged model is hosted ungated at:
+    The DPO adapters at MGPGRAD/Swiss-Knife and divyajot5005/ndna were
+    trained on a Qwen2.5-based SFT-merged checkpoint (Qwen2ForCausalLM,
+    hidden=3584, 28 layers, vocab=152064). The SFT-merged model is hosted
+    ungated as a HuggingFace *dataset* at:
         divyajot5005/ndna  →  SFT/Qwen_SFT_merged/
-    We load it as a HuggingFace dataset-hosted model (no gating).
+    We load it via snapshot_download (no gating).
+
+NOTE ON BLADES:
+    Blades are heterogeneous in where they live on the HF Hub:
+      • helpfulness  — model repo  MGPGRAD/Swiss-Knife
+      • harmlessness — dataset repo divyajot5005/ndna
+    So each blade entry carries (repo_id, repo_type, subfolder). The
+    loader downloads to a local path before calling PeftModel.
 """
 
 from dataclasses import dataclass, field
@@ -30,14 +35,25 @@ class SwissKnifeConfig:
     base_model_subfolder: str = "SFT/Qwen_SFT_merged"
     """Subfolder within base_model_id containing the full model weights."""
 
-    blade_repo_id: str = "MGPGRAD/Swiss-Knife"
-    """HuggingFace repo containing the DPO adapter checkpoints."""
-
-    blade_subfolder_map: Dict[str, str] = field(default_factory=lambda: {
-        "helpfulness": "dpo_out/hh_helpfulness/final_adapter",
-        "truthfulness": "dpo_out/truthfulness/final_adapter",
+    blade_sources: Dict[str, Dict[str, str]] = field(default_factory=lambda: {
+        "helpfulness": {
+            "repo_id":    "MGPGRAD/Swiss-Knife",
+            "repo_type":  "model",
+            "subfolder":  "dpo_out/hh_helpfulness/final_adapter",
+        },
+        "harmlessness": {
+            "repo_id":    "divyajot5005/ndna",
+            "repo_type":  "dataset",
+            "subfolder":  "SFT/qwen25_dpo_output/final_dpo_adapter",
+        },
+        "truthfulness": {
+            "repo_id":    "MGPGRAD/Swiss-Knife",
+            "repo_type":  "model",
+            "subfolder":  "dpo_out/truthfulness/final_adapter",
+        },
     })
-    """Maps human-readable blade names → subfolder paths within *blade_repo_id*."""
+    """Per-blade source descriptor: (repo_id, repo_type, subfolder).
+    repo_type ∈ {"model", "dataset"} — controls which Hub API is used."""
 
     # ── Tournament hyperparameters ──────────────────────────────────────
     K: int = 8
@@ -83,6 +99,25 @@ class SwissKnifeConfig:
 
     seed: int = 42
     """Random seed for reproducibility."""
+
+    blade_bias: float = 0.0
+    """Additive constant added to every blade score before the tournament.
+    Used to empirically verify calibration invariance: the winner should
+    be unchanged regardless of this value (pairwise differences cancel)."""
+
+    normalize_scores: bool = True
+    """Per-round z-score normalisation of both score tensors before the
+    bracket. Fixes the scale mismatch between draft span log-likelihoods
+    (O(10–100)) and DPO blade rewards (O(0.001–0.1)) that otherwise lets
+    the draft term swamp the blade term at every α > 0. Set to False to
+    reproduce the pristine paper-equation behaviour (useful for the
+    kernel-level calibration-invariance test in Demo 6)."""
+
+    scores_log: str = ""
+    """Optional path to a JSONL file. When non-empty, every tournament
+    round appends one JSON line with raw + post-normalisation draft and
+    blade score vectors and the winner index. Used by make_plots.py to
+    visualise the score-scale mismatch."""
 
     def __post_init__(self):
         assert 0.0 <= self.alpha <= 1.0, f"α must be in [0,1], got {self.alpha}"

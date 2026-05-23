@@ -57,15 +57,20 @@ def _resolve_dtype(cfg: SwissKnifeConfig) -> torch.dtype:
     return dtype
 
 
-def _resolve_device(cfg: SwissKnifeConfig) -> str:
-    """Resolve the device string, auto-falling back to CPU if no GPU."""
+def _resolve_device(cfg: SwissKnifeConfig):
+    """Resolve device for ``from_pretrained``.
+
+    Returns ``{'': 0}`` on GPU to pin the entire model onto cuda:0 (rather
+    than letting accelerate shard layers across CPU/GPU). Sharding produces
+    index-vs-tensor device mismatches in the candidate-scoring forward
+    passes. With 13 GB total VRAM needed (two bf16 copies of Qwen2.5-3B),
+    pinning is safe on any GPU with ≥16 GB free."""
     if cfg.device == "auto":
         if torch.cuda.is_available():
-            logger.info("CUDA GPU detected — using device_map='auto'")
-            return "auto"
-        else:
-            logger.info("No CUDA GPU — using CPU. Expect slow inference.")
-            return "cpu"
+            logger.info("CUDA GPU detected — pinning model to cuda:0")
+            return {"": 0}
+        logger.info("No CUDA GPU — using CPU. Expect slow inference.")
+        return "cpu"
     return cfg.device
 
 
@@ -157,29 +162,39 @@ def load_blade_model(
 ) -> PeftModel:
     """Load a DPO LoRA adapter (blade) on a fresh copy of the base model.
 
+    Supports adapters hosted in either a HuggingFace *model* repo (passed
+    directly to PeftModel) or a *dataset* repo (downloaded first via
+    snapshot_download, since PEFT does not understand dataset repos).
+
     Parameters
     ----------
     blade_name : str
-        Key into ``cfg.blade_subfolder_map``, e.g. ``"helpfulness"``
-        or ``"truthfulness"``.
+        Key into ``cfg.blade_sources``. E.g. ``"helpfulness"``,
+        ``"harmlessness"``, ``"truthfulness"``.
 
     Returns
     -------
     PeftModel
-        The base model + LoRA adapter.
-        Forward passes through this model yield π_blade.
+        Base model + LoRA adapter. Forward passes yield π_blade.
     """
-    if blade_name not in cfg.blade_subfolder_map:
+    if blade_name not in cfg.blade_sources:
         raise ValueError(
             f"Unknown blade '{blade_name}'. "
-            f"Available: {list(cfg.blade_subfolder_map)}"
+            f"Available: {list(cfg.blade_sources)}"
         )
-    subfolder = cfg.blade_subfolder_map[blade_name]
+    source = cfg.blade_sources[blade_name]
+    repo_id   = source["repo_id"]
+    repo_type = source["repo_type"]
+    subfolder = source["subfolder"]
+
     model_path = _download_base_model(cfg)
     dtype = _resolve_dtype(cfg)
     device = _resolve_device(cfg)
 
-    logger.info("Loading blade '%s' base copy [dtype=%s, device=%s]...", blade_name, dtype, device)
+    logger.info(
+        "Loading blade '%s' base copy [dtype=%s, device=%s]...",
+        blade_name, dtype, device,
+    )
     base_for_blade = AutoModelForCausalLM.from_pretrained(
         model_path,
         torch_dtype=dtype,
@@ -187,13 +202,40 @@ def load_blade_model(
         trust_remote_code=True,
     )
 
-    logger.info("Attaching LoRA adapter from %s / %s ...", cfg.blade_repo_id, subfolder)
-    blade_model = PeftModel.from_pretrained(
-        base_for_blade,
-        cfg.blade_repo_id,
-        subfolder=subfolder,
-        torch_dtype=dtype,
-    )
+    if repo_type == "model":
+        logger.info(
+            "Attaching LoRA adapter from model repo %s / %s ...",
+            repo_id, subfolder,
+        )
+        blade_model = PeftModel.from_pretrained(
+            base_for_blade,
+            repo_id,
+            subfolder=subfolder,
+            torch_dtype=dtype,
+        )
+    elif repo_type == "dataset":
+        logger.info(
+            "Downloading dataset-hosted adapter %s / %s ...",
+            repo_id, subfolder,
+        )
+        local_dir = snapshot_download(
+            repo_id=repo_id,
+            repo_type="dataset",
+            allow_patterns=[f"{subfolder}/*"],
+        )
+        adapter_path = os.path.join(local_dir, subfolder)
+        logger.info("Attaching LoRA adapter from local path: %s", adapter_path)
+        blade_model = PeftModel.from_pretrained(
+            base_for_blade,
+            adapter_path,
+            torch_dtype=dtype,
+        )
+    else:
+        raise ValueError(
+            f"Unknown repo_type '{repo_type}' for blade '{blade_name}'. "
+            f"Expected 'model' or 'dataset'."
+        )
+
     blade_model.eval()
     for param in blade_model.parameters():
         param.requires_grad = False

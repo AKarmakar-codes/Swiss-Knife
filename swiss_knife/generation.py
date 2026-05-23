@@ -16,6 +16,7 @@ The loop terminates when:
     - every candidate in a round contains EOS (nothing useful to append).
 """
 
+import json
 import logging
 from typing import List, Optional, Tuple
 
@@ -194,10 +195,59 @@ class SwissKnifeGenerator:
                 current_ids, current_mask, candidates,
             )
 
+            # Snapshot raw (pre-bias, pre-normalisation) scores for the
+            # scores-log dump. Used by make_plots.py to visualise the
+            # raw scale mismatch between draft and blade.
+            draft_raw = draft_scores.detach().float().cpu().tolist()
+            blade_raw = blade_scores.detach().float().cpu().tolist()
+
+            # Diagnostic: log the per-round scale of both score tensors.
+            # If draft std ≫ blade std without normalisation, the bracket
+            # is effectively running on draft-argmax — a bug, not a feature.
+            logger.debug(
+                "scales | draft μ=%.3f σ=%.3f range=[%.3f,%.3f] | "
+                "blade μ=%.5f σ=%.5f range=[%.5f,%.5f]",
+                draft_scores.mean().item(), draft_scores.std().item(),
+                draft_scores.min().item(), draft_scores.max().item(),
+                blade_scores.mean().item(), blade_scores.std().item(),
+                blade_scores.min().item(), blade_scores.max().item(),
+            )
+
+            # Calibration-invariance probe: add a constant offset to all
+            # blade scores. Pairwise differences cancel it, so the winner
+            # should be unchanged. Use --blade-bias from CLI to verify.
+            if self.cfg.blade_bias != 0.0:
+                blade_scores = blade_scores + self.cfg.blade_bias
+
+            # Per-round z-score normalisation. Brings draft and blade
+            # tensors onto a comparable scale so α actually controls the
+            # mix instead of being dominated by the larger-magnitude
+            # tensor. Z-scoring is itself shift-invariant, so the
+            # calibration-invariance property of pairwise selection is
+            # preserved at every α. Disable with --no-normalize to test
+            # the kernel-level invariance on raw scores.
+            if self.cfg.normalize_scores:
+                draft_scores = (draft_scores - draft_scores.mean()) / (draft_scores.std() + 1e-6)
+                blade_scores = (blade_scores - blade_scores.mean()) / (blade_scores.std() + 1e-6)
+
             # ── Step 4: w ← KnockoutBracket(C, s_d, s_b, α) ─────────
             winner_idx = knockout_bracket(
                 draft_scores, blade_scores, self.cfg.alpha,
             )
+
+            # Optional JSONL dump of per-round score vectors for plotting.
+            if self.cfg.scores_log:
+                with open(self.cfg.scores_log, "a", encoding="utf-8") as fh:
+                    fh.write(json.dumps({
+                        "round":      round_count,
+                        "alpha":      self.cfg.alpha,
+                        "normalized": bool(self.cfg.normalize_scores),
+                        "draft_raw":  draft_raw,
+                        "blade_raw":  blade_raw,
+                        "draft_used": draft_scores.detach().float().cpu().tolist(),
+                        "blade_used": blade_scores.detach().float().cpu().tolist(),
+                        "winner":     int(winner_idx),
+                    }) + "\n")
 
             # ── Step 5: y ← y ⊕ C[w] ────────────────────────────────
             winning_span = candidates[winner_idx]
