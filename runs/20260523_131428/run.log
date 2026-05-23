@@ -1,0 +1,107 @@
+
+====================================================================
+  ENVIRONMENT
+====================================================================
+[13:14:28] Run dir : runs/20260523_131428
+[13:14:28] Seed    : 42
+[13:14:28] Dtype   : bfloat16
+[13:14:28] MaxTok  : 120
+[13:14:28] Python  : Python 3.12.13
+[13:14:28] Host    : e7e45279d35a
+[13:14:28] GPU     : NVIDIA GeForce RTX 4090, 49140 MiB, 48519 MiB
+[13:14:28] Git rev : ad80e75
+[13:14:28] Blades  : helpfulness (MGPGRAD/Swiss-Knife), harmlessness (divyajot5005/ndna)
+[13:14:28] Default : normalize_scores=True (per-round z-score)
+
+====================================================================
+  DEMO 1 — Tournament kernel unit tests
+====================================================================
+[13:14:28]   → tournament unit tests
+[13:14:30]     ✓ done in 2s   → runs/20260523_131428/demo1_unit_tests.log
+
+====================================================================
+  DEMO 2 — α sweep (steering gradient, normalized scores)
+====================================================================
+[13:14:30]   → α=1.0
+[13:14:56]     ✓ done in 26s   → runs/20260523_131428/demo2_alpha_sweep/alpha_1.0.txt
+[13:14:56]   → α=0.7
+[13:15:22]     ✓ done in 26s   → runs/20260523_131428/demo2_alpha_sweep/alpha_0.7.txt
+[13:15:22]   → α=0.5
+[13:15:48]     ✓ done in 26s   → runs/20260523_131428/demo2_alpha_sweep/alpha_0.5.txt
+[13:15:48]   → α=0.3
+[13:16:13]     ✓ done in 25s   → runs/20260523_131428/demo2_alpha_sweep/alpha_0.3.txt
+[13:16:13]   → α=0.0
+[13:16:40]     ✓ done in 27s   → runs/20260523_131428/demo2_alpha_sweep/alpha_0.0.txt
+
+====================================================================
+  DEMO 3 — Blade switchability (helpfulness × harmlessness)
+====================================================================
+[13:16:40]   → p0 blade=helpfulness
+[13:17:06]     ✓ done in 26s   → runs/20260523_131428/demo3_switchability/p0_helpfulness.txt
+[13:17:06]   → p0 blade=harmlessness
+[13:17:37]     ✓ done in 31s   → runs/20260523_131428/demo3_switchability/p0_harmlessness.txt
+[13:17:37]   → p1 blade=helpfulness
+[13:18:03]     ✓ done in 26s   → runs/20260523_131428/demo3_switchability/p1_helpfulness.txt
+[13:18:03]   → p1 blade=harmlessness
+[13:18:29]     ✓ done in 26s   → runs/20260523_131428/demo3_switchability/p1_harmlessness.txt
+[13:18:29]   → p2 blade=helpfulness
+[13:18:56]     ✓ done in 27s   → runs/20260523_131428/demo3_switchability/p2_helpfulness.txt
+[13:18:56]   → p2 blade=harmlessness
+[13:19:23]     ✓ done in 27s   → runs/20260523_131428/demo3_switchability/p2_harmlessness.txt
+
+====================================================================
+  DEMO 4 — Override-rate quantification
+====================================================================
+[13:19:23]   → runs/20260523_131428/demo4_override_rates.txt
+
+====================================================================
+  DEMO 5 — K sweep (latency vs candidate count)
+====================================================================
+[13:19:23]   → K=2
+[13:19:42]     ✓ done in 19s   → runs/20260523_131428/demo5_K_sweep/K2.txt
+[13:19:42]   → K=4
+[13:20:01]     ✓ done in 19s   → runs/20260523_131428/demo5_K_sweep/K4.txt
+[13:20:01]   → K=8
+[13:20:22]     ✓ done in 21s   → runs/20260523_131428/demo5_K_sweep/K8.txt
+[13:20:22]   → K=16
+[13:20:44]     ✓ done in 22s   → runs/20260523_131428/demo5_K_sweep/K16.txt
+
+====================================================================
+  DEMO 6 — Empirical calibration invariance (raw scores)
+====================================================================
+[13:20:44]   → blade-bias=0 (no-normalize, α=0)
+[13:21:04]     ✓ done in 20s   → runs/20260523_131428/demo6_calibration/bias_0.txt
+[13:21:04]   → blade-bias=100 (no-normalize, α=0)
+[13:21:24]     ✓ done in 20s   → runs/20260523_131428/demo6_calibration/bias_100.txt
+[13:21:24]   → blade-bias=1000 (no-normalize, α=0)
+[13:21:44]     ✓ done in 20s   → runs/20260523_131428/demo6_calibration/bias_1000.txt
+[13:21:44]   → blade-bias=10000 (no-normalize, α=0)
+[13:22:04]     ✓ done in 20s   → runs/20260523_131428/demo6_calibration/bias_10000.txt
+
+====================================================================
+  GENERATING PLOTS
+====================================================================
+  ✓ runs/20260523_131428/plots/alpha_override_curve.png
+  ✓ runs/20260523_131428/plots/K_latency.png
+  ✓ runs/20260523_131428/plots/score_scales.png
+  ✓ runs/20260523_131428/plots/calibration_invariance.png
+
+Generated 4 plot(s) in runs/20260523_131428/plots/
+
+====================================================================
+  GENERATING SUMMARY REPORT
+====================================================================
+[13:22:06]   → runs/20260523_131428/SUMMARY.md
+
+====================================================================
+  ALL DEMOS COMPLETE
+====================================================================
+[13:22:06] Results : runs/20260523_131428/
+[13:22:06] Summary : runs/20260523_131428/SUMMARY.md
+[13:22:06] Plots   : runs/20260523_131428/plots/
+[13:22:06] 
+[13:22:06] Quick view:
+[13:22:06]     cat runs/20260523_131428/SUMMARY.md
+[13:22:06]     cat runs/20260523_131428/demo4_override_rates.txt
+[13:22:06]     ls  runs/20260523_131428/plots/
+[13:22:06] 

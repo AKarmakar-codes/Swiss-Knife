@@ -1,0 +1,55 @@
+========================================================================
+  Swiss Knife — Decode-Time Alignment via Tournament Sampling
+  Option A: Non-Speculative Best-of-K Tournament
+========================================================================
+  Base model : divyajot5005/ndna/SFT/Qwen_SFT_merged
+  Blade      : helpfulness
+  α (mix)    : 0.0
+  β (DPO)    : 0.1
+  K (cands)  : 8
+  L (span)   : 5
+  Max tokens : 60
+  Dtype      : bfloat16
+  Device     : CUDA
+------------------------------------------------------------------------
+  Prompt     : Explain AI alignment to a beginner.
+========================================================================
+
+⏳ Loading models...
+13:21:48 │ swiss_knife.models        │ INFO  │ Downloading base model from dataset repo: divyajot5005/ndna / SFT/Qwen_SFT_merged
+13:21:48 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/revision/main "HTTP/1.1 200 OK"
+13:21:48 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+13:21:48 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D "HTTP/1.1 200 OK"
+Fetching ... files: 0it [00:00, ?it/s]Fetching ... files: 14it [00:00, 30615.36it/s]
+13:21:48 │ swiss_knife.models        │ INFO  │ Base model cached at: /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+13:21:48 │ swiss_knife.models        │ INFO  │ Loading tokenizer from: /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+13:21:49 │ swiss_knife.models        │ INFO  │ CUDA GPU detected — pinning model to cuda:0
+13:21:49 │ swiss_knife.models        │ INFO  │ Loading base model (draft + ref): /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged  [dtype=torch.bfloat16, device={'': 0}]
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/339 [00:00<?, ?it/s]Loading weights:   0%|          | 1/339 [00:00<01:52,  3.01it/s]Loading weights:   1%|          | 2/339 [00:00<01:07,  4.98it/s]Loading weights:   5%|▌         | 17/339 [00:00<00:07, 44.46it/s]Loading weights:   9%|▊         | 29/339 [00:00<00:04, 63.01it/s]Loading weights:  14%|█▍        | 48/339 [00:00<00:03, 94.56it/s]Loading weights:  19%|█▉        | 64/339 [00:00<00:02, 97.96it/s]Loading weights:  23%|██▎       | 78/339 [00:01<00:02, 103.10it/s]Loading weights:  27%|██▋       | 90/339 [00:01<00:02, 104.47it/s]Loading weights:  33%|███▎      | 112/339 [00:01<00:01, 117.99it/s]Loading weights:  37%|███▋      | 124/339 [00:01<00:01, 117.32it/s]Loading weights:  40%|████      | 137/339 [00:01<00:01, 108.04it/s]Loading weights:  44%|████▍     | 150/339 [00:01<00:01, 112.69it/s]Loading weights:  48%|████▊     | 162/339 [00:01<00:01, 112.12it/s]Loading weights:  51%|█████▏    | 174/339 [00:01<00:01, 114.16it/s]Loading weights:  55%|█████▌    | 187/339 [00:02<00:01, 117.69it/s]Loading weights:  59%|█████▊    | 199/339 [00:02<00:01, 115.31it/s]Loading weights:  64%|██████▍   | 218/339 [00:02<00:00, 135.50it/s]Loading weights:  68%|██████▊   | 232/339 [00:02<00:00, 113.08it/s]Loading weights:  72%|███████▏  | 245/339 [00:02<00:00, 115.03it/s]Loading weights:  76%|███████▌  | 258/339 [00:02<00:00, 110.50it/s]Loading weights:  80%|███████▉  | 270/339 [00:02<00:00, 111.01it/s]Loading weights:  83%|████████▎ | 282/339 [00:02<00:00, 111.20it/s]Loading weights:  87%|████████▋ | 294/339 [00:02<00:00, 109.68it/s]Loading weights:  90%|█████████ | 306/339 [00:03<00:00, 108.80it/s]Loading weights:  94%|█████████▍| 318/339 [00:03<00:00, 110.19it/s]Loading weights:  97%|█████████▋| 330/339 [00:03<00:00, 111.19it/s]Loading weights: 100%|██████████| 339/339 [00:03<00:00, 103.53it/s]
+13:21:53 │ swiss_knife.models        │ INFO  │ Base model loaded and frozen. Params: 7,615,616,512
+13:21:53 │ swiss_knife.models        │ INFO  │ CUDA GPU detected — pinning model to cuda:0
+13:21:53 │ swiss_knife.models        │ INFO  │ Loading blade 'helpfulness' base copy [dtype=torch.bfloat16, device={'': 0}]...
+Loading weights:   0%|          | 0/339 [00:00<?, ?it/s]Loading weights:   0%|          | 1/339 [00:00<03:25,  1.64it/s]Loading weights:   5%|▌         | 17/339 [00:00<00:10, 31.25it/s]Loading weights:  12%|█▏        | 40/339 [00:00<00:04, 68.20it/s]Loading weights:  16%|█▌        | 53/339 [00:00<00:03, 77.37it/s]Loading weights:  22%|██▏       | 75/339 [00:01<00:02, 109.87it/s]Loading weights:  27%|██▋       | 91/339 [00:01<00:02, 103.84it/s]Loading weights:  32%|███▏      | 108/339 [00:01<00:01, 117.32it/s]Loading weights:  37%|███▋      | 124/339 [00:01<00:01, 111.26it/s]Loading weights:  40%|████      | 137/339 [00:01<00:01, 115.03it/s]Loading weights:  44%|████▍     | 150/339 [00:01<00:01, 110.49it/s]Loading weights:  50%|████▉     | 168/339 [00:01<00:01, 126.68it/s]Loading weights:  54%|█████▍    | 184/339 [00:01<00:01, 122.84it/s]Loading weights:  58%|█████▊    | 197/339 [00:02<00:01, 111.07it/s]Loading weights:  62%|██████▏   | 209/339 [00:02<00:01, 110.90it/s]Loading weights:  65%|██████▌   | 221/339 [00:02<00:01, 112.24it/s]Loading weights:  72%|███████▏  | 244/339 [00:02<00:00, 121.44it/s]Loading weights:  76%|███████▌  | 257/339 [00:02<00:00, 116.56it/s]Loading weights:  82%|████████▏ | 278/339 [00:02<00:00, 138.30it/s]Loading weights:  86%|████████▋ | 293/339 [00:02<00:00, 117.50it/s]Loading weights:  93%|█████████▎| 314/339 [00:03<00:00, 138.41it/s]Loading weights:  97%|█████████▋| 329/339 [00:03<00:00, 119.86it/s]Loading weights: 100%|██████████| 339/339 [00:03<00:00, 105.09it/s]
+13:21:57 │ swiss_knife.models        │ INFO  │ Attaching LoRA adapter from model repo MGPGRAD/Swiss-Knife / dpo_out/hh_helpfulness/final_adapter ...
+13:21:57 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+13:21:57 │ huggingface_hub.utils._http │ WARNING │ Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+13:21:57 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/MGPGRAD/Swiss-Knife/dd68a07e6cc18b879a0703381dbcdbbbfd58b533/dpo_out%2Fhh_helpfulness%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+13:21:57 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+13:21:57 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/MGPGRAD/Swiss-Knife/dd68a07e6cc18b879a0703381dbcdbbbfd58b533/dpo_out%2Fhh_helpfulness%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+13:21:58 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+13:21:58 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+13:21:59 │ swiss_knife.models        │ INFO  │ Blade 'helpfulness' loaded. LoRA params: 40,370,176
+✓ Models loaded in 10.8s
+
+⏳ Generating with tournament sampling...
+
+
+========================================================================
+  GENERATED OUTPUT
+========================================================================
+Explain AI alignment to a beginner. AI alignment is the idea that AI systems need to be aligned with the goals and values of the people that use them. In other words, an AI system needs to be programmed to act in accordance with human goals and values. For example, if an AI is being used for medical research, it should
+========================================================================
+  Generation time: 4.2s
+========================================================================
