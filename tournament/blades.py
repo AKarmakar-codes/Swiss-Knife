@@ -9,6 +9,12 @@ where π_blade is the LoRA-adapted model and π_ref is the bare base model.
 
 Both log-probabilities are computed per-token, then summed over the span
 to produce a single scalar score per candidate.
+
+Option B adds two key methods:
+  - score_parallel([gamma, K]):  score all candidate tokens at all gamma
+    positions in ONE forward pass each (blade + ref). Returns [gamma, K] tensor.
+  - target_logprob_parallel([gamma, K]): extract target log-probs for all
+    candidates from a single forward pass. Returns [gamma, K] tensor.
 """
 
 import logging
@@ -238,3 +244,151 @@ class DPOBlade:
             self.base_model, padded_ids, padded_mask, span_start=prompt_len,
         )
         return draft_scores  # [K]
+
+    # ── Option B: parallel [gamma, K] scoring ───────────────────────────────
+
+    @torch.no_grad()
+    def score_parallel(
+        self,
+        context_ids: torch.Tensor,
+        candidate_matrix: torch.Tensor,
+    ) -> torch.Tensor:
+        """Score all [gamma, K] candidate tokens in ONE forward pass per model.
+
+        This is the key efficiency method for Option B. The draft produces a
+        [gamma, K] tensor of candidate token IDs (top-K at each of the gamma
+        draft positions). We need the blade reward r_blade(D[i,k] | prefix_i)
+        for every (position i, candidate k) pair.
+
+        Strategy:
+          1. Run the blade model on the shared greedy prefix
+             (context + draft_greedy_path = context + D[:,0]).
+          2. At each position i, the model's output logit at step (context_len + i - 1)
+             gives the distribution over next tokens conditioned on the prefix up to i.
+          3. Index into the K candidates for position i to get K log-probs.
+          4. Repeat for the ref (base) model.
+          5. blade_reward[i,k] = beta * (log_pi_blade[i,k] - log_pi_ref[i,k]).
+
+        This runs exactly 2 forward passes (blade + ref) regardless of gamma and K.
+
+        Parameters
+        ----------
+        context_ids : torch.Tensor
+            Shape ``[1, context_len]`` — the prompt + generated prefix so far.
+        candidate_matrix : torch.Tensor
+            Shape ``[gamma, K]`` — candidate token IDs.
+            candidate_matrix[i, 0] is the draft's greedy token at position i.
+            candidate_matrix[i, k] for k>0 are alternative top-K tokens.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``[gamma, K]`` — r_blade(D[i,k] | prefix_i) for all (i,k).
+        """
+        gamma, K = candidate_matrix.shape
+        context_len = context_ids.shape[1]
+        device = context_ids.device
+
+        # Build the greedy sequence: [context, D[0,0], D[1,0], ..., D[gamma-1,0]]
+        greedy_tokens = candidate_matrix[:, 0]  # [gamma]
+        full_ids = torch.cat([
+            context_ids.squeeze(0),
+            greedy_tokens,
+        ], dim=0).unsqueeze(0)  # [1, context_len + gamma]
+        full_mask = torch.ones_like(full_ids)
+
+        # Forward pass: blade and ref (base) model in sequence
+        blade_logits = self.blade_model(
+            input_ids=full_ids, attention_mask=full_mask
+        ).logits.squeeze(0)  # [context_len + gamma, vocab_size]
+
+        ref_logits = self.base_model(
+            input_ids=full_ids, attention_mask=full_mask
+        ).logits.squeeze(0)  # [context_len + gamma, vocab_size]
+
+        # Extract position-specific log-probs
+        # At position i (0-indexed from 0 to gamma-1), the logit to look at is
+        # at sequence index (context_len + i - 1) because the model output at
+        # position t predicts token t+1.
+        blade_logprobs = F.log_softmax(blade_logits.float(), dim=-1)  # [T, V]
+        ref_logprobs   = F.log_softmax(ref_logits.float(), dim=-1)    # [T, V]
+
+        # Gather [gamma, K] log-probs
+        # position_indices[i] = context_len + i - 1
+        position_indices = torch.arange(
+            context_len - 1, context_len - 1 + gamma, device=device
+        )  # [gamma]
+
+        # candidate_matrix: [gamma, K] — token ids to gather
+        blade_gathered = blade_logprobs[
+            position_indices.unsqueeze(1),   # [gamma, 1]
+            candidate_matrix,                # [gamma, K]
+        ]  # [gamma, K]
+
+        ref_gathered = ref_logprobs[
+            position_indices.unsqueeze(1),
+            candidate_matrix,
+        ]  # [gamma, K]
+
+        # DPO blade reward: beta * (log pi_blade - log pi_ref)
+        rewards = self.beta * (blade_gathered - ref_gathered)  # [gamma, K]
+        return rewards
+
+    @torch.no_grad()
+    def target_logprob_parallel(
+        self,
+        context_ids: torch.Tensor,
+        candidate_matrix: torch.Tensor,
+        target_model,
+    ) -> torch.Tensor:
+        """Compute target model log-probabilities for all [gamma, K] candidates.
+
+        In Option B, the target model provides calibrated fluency likelihoods
+        (replacing the draft log-prob used in Option A). This method computes:
+
+            log_pi_target[i, k] = log pi_target(D[i,k] | context + D[:i, 0])
+
+        for all positions i=0..gamma-1 and candidates k=0..K-1 in ONE forward pass.
+
+        Parameters
+        ----------
+        context_ids : torch.Tensor
+            Shape ``[1, context_len]``.
+        candidate_matrix : torch.Tensor
+            Shape ``[gamma, K]``.
+        target_model : PreTrainedModel
+            The target (verifier) model — in Swiss Knife this is the same as the
+            base model (frozen draft = target for the speculative decoding loop).
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``[gamma, K]`` — log pi_target(D[i,k] | prefix) for all (i,k).
+        """
+        gamma, K = candidate_matrix.shape
+        context_len = context_ids.shape[1]
+        device = context_ids.device
+
+        greedy_tokens = candidate_matrix[:, 0]  # [gamma]
+        full_ids = torch.cat([
+            context_ids.squeeze(0),
+            greedy_tokens,
+        ], dim=0).unsqueeze(0)  # [1, context_len + gamma]
+        full_mask = torch.ones_like(full_ids)
+
+        logits = target_model(
+            input_ids=full_ids, attention_mask=full_mask
+        ).logits.squeeze(0)  # [context_len + gamma, vocab_size]
+
+        log_probs = F.log_softmax(logits.float(), dim=-1)  # [T, V]
+
+        position_indices = torch.arange(
+            context_len - 1, context_len - 1 + gamma, device=device
+        )  # [gamma]
+
+        gathered = log_probs[
+            position_indices.unsqueeze(1),
+            candidate_matrix,
+        ]  # [gamma, K]
+
+        return gathered

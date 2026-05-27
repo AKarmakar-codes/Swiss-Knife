@@ -2,6 +2,8 @@
 Swiss Knife — Configuration
 
 All hyperparameters and model identifiers in one place.
+Covers both Option A (non-speculative Best-of-K tournament) and
+Option B (speculative-decoding-integrated tournament verifier).
 
 NOTE ON BASE MODEL:
     The DPO adapters at MGPGRAD/Swiss-Knife and divyajot5005/ndna were
@@ -57,10 +59,39 @@ class SwissKnifeConfig:
 
     # ── Tournament hyperparameters ──────────────────────────────────────
     K: int = 8
-    """Number of candidate spans per tournament round."""
+    """Number of candidate tokens per position in the tournament.
+    Option A: K independent spans are sampled.
+    Option B: top-K token IDs are retained at each of the γ draft positions."""
 
     L: int = 5
-    """Span length (number of tokens per candidate)."""
+    """Span length (number of tokens per candidate).
+    Used only in Option A (generation.py). Ignored by Option B."""
+
+    gamma: int = 4
+    """Speculative lookahead depth γ (Option B only).
+    The draft proposes γ future tokens. The target + blade each do
+    ONE forward pass over all γ positions. Typical values: 4–8."""
+
+    tournament_mode: str = "knockout"
+    """Which tournament format to use: 'knockout' or 'swiss'.
+    'knockout'  — single-elimination bracket (log2 K rounds, K−1 matches).
+    'swiss'     — Swiss-system schedule (swiss_rounds rounds, K/2·R matches).
+    Swiss-system is more robust to auditor noise but ~2× more matches."""
+
+    swiss_rounds: int = 3
+    """Number of rounds in the Swiss-system tournament (used only when
+    tournament_mode='swiss'). Typical value: ceil(log2(K))."""
+
+    use_acceptance_gate: bool = False
+    """If True, after the tournament winner is chosen, apply an additional
+    reward-shifted speculative coin flip (P_accept = min(1, exp(β·S)/Z_local)).
+    Requires acceptance.py. Default False — tournament is the sole gate."""
+
+    generation_mode: str = "option_b"
+    """Which generation loop to run:
+    'option_a' — non-speculative Best-of-K tournament (generation.py).
+    'option_b' — speculative-decoding-integrated verifier (speculative_generator.py)."""
+
 
     alpha: float = 0.5
     """Mixing coefficient  α ∈ [0, 1].
@@ -121,7 +152,15 @@ class SwissKnifeConfig:
 
     def __post_init__(self):
         assert 0.0 <= self.alpha <= 1.0, f"α must be in [0,1], got {self.alpha}"
-        assert self.K >= 2 and (self.K & (self.K - 1) == 0), \
-            f"K must be a power of 2 for knockout bracket, got {self.K}"
+        assert self.K >= 2, f"K must be ≥ 2, got {self.K}"
+        if self.tournament_mode == "knockout":
+            assert (self.K & (self.K - 1) == 0), \
+                f"K must be a power of 2 for knockout bracket, got {self.K}. "\
+                f"Use tournament_mode='swiss' for arbitrary K."
         assert self.L >= 1, f"Span length L must be ≥ 1, got {self.L}"
         assert self.beta > 0, f"β must be positive, got {self.beta}"
+        assert self.gamma >= 1, f"γ (lookahead) must be ≥ 1, got {self.gamma}"
+        assert self.tournament_mode in ("knockout", "swiss"), \
+            f"tournament_mode must be 'knockout' or 'swiss', got '{self.tournament_mode}'"
+        assert self.generation_mode in ("option_a", "option_b"), \
+            f"generation_mode must be 'option_a' or 'option_b', got '{self.generation_mode}'"
