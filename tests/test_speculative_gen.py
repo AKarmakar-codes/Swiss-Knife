@@ -59,7 +59,7 @@ def _make_mock_tokenizer(vocab_size: int = VOCAB_SIZE, eos_id: int = 2):
     return tok
 
 
-def _make_generator(tournament_mode: str = "knockout"):
+def _make_generator(tournament_mode: str = "swiss"):
     cfg = SwissKnifeConfig(
         K=K,
         gamma=GAMMA,
@@ -173,9 +173,9 @@ def test_speculative_stats_fields():
     print(f"  auditor_calls_per_token={stats.auditor_calls_per_token:.3f}  ✓")
 
 
-def test_generate_returns_string_knockout():
-    """Full generate() with knockout tournament should return a string."""
-    gen, cfg, tok, base, blade_m = _make_generator("knockout")
+def test_generate_returns_string_swiss():
+    """Full generate() with Swiss-system tournament should return a string."""
+    gen, cfg, tok, base, blade_m = _make_generator("swiss")
 
     # Mock blade scorer
     mock_blade = MagicMock()
@@ -194,7 +194,7 @@ def test_generate_returns_string_knockout():
 
 def test_generate_returns_stats():
     """return_stats=True should return (str, SpeculativeStats)."""
-    gen, cfg, tok, base, blade_m = _make_generator("knockout")
+    gen, cfg, tok, base, blade_m = _make_generator("swiss")
 
     mock_blade = MagicMock()
     mock_blade.score_parallel = lambda ctx, cand: torch.randn(GAMMA, K)
@@ -212,9 +212,9 @@ def test_generate_returns_stats():
     print(f"  stats.total_tokens_accepted={stats.total_tokens_accepted}  ✓")
 
 
-def test_generate_swiss_mode():
-    """generate() with swiss tournament_mode should not crash."""
-    gen, cfg, tok, base, blade_m = _make_generator("swiss")
+def test_generate_knockout_mode():
+    """generate() with knockout tournament_mode should not crash."""
+    gen, cfg, tok, base, blade_m = _make_generator("knockout")
 
     mock_blade = MagicMock()
     mock_blade.score_parallel = lambda ctx, cand: torch.randn(GAMMA, K)
@@ -224,7 +224,7 @@ def test_generate_swiss_mode():
 
     text = gen.generate("Test prompt.", max_new_tokens=8)
     assert isinstance(text, str)
-    print(f"  Swiss mode generate() returned: '{text}'  ✓")
+    print(f"  Knockout mode generate() returned: '{text}'  ✓")
 
 
 if __name__ == "__main__":
@@ -245,16 +245,16 @@ if __name__ == "__main__":
     test_speculative_stats_fields()
     print()
 
-    print("TEST 4 — generate() knockout returns string")
-    test_generate_returns_string_knockout()
+    print("TEST 4 — generate() swiss returns string")
+    test_generate_returns_string_swiss()
     print()
 
     print("TEST 5 — generate() return_stats=True")
     test_generate_returns_stats()
     print()
 
-    print("TEST 6 — generate() Swiss mode")
-    test_generate_swiss_mode()
+    print("TEST 6 — generate() Knockout mode (fallback)")
+    test_generate_knockout_mode()
     print()
 
     print("=" * 60)

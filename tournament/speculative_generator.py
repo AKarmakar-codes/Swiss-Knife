@@ -46,11 +46,6 @@ from .config import SwissKnifeConfig
 from .blades import DPOBlade
 from .tournament import knockout_bracket
 from .swiss_system import swiss_system_bracket
-from .acceptance import (
-    compute_z_local,
-    acceptance_prob as acceptance_prob_fn,
-    speculative_coin_flip,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +204,7 @@ class SwissKnifeSpeculativeGenerator:
             Column 0 is always the greedy (argmax) token.
         draft_topk_logits : torch.Tensor
             Shape ``[γ, K]`` — raw logits for the K candidates per position.
-            Used for Z_local computation if acceptance gate is active.
+            Retained for diagnostic/logging purposes.
         """
         gamma = self.cfg.gamma
         K = self.cfg.K
@@ -261,29 +256,6 @@ class SwissKnifeSpeculativeGenerator:
             self.cfg.alpha,
             rounds=self.cfg.swiss_rounds,
         )
-
-    # ── Optional acceptance gate ─────────────────────────────────────────
-
-    def _apply_acceptance_gate(
-        self,
-        draft_topk_logits_i: torch.Tensor,
-        blade_scores_i: torch.Tensor,
-        winner_idx: int,
-    ) -> bool:
-        """Apply the Z_local acceptance coin flip (Phase 1 gate).
-
-        Returns True = accept winner, False = reject (use greedy fallback).
-        Only called when cfg.use_acceptance_gate = True.
-        """
-        z = compute_z_local(draft_topk_logits_i, blade_scores_i, self.cfg.beta)
-        p_acc = acceptance_prob_fn(blade_scores_i[winner_idx], z, self.cfg.beta)
-        accepted = speculative_coin_flip(p_acc)
-        logger.debug(
-            "Acceptance gate: winner_blade=%.4f Z_local=%.4f p_accept=%.4f → %s",
-            blade_scores_i[winner_idx].item(), z.item(), p_acc.item(),
-            "ACCEPT" if accepted else "REJECT",
-        )
-        return accepted
 
     # ── Normalize scores for a single position ───────────────────────────
 
@@ -400,15 +372,7 @@ class SwissKnifeSpeculativeGenerator:
                     candidate_matrix[i, wi].item(),
                 )
 
-                # Optional extra acceptance gate (Phase 1 Z_local coin flip)
-                if self.cfg.use_acceptance_gate and wi != 0:
-                    gate_passed = self._apply_acceptance_gate(
-                        draft_topk_logits[i], blade_scores[i], wi
-                    )
-                    if not gate_passed:
-                        # Reject: fall back to greedy
-                        wi = 0
-
+                # Deterministic: tournament winner is final (no probabilistic gate)
                 # if D[i, wi] ≠ D[i, 0]:  rejection event
                 if wi != 0:
                     winner_token = int(candidate_matrix[i, wi].item())

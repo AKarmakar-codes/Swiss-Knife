@@ -72,20 +72,17 @@ class SwissKnifeConfig:
     The draft proposes γ future tokens. The target + blade each do
     ONE forward pass over all γ positions. Typical values: 4–8."""
 
-    tournament_mode: str = "knockout"
+    tournament_mode: str = "swiss"
     """Which tournament format to use: 'knockout' or 'swiss'.
     'knockout'  — single-elimination bracket (log2 K rounds, K−1 matches).
     'swiss'     — Swiss-system schedule (swiss_rounds rounds, K/2·R matches).
-    Swiss-system is more robust to auditor noise but ~2× more matches."""
+    Swiss-system is the default: more robust to auditor noise because
+    candidates play all rounds (no early elimination)."""
 
     swiss_rounds: int = 3
     """Number of rounds in the Swiss-system tournament (used only when
-    tournament_mode='swiss'). Typical value: ceil(log2(K))."""
-
-    use_acceptance_gate: bool = False
-    """If True, after the tournament winner is chosen, apply an additional
-    reward-shifted speculative coin flip (P_accept = min(1, exp(β·S)/Z_local)).
-    Requires acceptance.py. Default False — tournament is the sole gate."""
+    tournament_mode='swiss'). Typical value: ceil(log2(K)).
+    With K=8, ceil(log2(8))=3 rounds, giving 12 total matches."""
 
     generation_mode: str = "option_b"
     """Which generation loop to run:

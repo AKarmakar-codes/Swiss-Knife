@@ -70,7 +70,7 @@ def _get_shared():
         gamma=4,
         alpha=0.5,
         beta=0.1,
-        tournament_mode="knockout",
+        tournament_mode="swiss",
         generation_mode="option_b",
         normalize_scores=True,
         max_new_tokens=50,
@@ -99,7 +99,7 @@ def test_full_speculative_loop():
     End-to-end test of the speculative decoding loop with tournament.
 
     Loads real Qwen2.5-7B + helpfulness DPO blade, generates 50 tokens
-    using Option B (γ=4, K=8, knockout tournament), and verifies:
+    using Option B (γ=4, K=8, Swiss-system tournament), and verifies:
 
       1. Output is a non-empty string containing the original prompt
       2. SpeculativeStats fields are internally consistent:
@@ -138,7 +138,7 @@ def test_full_speculative_loop():
     prompt = "Explain the concept of AI alignment to a beginner in simple terms."
     max_tokens = 50
 
-    logger.info("Generating %d tokens with Option B (γ=%d, K=%d, tournament=knockout)...",
+    logger.info("Generating %d tokens with Option B (γ=%d, K=%d, tournament=swiss)...",
                 max_tokens, cfg.gamma, cfg.K)
 
     t0 = time.perf_counter()
