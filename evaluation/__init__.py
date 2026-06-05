@@ -1,19 +1,8 @@
 """
-Swiss Knife — Phase 4: Evaluation Harnesses
-============================================
+Swiss Knife — Evaluation
+=========================
 
-Exports:
-  SwitchabilityHarness   — objective adherence across blades
-  RobustnessHarness      — blade scoring stability on partial spans
-  SystemsRealismHarness  — latency, throughput, acceptance rate profiling
+Benchmarks:
+  benchmark_truthfulqa  — No Blade vs Truthfulness Blade on TruthfulQA
+  benchmark_safety      — No Blade vs Harmlessness Blade on adversarial prompts
 """
-
-from .switchability_harness import SwitchabilityHarness
-from .robustness_harness import RobustnessHarness
-from .systems_realism_harness import SystemsRealismHarness
-
-__all__ = [
-    "SwitchabilityHarness",
-    "RobustnessHarness",
-    "SystemsRealismHarness",
-]
