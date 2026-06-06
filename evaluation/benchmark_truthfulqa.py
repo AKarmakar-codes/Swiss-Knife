@@ -149,7 +149,7 @@ def run_benchmark():
 
     # ── Load TruthfulQA ──────────────────────────────────────────────────
     logger.info("Loading TruthfulQA dataset (generation split)...")
-    dataset = load_dataset("truthful_qa", "generation", split="validation")
+    dataset = load_dataset("truthful_qa/truthful_qa", "generation", split="validation")
     questions = dataset.select(range(min(NUM_QUESTIONS, len(dataset))))
     logger.info("Selected %d questions.", len(questions))
 
