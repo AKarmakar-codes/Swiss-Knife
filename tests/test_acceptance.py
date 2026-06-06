@@ -14,7 +14,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
-from tournament.acceptance import (
+from Model_mechanics.acceptance import (
     compute_z_local,
     acceptance_prob,
     speculative_coin_flip,

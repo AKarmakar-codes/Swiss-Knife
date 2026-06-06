@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import math
 import torch
-from tournament.swiss_system import swiss_system_bracket, swiss_score_summary
+from Model_mechanics.swiss_system import swiss_system_bracket, swiss_score_summary
 
 
 def test_condorcet_winner():
@@ -115,7 +115,7 @@ def test_summary_structure():
 
 def test_consistent_with_knockout_on_clear_winner():
     """On a clear dominant candidate, Swiss and Knockout should agree."""
-    from tournament.tournament import knockout_bracket
+    from Model_mechanics.tournament import knockout_bracket
 
     target = torch.tensor([10.0, 1.0, 2.0, 0.5, 1.5, 0.3, 0.8, 1.2])
     blade  = torch.tensor([10.0, 1.0, 2.0, 0.5, 1.5, 0.3, 0.8, 1.2])

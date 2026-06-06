@@ -20,8 +20,8 @@ import torch
 import torch.nn.functional as F
 from unittest.mock import MagicMock, patch
 
-from tournament.config import SwissKnifeConfig
-from tournament.speculative_generator import SwissKnifeSpeculativeGenerator, SpeculativeStats
+from Model_mechanics.config import SwissKnifeConfig
+from Model_mechanics.speculative_generator import SwissKnifeSpeculativeGenerator, SpeculativeStats
 
 
 VOCAB_SIZE = 1000
@@ -84,8 +84,8 @@ def _make_generator(tournament_mode: str = "swiss"):
     gen.blade_model = blade_m
 
     # Inject real tournament selectors
-    from tournament.tournament import knockout_bracket
-    from tournament.swiss_system import swiss_system_bracket
+    from Model_mechanics.tournament import knockout_bracket
+    from Model_mechanics.swiss_system import swiss_system_bracket
     if tournament_mode == "knockout":
         gen._run_tournament = gen._knockout_at_position
     else:
@@ -102,7 +102,7 @@ def test_draft_propose_shape():
     gen, cfg, tok, base, blade = _make_generator()
 
     # Inject a mock blade scorer
-    from tournament.blades import DPOBlade
+    from Model_mechanics.blades import DPOBlade
     mock_blade_scorer = MagicMock()
     gen.blade = mock_blade_scorer
 

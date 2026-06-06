@@ -19,7 +19,7 @@ import time
 import torch
 from unittest.mock import MagicMock
 
-from tournament.blade_rack import (
+from Model_mechanics.blade_rack import (
     BladeRack,
     ReconfigurationProfile,
     MoDStyleRetrainEstimate,
@@ -49,7 +49,7 @@ def _make_mock_rack():
     rack._load_times = {}
 
     # Inject mock DPOBlades directly (bypass load_blade_model)
-    from tournament.blades import DPOBlade
+    from Model_mechanics.blades import DPOBlade
     for name in BLADE_NAMES:
         mock_blade_inst = MagicMock(spec=DPOBlade)
         # Make blade_model have named_parameters that include 'lora' keys

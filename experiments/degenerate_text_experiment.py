@@ -155,10 +155,10 @@ def run_experiment(
     conditions = ["greedy", "option_a_knockout", "option_b_knockout", "option_b_swiss"]
 
     if not mock:
-        from tournament.config import SwissKnifeConfig
-        from tournament.models import load_all
-        from tournament.generation import SwissKnifeGenerator
-        from tournament.speculative_generator import SwissKnifeSpeculativeGenerator
+        from Model_mechanics.config import SwissKnifeConfig
+        from Model_mechanics.models import load_all
+        from Model_mechanics.generation import SwissKnifeGenerator
+        from Model_mechanics.speculative_generator import SwissKnifeSpeculativeGenerator
 
         cfg_a = SwissKnifeConfig(K=K, alpha=alpha, generation_mode="option_a",
                                   tournament_mode="knockout")

@@ -37,10 +37,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 
-from tournament.config import SwissKnifeConfig
-from tournament.models import load_tokenizer, load_base_model, load_blade_model
-from tournament.speculative_generator import SwissKnifeSpeculativeGenerator, SpeculativeStats
-from tournament.blade_rack import BladeRack, ReconfigurationProfile
+from Model_mechanics.config import SwissKnifeConfig
+from Model_mechanics.models import load_tokenizer, load_base_model, load_blade_model
+from Model_mechanics.speculative_generator import SwissKnifeSpeculativeGenerator, SpeculativeStats
+from Model_mechanics.blade_rack import BladeRack, ReconfigurationProfile
 
 logging.basicConfig(
     level=logging.INFO,

@@ -43,7 +43,7 @@ def run_profile(
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    from tournament.blade_rack import BladeRack, MoDStyleRetrainEstimate, ReconfigurationProfile
+    from Model_mechanics.blade_rack import BladeRack, MoDStyleRetrainEstimate, ReconfigurationProfile
 
     if mock:
         # ── Mock run without model weights ──────────────────────────────
@@ -56,7 +56,7 @@ def run_profile(
         mock_base = MagicMock()
 
         # Create a mock DPOBlade for each blade
-        from tournament.blades import DPOBlade
+        from Model_mechanics.blades import DPOBlade
 
         class MockBladeRack:
             """Mock BladeRack that generates synthetic swap profiles."""
@@ -82,8 +82,8 @@ def run_profile(
 
         rack = MockBladeRack()
     else:
-        from tournament.config import SwissKnifeConfig
-        from tournament.models import load_tokenizer, load_base_model
+        from Model_mechanics.config import SwissKnifeConfig
+        from Model_mechanics.models import load_tokenizer, load_base_model
         cfg = SwissKnifeConfig()
         tok = load_tokenizer(cfg)
         base = load_base_model(cfg)
