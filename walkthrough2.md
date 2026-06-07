@@ -18,7 +18,7 @@ $$r_{\text{blade}}(y \mid x) = \beta \cdot \left[\log \pi_{\text{blade}}(y \mid 
 
 > **Why this works without a separate reward model:** DPO training implicitly encodes a reward function in the log-ratio between the aligned and reference policies. Extracting it requires only two forward passes (blade + ref), not a separately trained DeBERTa-style classifier.
 
-**Implementation:** [blades.py → `score_parallel()`](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/tournament/blades.py#L243-L325) computes this for all $[\gamma, K]$ candidates in exactly **2 forward passes** (one blade, one ref), regardless of $\gamma$ and $K$.
+**Implementation:** [blades.py → `score_parallel()`](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/Model_mechanics/blades.py#L243-L325) computes this for all $[\gamma, K]$ candidates in exactly **2 forward passes** (one blade, one ref), regardless of $\gamma$ and $K$.
 
 ---
 
@@ -33,7 +33,7 @@ $A$ wins iff $\text{match}(A, B) > 0$.
 - $\alpha \in [0, 1]$: mixing coefficient. $\alpha \to 1$ = pure fluency; $\alpha \to 0$ = pure alignment.
 - **Calibration invariance:** Since only *differences* of scores are used, adding any constant $c$ to all blade scores leaves $\Delta r_{\text{blade}}$ unchanged. This is the core theoretical advantage over argmax-based methods (ARGS, DeAL), where an inflated blade would collapse the output to refusals.
 
-**Implementation:** [tournament.py → `knockout_bracket()`](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/tournament/tournament.py#L22-L102) and [swiss_system.py → `swiss_system_bracket()`](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/tournament/swiss_system.py#L34-L160)
+**Implementation:** [tournament.py → `knockout_bracket()`](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/Model_mechanics/tournament.py#L22-L102) and [swiss_system.py → `swiss_system_bracket()`](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/Model_mechanics/swiss_system.py#L34-L160)
 
 ---
 
@@ -62,7 +62,7 @@ $$Z_{\text{local}} = \sum_{v \in \mathcal{V}_K} p_{\text{draft}}(v) \cdot \exp(\
 For numerical stability, this is computed in log-space:
 $$\log Z_{\text{local}} = \text{logsumexp}\!\left(\log p_{\text{draft}}(v) + \beta \cdot S(v)\right)_{v \in \mathcal{V}_K}$$
 
-**Implementation:** [acceptance.py → `compute_z_local()`, `acceptance_prob()`](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/tournament/acceptance.py#L78-L155)
+**Implementation:** [acceptance.py → `compute_z_local()`, `acceptance_prob()`](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/Model_mechanics/acceptance.py#L78-L155)
 
 ---
 
@@ -88,7 +88,7 @@ This is the core generation algorithm. At each cycle:
 - Positional propagation: first rejection discards the tail
 - The blade plugs into the verifier slot — hot-swap = pointer swap
 
-**Implementation:** [speculative_generator.py → `SwissKnifeSpeculativeGenerator.generate()`](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/tournament/speculative_generator.py#L229-L368)
+**Implementation:** [speculative_generator.py → `SwissKnifeSpeculativeGenerator.generate()`](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/Model_mechanics/speculative_generator.py#L229-L368)
 
 ---
 
@@ -108,7 +108,7 @@ Swiss-system pairs candidates by cumulative score each round (strongest vs. stro
 
 ## 2. Files Changed (Existing)
 
-### 2.1 `tournament/config.py`
+### 2.1 `Model_mechanics/config.py`
 
 ```diff:config.py
 """
@@ -409,7 +409,7 @@ class SwissKnifeConfig:
 
 **What changed:** Added `gamma` (speculative lookahead depth), `tournament_mode` ("knockout"/"swiss"), `swiss_rounds`, `use_acceptance_gate`, and `generation_mode` ("option_a"/"option_b"). The K validation was relaxed so that non-power-of-2 K is allowed when using Swiss-system mode.
 
-### 2.2 `tournament/blades.py`
+### 2.2 `Model_mechanics/blades.py`
 
 ```diff:blades.py
 """
@@ -1055,7 +1055,7 @@ class DPOBlade:
 
 Both exploit the fact that the target/blade only need logits at the γ positions, which can be gathered from a single forward pass over the greedy prefix sequence `[context + D[:,0]]`.
 
-### 2.3 `tournament/__init__.py`
+### 2.3 `Model_mechanics/__init__.py`
 
 ```diff:__init__.py
 """
@@ -1081,13 +1081,13 @@ Swiss Knife — Decode-Time Alignment via Tournament Sampling
 
 Option A (Non-Speculative Best-of-K Tournament):
     Sample K independent spans → tournament selects best → commit → repeat.
-    See: tournament/generation.py, tournament/tournament.py
+    See: Model_mechanics/generation.py, Model_mechanics/tournament.py
 
 Option B (Speculative-Decoding-Integrated Tournament Verifier):
     Draft proposes γ tokens → top-K per position → [γ, K] candidate tensor.
     Target + Blade: ONE forward pass each → [γ, K] scores.
     Per-position tournament → acceptance propagation (discard tail on rejection).
-    See: tournament/speculative_generator.py, tournament/swiss_system.py
+    See: Model_mechanics/speculative_generator.py, Model_mechanics/swiss_system.py
 
 Architecture:
     Base/Draft Model   : Qwen2.5 SFT-merged (frozen)
@@ -1109,9 +1109,9 @@ Version bumped `0.1.0 → 0.2.0`. Docstring updated to describe both Option A an
 
 ## 3. New Files — Core Pipeline
 
-### 3.1 `tournament/acceptance.py` (Phase 1)
+### 3.1 `Model_mechanics/acceptance.py` (Phase 1)
 
-[View file](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/tournament/acceptance.py)
+[View file](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/Model_mechanics/acceptance.py)
 
 | Function | Purpose |
 |---|---|
@@ -1123,9 +1123,9 @@ Version bumped `0.1.0 → 0.2.0`. Docstring updated to describe both Option A an
 
 The full derivation of why $p_{\text{draft}}$ cancels is embedded as the module docstring.
 
-### 3.2 `tournament/swiss_system.py` (Phase 2)
+### 3.2 `Model_mechanics/swiss_system.py` (Phase 2)
 
-[View file](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/tournament/swiss_system.py)
+[View file](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/Model_mechanics/swiss_system.py)
 
 Drop-in replacement for `knockout_bracket()` with identical signature. Implements:
 - Per-round score-grouped pairing (highest vs. highest)
@@ -1134,9 +1134,9 @@ Drop-in replacement for `knockout_bracket()` with identical signature. Implement
 - Tie-breaking by target log-prob (secondary criterion)
 - `swiss_score_summary()` diagnostic returning per-candidate win counts
 
-### 3.3 `tournament/speculative_generator.py` (Phase 2 — the heart)
+### 3.3 `Model_mechanics/speculative_generator.py` (Phase 2 — the heart)
 
-[View file](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/tournament/speculative_generator.py)
+[View file](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/Model_mechanics/speculative_generator.py)
 
 **`_draft_propose(context_ids)`** — Runs the draft model autoregressively for γ steps. At each step, captures the full logit vector and retains the top-K token IDs → `[γ, K]` candidate tensor. Column 0 is always the greedy (argmax) token.
 
@@ -1150,9 +1150,9 @@ Drop-in replacement for `knockout_bracket()` with identical signature. Implement
 
 Collects `SpeculativeStats` (acceptance rate, tokens/sec, auditor calls/token).
 
-### 3.4 `tournament/blade_rack.py` (Phase 3)
+### 3.4 `Model_mechanics/blade_rack.py` (Phase 3)
 
-[View file](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/tournament/blade_rack.py)
+[View file](file:///home/agnibh/Desktop/vscode/ML/Swiss%20Knife/Model_mechanics/blade_rack.py)
 
 | Class | Purpose |
 |---|---|
@@ -1248,7 +1248,7 @@ flowchart TD
 
 ```
 Swiss Knife/
-├── tournament/
+├── Model_mechanics/
 │   ├── __init__.py              v0.2.0
 │   ├── config.py                + gamma, tournament_mode, swiss_rounds, generation_mode
 │   ├── acceptance.py            [NEW] Phase 1 — Z_local math + coin flip

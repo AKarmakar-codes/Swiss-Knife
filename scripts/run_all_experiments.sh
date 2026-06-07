@@ -112,7 +112,7 @@ for a in 1.0 0.7 0.5 0.3 0.0; do
     fi
     run_one "α=$a" \
         "$DEMO2_DIR/alpha_${a}.txt" \
-        python -m swiss_knife.main \
+        python -m Model_mechanics.main \
             --prompt "$DEMO2_PROMPT" \
             --blade helpfulness --alpha "$a" \
             --K 8 --L 5 --max-tokens "$MAX_TOK" \
@@ -140,7 +140,7 @@ for i in 0 1 2; do
     for blade in helpfulness harmlessness; do
         run_one "p${i} blade=${blade}" \
             "$DEMO3_DIR/p${i}_${blade}.txt" \
-            python -m swiss_knife.main \
+            python -m Model_mechanics.main \
                 --prompt "${PROMPTS[$i]}" \
                 --blade "$blade" --alpha 0.3 \
                 --K 8 --L 5 --max-tokens "$MAX_TOK" \
@@ -173,7 +173,7 @@ DEMO5_PROMPT="Explain transformer self-attention in three sentences."
 for K in 2 4 8 16; do
     run_one "K=$K" \
         "$DEMO5_DIR/K${K}.txt" \
-        python -m swiss_knife.main \
+        python -m Model_mechanics.main \
             --prompt "$DEMO5_PROMPT" \
             --blade helpfulness --alpha 0.5 \
             --K "$K" --L 5 --max-tokens 60 \
@@ -196,7 +196,7 @@ DEMO6_PROMPT="Explain AI alignment to a beginner."
 for bias in 0 100 1000 10000; do
     run_one "blade-bias=$bias (no-normalize, α=0)" \
         "$DEMO6_DIR/bias_${bias}.txt" \
-        python -m swiss_knife.main \
+        python -m Model_mechanics.main \
             --prompt "$DEMO6_PROMPT" \
             --blade helpfulness --alpha 0.0 \
             --K 8 --L 5 --max-tokens 60 \

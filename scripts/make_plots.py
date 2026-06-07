@@ -1,7 +1,7 @@
 """Generate matplotlib plots from a Swiss Knife experiment run directory.
 
 Reads the demo log files and per-round JSONL scores dump (produced when
---scores-log is passed to swiss_knife.main) and emits PNG plots into
+--scores-log is passed to Model_mechanics.main) and emits PNG plots into
 <runs_dir>/plots/.
 
 Plots produced:

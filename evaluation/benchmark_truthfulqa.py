@@ -1,33 +1,35 @@
 """
 Swiss Knife — TruthfulQA Benchmark
-===================================
+=====================================
 
-Cross-blade evaluation on TruthfulQA (Lin et al., 2022).
-Generates free-form answers using the Swiss Knife speculative loop
-with different blades and scores them against reference answers.
+Evaluates Option B (Swiss-system speculative loop) on TruthfulQA.
+
+Comparison:
+  • no_blade         — α=1.0 → tournament uses only target log-probs → greedy decoding
+                       (truthfulness blade is loaded but zeroed out by α=1)
+  • truthfulness_blade — α=0.5 → tournament mixes target fluency + truthfulness reward
 
 What this proves:
-  - The truthfulness blade produces responses that are more aligned
-    with TruthfulQA's correct answers than the helpfulness blade.
-  - Blade swapping actually changes alignment behavior on a standard
-    benchmark, not just on cherry-picked prompts.
+  Adding the truthfulness blade inside the speculative verifier slot
+  improves TruthfulQA keyword overlap over pure greedy decoding,
+  without any retraining of the base model.
 
-Scoring method:
-  For each question, we compute a "truthfulness score" as the fraction
-  of correct answer keywords present in the generated response minus
-  the fraction of incorrect answer keywords present. This gives a
-  signal in [-1, 1] where higher = more truthful.
+Scoring:
+  For each question, we compute overlap of the generated response with
+  TruthfulQA's correct-answer keyword set minus overlap with the
+  incorrect-answer keyword set. Score ∈ [-1, 1], higher = more truthful.
 
 Run on Vast.ai:
     pip install datasets
     python evaluation/benchmark_truthfulqa.py
 
-Estimated time: ~20 min on RTX Pro 5000 (50 questions × 2 blades × ~12s each)
-Estimated VRAM: ~30 GB (base model + 1 blade copy in bfloat16)
+Estimated time: ~20 min on RTX Pro 5000 (50 questions × 2 conditions × ~12s)
+Estimated VRAM: ~30 GB (base model + truthfulness blade in bfloat16)
 """
 
 import sys
 import os
+import argparse
 import json
 import time
 import logging
@@ -52,10 +54,42 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 
-NUM_QUESTIONS = 50          # Number of TruthfulQA questions to evaluate
-MAX_NEW_TOKENS = 80         # Max tokens per response
-BLADES_TO_COMPARE = ["truthfulness", "helpfulness"]
-OUTPUT_DIR = "runs/truthfulqa_benchmark"
+DEFAULT_NUM_QUESTIONS  = 50
+DEFAULT_MAX_NEW_TOKENS = 80
+DEFAULT_OUTPUT_DIR     = "runs/truthfulqa_benchmark"
+
+# The two conditions being compared
+CONDITIONS = [
+    {
+        "name":  "no_blade",
+        "label": "No Blade (greedy baseline)",
+        "alpha": 1.0,        # α=1 → blade reward zeroed out → pure greedy
+    },
+    {
+        "name":  "truthfulness_blade",
+        "label": "Truthfulness Blade (Swiss α=0.5)",
+        "alpha": 0.5,        # α=0.5 → equal mix of fluency + blade reward
+    },
+]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Evaluate Swiss Knife Option B with the truthfulness blade on TruthfulQA.",
+    )
+    parser.add_argument("--num-questions", type=int, default=DEFAULT_NUM_QUESTIONS)
+    parser.add_argument("--max-new-tokens", type=int, default=DEFAULT_MAX_NEW_TOKENS)
+    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--K", type=int, default=8)
+    parser.add_argument("--gamma", type=int, default=4)
+    parser.add_argument("--swiss-rounds", type=int, default=3)
+    parser.add_argument("--beta", type=float, default=0.1)
+    parser.add_argument("--blade-alpha", type=float, default=0.5)
+    parser.add_argument("--dtype", default=None, choices=["float16", "bfloat16", "float32"])
+    parser.add_argument("--device", default="auto")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--no-normalize", dest="normalize_scores", action="store_false", default=True)
+    return parser.parse_args()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -64,7 +98,19 @@ OUTPUT_DIR = "runs/truthfulqa_benchmark"
 
 def _normalize(text: str) -> set:
     """Extract lowercase word set from text for keyword matching."""
-    return set(text.lower().split())
+    import re
+    return set(re.findall(r"[a-z0-9']+", text.lower()))
+
+
+def strip_prompt(output: str, prompt: str) -> str:
+    """Remove the prompt prefix without crashing if decoding normalizes spaces."""
+    if output.startswith(prompt):
+        return output[len(prompt):].strip()
+    marker = "\nA:"
+    marker_pos = output.find(marker)
+    if marker_pos >= 0:
+        return output[marker_pos + len(marker):].strip()
+    return output.strip()
 
 
 def truthfulness_score(
@@ -117,55 +163,77 @@ def truthfulness_score(
 # Main benchmark
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_benchmark():
+def run_benchmark(args: argparse.Namespace):
+    if args.num_questions < 1:
+        raise ValueError("--num-questions must be at least 1")
+
     print()
     print("=" * 70)
     print("  Swiss Knife — TruthfulQA Benchmark")
-    print("  Cross-Blade Evaluation (Truthfulness vs Helpfulness)")
+    print("  Condition: No Blade (greedy)  vs  Truthfulness Blade")
     print("=" * 70)
     print()
 
-    # ── Setup ────────────────────────────────────────────────────────────
-    device = "auto" if torch.cuda.is_available() else "cpu"
-    dtype = "bfloat16" if torch.cuda.is_available() else "float32"
+    # ── Environment ──────────────────────────────────────────────────────
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
 
-    cfg = SwissKnifeConfig(
-        K=8,
-        gamma=4,
-        alpha=0.5,
-        beta=0.1,
-        tournament_mode="swiss",
-        swiss_rounds=3,
-        generation_mode="option_b",
-        normalize_scores=True,
-        max_new_tokens=MAX_NEW_TOKENS,
-        device=device,
-        dtype=dtype,
-    )
+    device = args.device if torch.cuda.is_available() else "cpu"
+    dtype  = args.dtype or ("bfloat16" if torch.cuda.is_available() else "float32")
 
-    logger.info("Loading tokenizer + base model...")
-    tokenizer = load_tokenizer(cfg)
-    base_model = load_base_model(cfg)
+    conditions = [
+        CONDITIONS[0],
+        {
+            **CONDITIONS[1],
+            "alpha": args.blade_alpha,
+            "label": f"Truthfulness Blade (Swiss α={args.blade_alpha})",
+        },
+    ]
 
-    # ── Load TruthfulQA ──────────────────────────────────────────────────
+    # ── Load dataset ─────────────────────────────────────────────────────
     logger.info("Loading TruthfulQA dataset (generation split)...")
-    dataset = load_dataset("truthful_qa/truthful_qa", "generation", split="validation")
-    questions = dataset.select(range(min(NUM_QUESTIONS, len(dataset))))
+    dataset   = load_dataset("truthfulqa/truthful_qa", "generation", split="validation")
+    questions = dataset.select(range(min(args.num_questions, len(dataset))))
     logger.info("Selected %d questions.", len(questions))
 
-    # ── Evaluate each blade ──────────────────────────────────────────────
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    # ── Load base model once (shared across both conditions) ─────────────
+    base_cfg = SwissKnifeConfig(
+        K=args.K, gamma=args.gamma, beta=args.beta,
+        tournament_mode="swiss", swiss_rounds=args.swiss_rounds,
+        generation_mode="option_b", normalize_scores=args.normalize_scores,
+        max_new_tokens=args.max_new_tokens, device=device, dtype=dtype,
+        seed=args.seed,
+        alpha=1.0,   # overridden per condition below
+    )
+    logger.info("Loading tokenizer + base model (shared)...")
+    tokenizer  = load_tokenizer(base_cfg)
+    base_model = load_base_model(base_cfg)
+
+    # Load the truthfulness blade once (shared; its contribution is
+    # controlled by alpha, not by whether it is loaded)
+    logger.info("Loading truthfulness blade (used by both conditions)...")
+    blade_model = load_blade_model(base_cfg, "truthfulness")
+
+    os.makedirs(args.output_dir, exist_ok=True)
     all_results = {}
 
-    for blade_name in BLADES_TO_COMPARE:
+    # ── Run each condition ───────────────────────────────────────────────
+    for cond in conditions:
         print()
         print("━" * 70)
-        print(f"  Evaluating blade: {blade_name}")
+        print(f"  Condition: {cond['label']}")
+        print(f"  α = {cond['alpha']}")
         print("━" * 70)
 
-        # Load blade
-        logger.info("Loading blade '%s'...", blade_name)
-        blade_model = load_blade_model(cfg, blade_name)
+        cfg = SwissKnifeConfig(
+            K=args.K, gamma=args.gamma, beta=args.beta,
+            tournament_mode="swiss", swiss_rounds=args.swiss_rounds,
+            generation_mode="option_b", normalize_scores=args.normalize_scores,
+            max_new_tokens=args.max_new_tokens, device=device, dtype=dtype,
+            seed=args.seed,
+            alpha=cond["alpha"],
+        )
 
         generator = SwissKnifeSpeculativeGenerator(
             cfg=cfg,
@@ -174,111 +242,112 @@ def run_benchmark():
             blade_model=blade_model,
         )
 
-        scores = []
+        scores    = []
         responses = []
-        t_start = time.perf_counter()
+        t_start   = time.perf_counter()
 
         for idx, item in enumerate(questions):
-            question = item["question"]
-            correct_answers = item["correct_answers"]
+            question          = item["question"]
+            correct_answers   = item["correct_answers"]
             incorrect_answers = item["incorrect_answers"]
 
-            # Format prompt
-            prompt = f"Q: {question}\nA:"
+            prompt    = f"Q: {question}\nA:"
+            output, stats = generator.generate(
+                prompt,
+                max_new_tokens=args.max_new_tokens,
+                return_stats=True,
+            )
+            generated = strip_prompt(output, prompt)
 
-            # Generate
-            output = generator.generate(prompt, max_new_tokens=MAX_NEW_TOKENS)
-
-            # Extract just the generated part (after the prompt)
-            generated = output[len(prompt):].strip()
-
-            # Score
             score = truthfulness_score(generated, correct_answers, incorrect_answers)
             scores.append(score)
             responses.append({
-                "question": question,
-                "generated": generated,
-                "score": score,
-                "correct_answers": correct_answers,
+                "question":          question,
+                "generated":         generated,
+                "score":             score,
+                "correct_answers":   correct_answers,
                 "incorrect_answers": incorrect_answers,
+                "generation_stats":   stats.to_dict(),
             })
 
             if (idx + 1) % 10 == 0 or idx == 0:
-                avg_so_far = sum(scores) / len(scores)
+                avg = sum(scores) / len(scores)
                 logger.info(
-                    "[%s] %d/%d done | avg score: %.4f | last: %.4f",
-                    blade_name, idx + 1, len(questions), avg_so_far, score,
+                    "[%s] %d/%d | avg=%.4f | last=%.4f",
+                    cond["name"], idx + 1, len(questions), avg, score,
                 )
 
-        elapsed = time.perf_counter() - t_start
-        avg_score = sum(scores) / len(scores)
+        elapsed       = time.perf_counter() - t_start
+        avg_score     = sum(scores) / len(scores)
         positive_rate = sum(1 for s in scores if s > 0) / len(scores)
 
-        all_results[blade_name] = {
+        all_results[cond["name"]] = {
+            "label":                  cond["label"],
+            "alpha":                  cond["alpha"],
             "avg_truthfulness_score": round(avg_score, 4),
-            "positive_rate": round(positive_rate, 4),
-            "num_questions": len(questions),
-            "elapsed_s": round(elapsed, 1),
-            "scores": scores,
+            "positive_rate":          round(positive_rate, 4),
+            "num_questions":          len(questions),
+            "elapsed_s":              round(elapsed, 1),
+            "scores":                 scores,
         }
 
-        # Save per-blade responses
-        blade_file = os.path.join(OUTPUT_DIR, f"truthfulqa_{blade_name}.json")
-        with open(blade_file, "w") as f:
+        out_file = os.path.join(args.output_dir, f"truthfulqa_{cond['name']}.json")
+        with open(out_file, "w") as f:
             json.dump(responses, f, indent=2)
-        logger.info("Saved %d responses to %s", len(responses), blade_file)
+        logger.info("Saved responses → %s", out_file)
 
-        # Free blade VRAM
-        del blade_model, generator
-        torch.cuda.empty_cache() if torch.cuda.is_available() else None
-
-    # ── Results comparison ───────────────────────────────────────────────
+    # ── Results table ────────────────────────────────────────────────────
     print()
     print("=" * 70)
-    print("  TruthfulQA Results")
+    print("  TruthfulQA Results — No Blade vs Truthfulness Blade")
     print("=" * 70)
     print()
-    print(f"  {'Blade':<20} {'Avg Score':>12} {'Positive %':>12} {'Time':>10}")
-    print(f"  {'─' * 20} {'─' * 12} {'─' * 12} {'─' * 10}")
+    print(f"  {'Condition':<35} {'Avg Score':>10} {'Positive %':>12} {'Time':>8}")
+    print(f"  {'─' * 35} {'─' * 10} {'─' * 12} {'─' * 8}")
 
-    for blade_name in BLADES_TO_COMPARE:
-        r = all_results[blade_name]
+    for cond in conditions:
+        r = all_results[cond["name"]]
         print(
-            f"  {blade_name:<20} {r['avg_truthfulness_score']:>12.4f} "
-            f"{r['positive_rate'] * 100:>11.1f}% {r['elapsed_s']:>9.1f}s"
+            f"  {r['label']:<35} {r['avg_truthfulness_score']:>10.4f} "
+            f"{r['positive_rate'] * 100:>11.1f}% {r['elapsed_s']:>7.1f}s"
         )
 
-    # Delta
-    if len(BLADES_TO_COMPARE) == 2:
-        a, b = BLADES_TO_COMPARE
-        delta = all_results[a]["avg_truthfulness_score"] - all_results[b]["avg_truthfulness_score"]
-        print()
-        if delta > 0:
-            print(f"  ✓ {a} blade scores +{delta:.4f} higher than {b} blade")
-        elif delta < 0:
-            print(f"  ✗ {b} blade scores +{-delta:.4f} higher than {a} blade")
-        else:
-            print(f"  ─ Both blades score identically")
+    no_blade   = all_results["no_blade"]["avg_truthfulness_score"]
+    with_blade = all_results["truthfulness_blade"]["avg_truthfulness_score"]
+    delta      = with_blade - no_blade
+    print()
+    if delta > 0:
+        print(f"  ✓ Truthfulness blade improves score by +{delta:.4f} over greedy baseline")
+    elif delta < 0:
+        print(f"  ✗ Truthfulness blade degrades score by {delta:.4f} vs greedy baseline")
+    else:
+        print(f"  ─ No difference between conditions")
 
     # Save summary
-    summary_file = os.path.join(OUTPUT_DIR, "truthfulqa_summary.json")
     summary = {
         "timestamp": datetime.now().isoformat(),
         "config": {
-            "K": cfg.K, "gamma": cfg.gamma, "alpha": cfg.alpha,
-            "beta": cfg.beta, "tournament_mode": cfg.tournament_mode,
-            "max_new_tokens": MAX_NEW_TOKENS, "num_questions": NUM_QUESTIONS,
+            "K": args.K, "gamma": args.gamma, "tournament_mode": "swiss",
+            "swiss_rounds": args.swiss_rounds, "beta": args.beta,
+            "max_new_tokens": args.max_new_tokens,
+            "num_questions": len(questions),
+            "dtype": dtype,
+            "device": device,
+            "seed": args.seed,
+            "normalize_scores": args.normalize_scores,
         },
         "results": {k: {kk: vv for kk, vv in v.items() if kk != "scores"}
                     for k, v in all_results.items()},
+        "delta_truthfulness": round(delta, 4),
     }
+    summary_file = os.path.join(args.output_dir, "truthfulqa_summary.json")
     with open(summary_file, "w") as f:
         json.dump(summary, f, indent=2)
 
     print()
-    print(f"  Results saved to: {OUTPUT_DIR}/")
+    print(f"  Results saved to: {args.output_dir}/")
     print("=" * 70)
 
 
 if __name__ == "__main__":
-    run_benchmark()
+    run_benchmark(parse_args())

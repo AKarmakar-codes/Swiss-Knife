@@ -466,7 +466,7 @@ class SwissKnifeSpeculativeGenerator:
         blade_name : str
             Name of the blade to activate (must be loaded in blade_rack).
         blade_rack : BladeRack
-            The pre-loaded blade cache from tournament/blade_rack.py.
+            The pre-loaded blade cache from Model_mechanics/blade_rack.py.
 
         Returns
         -------

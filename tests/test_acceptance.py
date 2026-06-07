@@ -1,5 +1,5 @@
 """
-Unit tests for tournament/acceptance.py (Phase 1).
+Unit tests for Model_mechanics/acceptance.py (Phase 1).
 
 Tests:
   1. Z_local is positive and numerically stable

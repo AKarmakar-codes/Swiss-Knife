@@ -21,9 +21,9 @@ import torch
 import torch.nn.functional as F
 from unittest.mock import MagicMock, patch
 
-from swiss_knife.config import SwissKnifeConfig
-from swiss_knife.tournament import knockout_bracket
-from swiss_knife.models import _download_base_model
+from Model_mechanics.config import SwissKnifeConfig
+from Model_mechanics.tournament import knockout_bracket
+from Model_mechanics.models import _download_base_model
 
 
 def test_repo_accessible_and_tokenizer():
@@ -103,7 +103,7 @@ def test_blade_scoring_shapes(tokenizer):
     mock_blade.__call__ = mock_blade
 
     # Manually run the blade scoring logic inline
-    from swiss_knife.blades import DPOBlade
+    from Model_mechanics.blades import DPOBlade
     blade_scorer = DPOBlade.__new__(DPOBlade)
     blade_scorer.cfg = cfg
     blade_scorer.tokenizer = tokenizer
@@ -165,6 +165,6 @@ if __name__ == "__main__":
     print("=" * 60)
     print("  ALL SMOKE TESTS PASSED ✓")
     print("  Pipeline is ready. Run full end-to-end with:")
-    print("  conda activate myenv && python -m swiss_knife.main \\")
+    print("  conda activate myenv && python -m Model_mechanics.main \\")
     print('       --prompt "Your prompt here" --blade helpfulness')
     print("=" * 60)

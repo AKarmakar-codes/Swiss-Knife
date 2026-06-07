@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, ".")
 
 import torch
-from swiss_knife.tournament import knockout_bracket, tournament_score_matrix
+from Model_mechanics.tournament import knockout_bracket, tournament_score_matrix
 
 
 def test_basic_winner():

@@ -1,5 +1,5 @@
 """
-Unit tests for tournament/blade_rack.py (Phase 3).
+Unit tests for Model_mechanics/blade_rack.py (Phase 3).
 
 All tests are mock-based — no model downloads required.
 

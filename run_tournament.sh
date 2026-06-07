@@ -8,7 +8,7 @@ echo "=========================================================="
 echo "Running Swiss Knife Knockout Tournament - Helpfulness Blade"
 echo "=========================================================="
 # This will download the base model and the helpfulness adapter, then run the generation
-python -m swiss_knife.main \
+python -m Model_mechanics.main \
     --prompt "Explain the concept of AI alignment to a beginner." \
     --blade helpfulness \
     --alpha 0.5 \
@@ -21,7 +21,7 @@ echo "\n\n=========================================================="
 echo "Running Swiss Knife Knockout Tournament - Truthfulness Blade"
 echo "=========================================================="
 # This will download the truthfulness adapter (base model is already cached), then run the generation
-python -m swiss_knife.main \
+python -m Model_mechanics.main \
     --prompt "Is the earth flat or round?" \
     --blade truthfulness \
     --alpha 0.5 \

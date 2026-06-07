@@ -3,13 +3,13 @@ Swiss Knife — Decode-Time Alignment via Tournament Sampling
 
 Option A (Non-Speculative Best-of-K Tournament):
     Sample K independent spans → tournament selects best → commit → repeat.
-    See: tournament/generation.py, tournament/tournament.py
+    See: Model_mechanics/generation.py, Model_mechanics/tournament.py
 
 Option B (Speculative-Decoding-Integrated Tournament Verifier):
     Draft proposes γ tokens → top-K per position → [γ, K] candidate tensor.
     Target + Blade: ONE forward pass each → [γ, K] scores.
     Per-position tournament → acceptance propagation (discard tail on rejection).
-    See: tournament/speculative_generator.py, tournament/swiss_system.py
+    See: Model_mechanics/speculative_generator.py, Model_mechanics/swiss_system.py
 
 Architecture:
     Base/Draft Model   : Qwen2.5 SFT-merged (frozen)

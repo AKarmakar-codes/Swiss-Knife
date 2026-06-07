@@ -2,7 +2,7 @@
 Swiss Knife — CLI Entry Point
 
 Usage:
-    python -m swiss_knife.main \\
+    python -m Model_mechanics.main \\
         --prompt "Explain quantum computing simply." \\
         --blade helpfulness \\
         --alpha 0.5 \\
@@ -26,7 +26,7 @@ from .generation import SwissKnifeGenerator
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        prog="swiss_knife",
+        prog="Model_mechanics",
         description="Swiss Knife — Decode-Time Alignment via Tournament Sampling (Option A POC)",
     )
     p.add_argument(

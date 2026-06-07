@@ -1,5 +1,5 @@
 """
-Unit tests for tournament/speculative_generator.py (Option B, Phase 2).
+Unit tests for Model_mechanics/speculative_generator.py (Option B, Phase 2).
 
 All tests use mocked models — no 13 GB weights required.
 

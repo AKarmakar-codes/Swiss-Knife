@@ -1,5 +1,5 @@
 """
-Unit tests for tournament/swiss_system.py (Phase 2).
+Unit tests for Model_mechanics/swiss_system.py (Phase 2).
 
 Tests:
   1. Condorcet winner always wins (same as knockout guarantee)
