@@ -1,18 +1,30 @@
 """
 Swiss Knife — CLI Entry Point
 
-Usage:
+Usage (existing):
     python -m Model_mechanics.main \\
         --prompt "Explain quantum computing simply." \\
-        --blade helpfulness \\
-        --alpha 0.5 \\
-        --K 8 \\
-        --L 5 \\
-        --max-tokens 200 \\
-        --verbose
+        --blade helpfulness --generation-mode option_a
+
+Usage (GSI strategies):
+    python -m Model_mechanics.main \\
+        --prompt "Solve: What is 2+2?" \\
+        --blade helpfulness --generation-mode gsi_softmax \\
+        --gsi-n 8 --beta 0.1 --gsi-threshold 0.0
+
+    python -m Model_mechanics.main \\
+        --prompt "Solve: What is 2+2?" \\
+        --blade helpfulness --generation-mode gsi_pairwise \\
+        --gsi-n 8 --alpha 0.5 --gsi-tau 1.0
+
+    python -m Model_mechanics.main \\
+        --prompt "Solve: What is 2+2?" \\
+        --blade helpfulness --generation-mode gsi_swiss \\
+        --gsi-n 8 --alpha 0.5 --swiss-rounds 3
 """
 
 import argparse
+import json
 import logging
 import sys
 import time
@@ -21,13 +33,12 @@ import torch
 
 from .config import SwissKnifeConfig
 from .models import load_all
-from .generation import SwissKnifeGenerator
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="Model_mechanics",
-        description="Swiss Knife — Decode-Time Alignment via Tournament Sampling (Option A POC)",
+        description="Swiss Knife — Decode-Time Alignment via Tournament / GSI Sampling",
     )
     p.add_argument(
         "--prompt", type=str, required=True,
@@ -37,6 +48,11 @@ def parse_args() -> argparse.Namespace:
         "--blade", type=str, default="helpfulness",
         choices=["helpfulness", "harmlessness", "truthfulness"],
         help="Active alignment blade (default: helpfulness).",
+    )
+    p.add_argument(
+        "--generation-mode", type=str, default="option_a",
+        choices=["option_a", "option_b", "gsi_softmax", "gsi_pairwise", "gsi_swiss"],
+        help="Generation strategy (default: option_a).",
     )
     p.add_argument(
         "--alpha", type=float, default=0.5,
@@ -92,6 +108,34 @@ def parse_args() -> argparse.Namespace:
              "one line with raw + post-normalisation score vectors and the "
              "winner index. Used for plotting.",
     )
+
+    # ── GSI-specific arguments ──────────────────────────────────────────
+    gsi = p.add_argument_group("GSI Options (for gsi_softmax, gsi_pairwise, gsi_swiss)")
+    gsi.add_argument(
+        "--gsi-n", type=int, default=8,
+        help="Number of candidate reasoning steps per iteration (default: 8).",
+    )
+    gsi.add_argument(
+        "--gsi-threshold", type=float, default=0.0,
+        help="Rejection threshold u. Steps with reward < u trigger resampling (default: 0.0).",
+    )
+    gsi.add_argument(
+        "--gsi-max-step-tokens", type=int, default=512,
+        help="Max tokens per reasoning step (default: 512).",
+    )
+    gsi.add_argument(
+        "--gsi-tau", type=float, default=1.0,
+        help="Temperature τ for Bradley-Terry pairwise selection (default: 1.0).",
+    )
+    gsi.add_argument(
+        "--swiss-rounds", type=int, default=0,
+        help="Swiss-system rounds. 0 = auto ceil(log2(n)) (default: 0).",
+    )
+    gsi.add_argument(
+        "--stats-out", type=str, default="",
+        help="Optional path to write JSON stats after generation.",
+    )
+
     p.add_argument(
         "--verbose", action="store_true",
         help="Print per-round tournament details.",
@@ -123,6 +167,12 @@ def main():
         blade_bias=args.blade_bias,
         normalize_scores=args.normalize_scores,
         scores_log=args.scores_log,
+        generation_mode=args.generation_mode,
+        gsi_n=args.gsi_n,
+        gsi_threshold=args.gsi_threshold,
+        gsi_max_step_tokens=args.gsi_max_step_tokens,
+        gsi_tau=args.gsi_tau,
+        swiss_rounds=args.swiss_rounds,
     )
 
     # ── Reproducibility ────────────────────────────────────────────────
@@ -131,16 +181,32 @@ def main():
         torch.cuda.manual_seed_all(cfg.seed)
 
     # ── Print banner ───────────────────────────────────────────────────
+    mode_labels = {
+        "option_a": "Option A: Non-Speculative Best-of-K Tournament",
+        "option_b": "Option B: Speculative-Decoding-Integrated Tournament",
+        "gsi_softmax": "GSI Strategy 1: Softmax Selection",
+        "gsi_pairwise": "GSI Strategy 2: Pairwise Bradley-Terry",
+        "gsi_swiss": "GSI Strategy 3: Swiss-System → Points → Softmax",
+    }
     print("=" * 72)
-    print("  Swiss Knife — Decode-Time Alignment via Tournament Sampling")
-    print("  Option A: Non-Speculative Best-of-K Tournament")
+    print("  Swiss Knife — Decode-Time Alignment")
+    print(f"  {mode_labels.get(cfg.generation_mode, cfg.generation_mode)}")
     print("=" * 72)
     print(f"  Base model : {cfg.base_model_id}/{cfg.base_model_subfolder}")
     print(f"  Blade      : {args.blade}")
     print(f"  α (mix)    : {cfg.alpha}")
     print(f"  β (DPO)    : {cfg.beta}")
-    print(f"  K (cands)  : {cfg.K}")
-    print(f"  L (span)   : {cfg.L}")
+    if cfg.generation_mode.startswith("gsi_"):
+        print(f"  n (cands)  : {cfg.gsi_n}")
+        print(f"  threshold  : {cfg.gsi_threshold}")
+        print(f"  max step   : {cfg.gsi_max_step_tokens} tokens")
+        if cfg.generation_mode == "gsi_pairwise":
+            print(f"  τ (B-T)    : {cfg.gsi_tau}")
+        if cfg.generation_mode == "gsi_swiss":
+            print(f"  swiss rnds : {cfg.swiss_rounds or 'auto'}")
+    else:
+        print(f"  K (cands)  : {cfg.K}")
+        print(f"  L (span)   : {cfg.L}")
     print(f"  Max tokens : {cfg.max_new_tokens}")
     print(f"  Dtype      : {cfg.dtype}")
     print(f"  Device     : {'CUDA' if torch.cuda.is_available() else 'CPU'}")
@@ -156,16 +222,63 @@ def main():
     t_load = time.time() - t0
     print(f"✓ Models loaded in {t_load:.1f}s\n")
 
-    # ── Generate ───────────────────────────────────────────────────────
-    generator = SwissKnifeGenerator(cfg, tokenizer, base_model, blade_model)
+    # ── Instantiate the right generator ────────────────────────────────
+    if cfg.generation_mode == "option_a":
+        from .generation import SwissKnifeGenerator
+        generator = SwissKnifeGenerator(cfg, tokenizer, base_model, blade_model)
+        print("⏳ Generating with Option A tournament sampling...\n")
+        t0 = time.time()
+        output = generator.generate(prompt=args.prompt, verbose=args.verbose)
+        t_gen = time.time() - t0
+        stats_dict = None
 
-    print("⏳ Generating with tournament sampling...\n")
-    t0 = time.time()
-    output = generator.generate(
-        prompt=args.prompt,
-        verbose=args.verbose,
-    )
-    t_gen = time.time() - t0
+    elif cfg.generation_mode == "option_b":
+        from .speculative_generator import SwissKnifeSpeculativeGenerator
+        generator = SwissKnifeSpeculativeGenerator(cfg, tokenizer, base_model, blade_model)
+        print("⏳ Generating with Option B speculative tournament...\n")
+        t0 = time.time()
+        output, stats = generator.generate(
+            prompt=args.prompt, verbose=args.verbose, return_stats=True,
+        )
+        t_gen = time.time() - t0
+        stats_dict = stats.to_dict()
+
+    elif cfg.generation_mode == "gsi_softmax":
+        from .gsi_softmax import GSISoftmaxGenerator
+        generator = GSISoftmaxGenerator(cfg, tokenizer, base_model, blade_model)
+        print("⏳ Generating with GSI Strategy 1 (Softmax)...\n")
+        t0 = time.time()
+        output, stats = generator.generate(
+            prompt=args.prompt, verbose=args.verbose, return_stats=True,
+        )
+        t_gen = time.time() - t0
+        stats_dict = stats.to_dict()
+
+    elif cfg.generation_mode == "gsi_pairwise":
+        from .gsi_pairwise import GSIPairwiseGenerator
+        generator = GSIPairwiseGenerator(cfg, tokenizer, base_model, blade_model)
+        print("⏳ Generating with GSI Strategy 2 (Pairwise Bradley-Terry)...\n")
+        t0 = time.time()
+        output, stats = generator.generate(
+            prompt=args.prompt, verbose=args.verbose, return_stats=True,
+        )
+        t_gen = time.time() - t0
+        stats_dict = stats.to_dict()
+
+    elif cfg.generation_mode == "gsi_swiss":
+        from .gsi_swiss import GSISwissGenerator
+        generator = GSISwissGenerator(cfg, tokenizer, base_model, blade_model)
+        print("⏳ Generating with GSI Strategy 3 (Swiss → Points → Softmax)...\n")
+        t0 = time.time()
+        output, stats = generator.generate(
+            prompt=args.prompt, verbose=args.verbose, return_stats=True,
+        )
+        t_gen = time.time() - t0
+        stats_dict = stats.to_dict()
+
+    else:
+        print(f"ERROR: Unknown generation_mode '{cfg.generation_mode}'")
+        sys.exit(1)
 
     # ── Output ─────────────────────────────────────────────────────────
     print()
@@ -175,7 +288,15 @@ def main():
     print(output)
     print("=" * 72)
     print(f"  Generation time: {t_gen:.1f}s")
+    if stats_dict:
+        print(f"  Stats: {json.dumps(stats_dict, indent=2)}")
     print("=" * 72)
+
+    # ── Write stats if requested ────────────────────────────────────────
+    if args.stats_out and stats_dict:
+        with open(args.stats_out, "w", encoding="utf-8") as f:
+            json.dump(stats_dict, f, indent=2)
+        print(f"\n📊 Stats written to {args.stats_out}")
 
 
 if __name__ == "__main__":

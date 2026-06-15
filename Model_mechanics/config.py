@@ -87,8 +87,33 @@ class SwissKnifeConfig:
     generation_mode: str = "option_b"
     """Which generation loop to run:
     'option_a' — non-speculative Best-of-K tournament (generation.py).
-    'option_b' — speculative-decoding-integrated verifier (speculative_generator.py)."""
+    'option_b' — speculative-decoding-integrated verifier (speculative_generator.py).
+    'gsi_softmax'  — GSI with softmax selection over reasoning steps.
+    'gsi_pairwise' — GSI with pairwise Bradley-Terry selection.
+    'gsi_swiss'    — GSI with Swiss-system matches → points → softmax."""
 
+    # ── GSI hyperparameters ─────────────────────────────────────────────
+    gsi_n: int = 8
+    """Number of candidate reasoning steps sampled per iteration (GSI's n).
+    Higher n → better coverage of the reward landscape but slower per step."""
+
+    gsi_threshold: float = 0.0
+    """Rejection threshold u for GSI. If the tilted reward of the selected
+    step falls below u, rejection triggers a resample.
+    Set to -inf to disable rejection (accept everything)."""
+
+    gsi_step_delimiter: str = "\n\n"
+    """Delimiter marking the end of a reasoning step. GSI generates steps
+    until this delimiter is produced, then scores the complete step."""
+
+    gsi_max_step_tokens: int = 512
+    """Maximum tokens per reasoning step. If the model hasn't produced the
+    step delimiter after this many tokens, the step is force-terminated."""
+
+    gsi_tau: float = 1.0
+    """Temperature τ for pairwise Bradley-Terry selection (Strategy 2).
+    P(A wins) = 1 / (1 + exp(-MATCH(A,B) / τ)).
+    Lower τ → sharper (more deterministic) selection."""
 
     alpha: float = 0.5
     """Mixing coefficient  α ∈ [0, 1].
@@ -159,5 +184,17 @@ class SwissKnifeConfig:
         assert self.gamma >= 1, f"γ (lookahead) must be ≥ 1, got {self.gamma}"
         assert self.tournament_mode in ("knockout", "swiss"), \
             f"tournament_mode must be 'knockout' or 'swiss', got '{self.tournament_mode}'"
-        assert self.generation_mode in ("option_a", "option_b"), \
-            f"generation_mode must be 'option_a' or 'option_b', got '{self.generation_mode}'"
+        _valid_gen_modes = (
+            "option_a", "option_b",
+            "gsi_softmax", "gsi_pairwise", "gsi_swiss",
+        )
+        assert self.generation_mode in _valid_gen_modes, \
+            f"generation_mode must be one of {_valid_gen_modes}, got '{self.generation_mode}'"
+
+        # GSI-specific validation
+        if self.generation_mode.startswith("gsi_"):
+            assert self.gsi_n >= 2, f"gsi_n must be ≥ 2, got {self.gsi_n}"
+            assert self.gsi_max_step_tokens >= 1, \
+                f"gsi_max_step_tokens must be ≥ 1, got {self.gsi_max_step_tokens}"
+            assert self.gsi_tau > 0, f"gsi_tau must be positive, got {self.gsi_tau}"
+

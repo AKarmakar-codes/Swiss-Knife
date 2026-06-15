@@ -392,3 +392,164 @@ class DPOBlade:
         ]  # [gamma, K]
 
         return gathered
+
+    # ── GSI: Step-level reward scoring ──────────────────────────────────
+
+    @torch.no_grad()
+    def score_reasoning_steps(
+        self,
+        prefix_ids: torch.Tensor,
+        step_token_ids_list: list,
+    ) -> torch.Tensor:
+        """Compute blade rewards for n complete reasoning steps.
+
+        This is the bridge between Swiss Knife blades and GSI:
+        it scores entire reasoning steps (not individual tokens), returning
+        one scalar reward per step that serves as r(x, y_i) in GSI.
+
+        Parameters
+        ----------
+        prefix_ids : torch.Tensor
+            Shape ``[1, prefix_len]`` — tokenized prompt + previously accepted steps.
+        step_token_ids_list : list of torch.Tensor
+            n tensors, each of shape ``[step_len_i]`` — token IDs for each
+            candidate reasoning step (variable lengths allowed).
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``[n]`` — r_blade for each step.
+            r_blade = β · Σ_t [log π_blade(tok_t | prefix, tok_<t) - log π_ref(tok_t | prefix, tok_<t)]
+        """
+        n = len(step_token_ids_list)
+        if n == 0:
+            return torch.tensor([], device=prefix_ids.device)
+
+        prefix_len = prefix_ids.shape[1]
+        device = prefix_ids.device
+
+        # Build [prefix ⊕ step_i] for each candidate step
+        full_ids_list = []
+        full_mask_list = []
+        max_len = 0
+
+        for step_ids in step_token_ids_list:
+            step_ids = step_ids.to(device)
+            full = torch.cat([prefix_ids.squeeze(0), step_ids], dim=0)
+            mask = torch.ones(full.shape[0], dtype=torch.long, device=device)
+            full_ids_list.append(full)
+            full_mask_list.append(mask)
+            max_len = max(max_len, full.shape[0])
+
+        # Pad to uniform length (right-pad for simplicity; mask handles it)
+        padded_ids = torch.full(
+            (n, max_len), self.tokenizer.pad_token_id,
+            dtype=torch.long, device=device,
+        )
+        padded_mask = torch.zeros(n, max_len, dtype=torch.long, device=device)
+
+        for i, (ids, mask) in enumerate(zip(full_ids_list, full_mask_list)):
+            padded_ids[i, :ids.shape[0]] = ids
+            padded_mask[i, :mask.shape[0]] = mask
+
+        # Forward pass: blade and ref models
+        blade_logits = self.blade_model(
+            input_ids=padded_ids, attention_mask=padded_mask
+        ).logits  # [n, max_len, V]
+
+        ref_logits = self.base_model(
+            input_ids=padded_ids, attention_mask=padded_mask
+        ).logits  # [n, max_len, V]
+
+        # Compute per-token log-probs over the step portion only
+        blade_logprobs = F.log_softmax(blade_logits.float(), dim=-1)
+        ref_logprobs = F.log_softmax(ref_logits.float(), dim=-1)
+
+        rewards = torch.zeros(n, device=device)
+        for i, step_ids in enumerate(step_token_ids_list):
+            step_len = step_ids.shape[0]
+            if step_len == 0:
+                continue
+            # Positions: predict step tokens from positions [prefix_len-1, prefix_len+step_len-2]
+            # Labels: step tokens at positions [prefix_len, prefix_len+step_len-1]
+            pred_positions = torch.arange(
+                prefix_len - 1, prefix_len - 1 + step_len, device=device
+            )
+            label_tokens = padded_ids[i, prefix_len:prefix_len + step_len]
+
+            blade_lp = blade_logprobs[i, pred_positions, label_tokens].sum()
+            ref_lp = ref_logprobs[i, pred_positions, label_tokens].sum()
+
+            rewards[i] = self.beta * (blade_lp - ref_lp)
+
+        return rewards
+
+    @torch.no_grad()
+    def compute_step_draft_logprobs(
+        self,
+        prefix_ids: torch.Tensor,
+        step_token_ids_list: list,
+    ) -> torch.Tensor:
+        """Compute base model (draft) log-probabilities for n reasoning steps.
+
+        Used as the fluency signal (log π_draft) in the match function.
+
+        Parameters
+        ----------
+        prefix_ids : torch.Tensor
+            Shape ``[1, prefix_len]``.
+        step_token_ids_list : list of torch.Tensor
+            n tensors, each of shape ``[step_len_i]``.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``[n]`` — log π_draft(step_i | prefix) for each step.
+        """
+        n = len(step_token_ids_list)
+        if n == 0:
+            return torch.tensor([], device=prefix_ids.device)
+
+        prefix_len = prefix_ids.shape[1]
+        device = prefix_ids.device
+
+        full_ids_list = []
+        full_mask_list = []
+        max_len = 0
+
+        for step_ids in step_token_ids_list:
+            step_ids = step_ids.to(device)
+            full = torch.cat([prefix_ids.squeeze(0), step_ids], dim=0)
+            mask = torch.ones(full.shape[0], dtype=torch.long, device=device)
+            full_ids_list.append(full)
+            full_mask_list.append(mask)
+            max_len = max(max_len, full.shape[0])
+
+        padded_ids = torch.full(
+            (n, max_len), self.tokenizer.pad_token_id,
+            dtype=torch.long, device=device,
+        )
+        padded_mask = torch.zeros(n, max_len, dtype=torch.long, device=device)
+
+        for i, (ids, mask) in enumerate(zip(full_ids_list, full_mask_list)):
+            padded_ids[i, :ids.shape[0]] = ids
+            padded_mask[i, :mask.shape[0]] = mask
+
+        draft_logits = self.base_model(
+            input_ids=padded_ids, attention_mask=padded_mask
+        ).logits
+        draft_logprobs = F.log_softmax(draft_logits.float(), dim=-1)
+
+        scores = torch.zeros(n, device=device)
+        for i, step_ids in enumerate(step_token_ids_list):
+            step_len = step_ids.shape[0]
+            if step_len == 0:
+                continue
+            pred_positions = torch.arange(
+                prefix_len - 1, prefix_len - 1 + step_len, device=device
+            )
+            label_tokens = padded_ids[i, prefix_len:prefix_len + step_len]
+            scores[i] = draft_logprobs[i, pred_positions, label_tokens].sum()
+
+        return scores
+
