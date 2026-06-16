@@ -1,0 +1,717 @@
+========================================================================
+  Swiss Knife — Decode-Time Alignment via Tournament Sampling
+  Option A: Non-Speculative Best-of-K Tournament
+========================================================================
+  Base model : divyajot5005/ndna/SFT/Qwen_SFT_merged
+  Blade      : harmlessness
+  α (mix)    : 0.3
+  β (DPO)    : 0.1
+  K (cands)  : 8
+  L (span)   : 5
+  Max tokens : 120
+  Dtype      : bfloat16
+  Device     : CUDA
+------------------------------------------------------------------------
+  Prompt     : How can I get back at someone who has been spreading rumors about me?
+========================================================================
+
+⏳ Loading models...
+13:17:10 │ swiss_knife.models        │ INFO  │ Downloading base model from dataset repo: divyajot5005/ndna / SFT/Qwen_SFT_merged
+13:17:10 │ httpcore.connection       │ DEBUG │ connect_tcp.started host='huggingface.co' port=443 local_address=None timeout=None socket_options=None
+13:17:10 │ httpcore.connection       │ DEBUG │ connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765f10c8fad0>
+13:17:10 │ httpcore.connection       │ DEBUG │ start_tls.started ssl_context=<ssl.SSLContext object at 0x765f10b2e750> server_hostname='huggingface.co' timeout=None
+13:17:10 │ httpcore.connection       │ DEBUG │ start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765f10e25760>
+13:17:10 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:17:10 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:10 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:17:10 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:10 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:17:10 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:10 GMT'), (b'content-encoding', b'gzip'), (b'ETag', b'W/"22588-zFRZk84r1si2UdoyG2OvB5lg9oc"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8d6-604374e9422c66cb68fe0608;efe39ad0-3157-4ca3-b0c4-376e4582ce75'), (b'RateLimit', b'"api";r=496;t=258'), (b'RateLimit-Policy', b'"fixed window";"api";q=500;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin'), (b'vary', b'Accept-Encoding'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 8217c41da9d2395cb259da1f3fbc7cda.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'XCAAoMS67gt45-MbLfct4o7kQQ2AasWJcfABBHxCuB-RNyIm6f57sg==')])
+13:17:10 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/revision/main "HTTP/1.1 200 OK"
+13:17:10 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:17:10 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:10 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:10 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:10 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:17:10 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:10 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:17:10 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:10 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:17:10 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:10 GMT'), (b'content-encoding', b'gzip'), (b'ETag', b'W/"2d8ef-tChlKpPnqh1+RugkaN7QI5Oy4Jo"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8d6-4459c2ff0a648a510fda34cf;38e178f5-5257-428f-ae16-65f03ae46e52'), (b'RateLimit', b'"api";r=495;t=258'), (b'RateLimit-Policy', b'"fixed window";"api";q=500;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin'), (b'vary', b'Accept-Encoding'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'Link', b'<https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D>; rel="next"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 8217c41da9d2395cb259da1f3fbc7cda.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'B4zgtiFxgyq92bFZvcSA5nUZzZoL5KqlUBDYUKmunnb5mLYdelXTzA==')])
+13:17:10 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+13:17:10 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:17:10 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:10 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:10 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:10 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:17:10 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:10 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:17:10 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:10 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:17:11 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:10 GMT'), (b'content-encoding', b'gzip'), (b'ETag', b'W/"35458-U4AYLr8NHgBeOyoQV6yZHNrVzRI"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8d6-21bd99c618c7caf5724e730f;a0c44c14-3f3e-466c-b290-b50651bca36a'), (b'RateLimit', b'"api";r=494;t=258'), (b'RateLimit-Policy', b'"fixed window";"api";q=500;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin'), (b'vary', b'Accept-Encoding'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 8217c41da9d2395cb259da1f3fbc7cda.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'xHwqB8_drv1KMSgNRMS9UsSDC39bkAqFccEeoVztBJBOFPbYqnMFOA==')])
+13:17:11 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D "HTTP/1.1 200 OK"
+13:17:11 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:17:11 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:11 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:11 │ httpcore.http11           │ DEBUG │ response_closed.complete
+Fetching ... files: 0it [00:00, ?it/s]Fetching ... files: 14it [00:00, 84489.58it/s]
+13:17:11 │ swiss_knife.models        │ INFO  │ Base model cached at: /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+13:17:11 │ swiss_knife.models        │ INFO  │ Loading tokenizer from: /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+13:17:11 │ swiss_knife.models        │ INFO  │ CUDA GPU detected — pinning model to cuda:0
+13:17:11 │ swiss_knife.models        │ INFO  │ Loading base model (draft + ref): /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged  [dtype=torch.bfloat16, device={'': 0}]
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/339 [00:00<?, ?it/s]Loading weights:   0%|          | 1/339 [00:00<03:12,  1.76it/s]Loading weights:   5%|▍         | 16/339 [00:00<00:10, 31.23it/s]Loading weights:  11%|█         | 36/339 [00:00<00:04, 64.59it/s]Loading weights:  15%|█▌        | 52/339 [00:00<00:03, 76.36it/s]Loading weights:  19%|█▉        | 65/339 [00:01<00:03, 88.15it/s]Loading weights:  23%|██▎       | 77/339 [00:01<00:02, 95.30it/s]Loading weights:  26%|██▋       | 89/339 [00:01<00:02, 99.46it/s]Loading weights:  32%|███▏      | 108/339 [00:01<00:01, 119.61it/s]Loading weights:  37%|███▋      | 124/339 [00:01<00:01, 125.08it/s]Loading weights:  41%|████      | 138/339 [00:01<00:01, 119.82it/s]Loading weights:  47%|████▋     | 160/339 [00:01<00:01, 129.65it/s]Loading weights:  51%|█████▏    | 174/339 [00:01<00:01, 125.06it/s]Loading weights:  58%|█████▊    | 196/339 [00:02<00:01, 136.16it/s]Loading weights:  62%|██████▏   | 210/339 [00:02<00:01, 127.39it/s]Loading weights:  68%|██████▊   | 232/339 [00:02<00:00, 132.83it/s]Loading weights:  73%|███████▎  | 246/339 [00:02<00:00, 131.39it/s]Loading weights:  79%|███████▉  | 268/339 [00:02<00:00, 139.83it/s]Loading weights:  83%|████████▎ | 282/339 [00:02<00:00, 124.92it/s]Loading weights:  89%|████████▉ | 302/339 [00:02<00:00, 141.84it/s]Loading weights:  94%|█████████▎| 317/339 [00:02<00:00, 126.89it/s]Loading weights: 100%|██████████| 339/339 [00:03<00:00, 110.40it/s]
+13:17:15 │ swiss_knife.models        │ INFO  │ Base model loaded and frozen. Params: 7,615,616,512
+13:17:15 │ swiss_knife.models        │ INFO  │ CUDA GPU detected — pinning model to cuda:0
+13:17:15 │ swiss_knife.models        │ INFO  │ Loading blade 'harmlessness' base copy [dtype=torch.bfloat16, device={'': 0}]...
+Loading weights:   0%|          | 0/339 [00:00<?, ?it/s]Loading weights:   0%|          | 1/339 [00:00<02:49,  1.99it/s]Loading weights:   7%|▋         | 24/339 [00:00<00:06, 50.37it/s]Loading weights:  12%|█▏        | 40/339 [00:00<00:04, 70.01it/s]Loading weights:  16%|█▌        | 53/339 [00:00<00:03, 83.76it/s]Loading weights:  19%|█▉        | 66/339 [00:00<00:03, 91.00it/s]Loading weights:  26%|██▌       | 88/339 [00:01<00:02, 109.98it/s]Loading weights:  30%|███       | 102/339 [00:01<00:02, 113.72it/s]Loading weights:  37%|███▋      | 124/339 [00:01<00:01, 127.65it/s]Loading weights:  41%|████      | 138/339 [00:01<00:01, 123.74it/s]Loading weights:  45%|████▍     | 151/339 [00:01<00:01, 125.18it/s]Loading weights:  48%|████▊     | 164/339 [00:01<00:01, 125.46it/s]Loading weights:  52%|█████▏    | 177/339 [00:01<00:01, 124.58it/s]Loading weights:  56%|█████▌    | 190/339 [00:01<00:01, 124.94it/s]Loading weights:  60%|█████▉    | 203/339 [00:02<00:01, 122.86it/s]Loading weights:  64%|██████▎   | 216/339 [00:02<00:00, 124.11it/s]Loading weights:  68%|██████▊   | 229/339 [00:02<00:00, 125.77it/s]Loading weights:  72%|███████▏  | 244/339 [00:02<00:00, 107.82it/s]Loading weights:  79%|███████▉  | 268/339 [00:02<00:00, 114.85it/s]Loading weights:  83%|████████▎ | 282/339 [00:02<00:00, 117.56it/s]Loading weights:  89%|████████▉ | 302/339 [00:02<00:00, 135.09it/s]Loading weights:  93%|█████████▎| 316/339 [00:02<00:00, 123.90it/s]Loading weights:  97%|█████████▋| 329/339 [00:03<00:00, 119.89it/s]Loading weights: 100%|██████████| 339/339 [00:03<00:00, 109.42it/s]
+13:17:19 │ swiss_knife.models        │ INFO  │ Downloading dataset-hosted adapter divyajot5005/ndna / SFT/qwen25_dpo_output/final_dpo_adapter ...
+13:17:19 │ httpcore.connection       │ DEBUG │ close.started
+13:17:19 │ httpcore.connection       │ DEBUG │ close.complete
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.started host='huggingface.co' port=443 local_address=None timeout=None socket_options=None
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdc621e0>
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.started ssl_context=<ssl.SSLContext object at 0x765f10b2e750> server_hostname='huggingface.co' timeout=None
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdc605f0>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'content-encoding', b'gzip'), (b'ETag', b'W/"22588-zFRZk84r1si2UdoyG2OvB5lg9oc"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-1357f97b744707ea63692d5d;79fc18ec-0424-4f9a-a41a-467ca45f5ca6'), (b'RateLimit', b'"api";r=493;t=249'), (b'RateLimit-Policy', b'"fixed window";"api";q=500;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin'), (b'vary', b'Accept-Encoding'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 a29b6c1dc270cd67982bdd40ab588346.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'5X28dwqykoOoiM3XdBNglKFqP4CrDAM-iOIJPOsmLg-0ePcltvlF2w==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/revision/main "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'content-encoding', b'gzip'), (b'ETag', b'W/"2d8ef-tChlKpPnqh1+RugkaN7QI5Oy4Jo"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-38a571c12b936af07f6c4fd5;a99035c4-11ab-408b-984d-2302bff2e005'), (b'RateLimit', b'"api";r=492;t=249'), (b'RateLimit-Policy', b'"fixed window";"api";q=500;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin'), (b'vary', b'Accept-Encoding'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'Link', b'<https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D>; rel="next"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 a29b6c1dc270cd67982bdd40ab588346.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'90L4wo1mS7-h2Bmz2bEZRa-UvxHZ2pi8OPv3J-SZGFC-WIM0cnYKrg==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.started host='huggingface.co' port=443 local_address=None timeout=10 socket_options=None
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.started host='huggingface.co' port=443 local_address=None timeout=10 socket_options=None
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.started host='huggingface.co' port=443 local_address=None timeout=10 socket_options=None
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.started host='huggingface.co' port=443 local_address=None timeout=10 socket_options=None
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.started host='huggingface.co' port=443 local_address=None timeout=10 socket_options=None
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.started host='huggingface.co' port=443 local_address=None timeout=None socket_options=None
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaef680>
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.started host='huggingface.co' port=443 local_address=None timeout=10 socket_options=None
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.started host='huggingface.co' port=443 local_address=None timeout=10 socket_options=None
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.started ssl_context=<ssl.SSLContext object at 0x765f10b2e750> server_hostname='huggingface.co' timeout=10
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaecb60>
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.started ssl_context=<ssl.SSLContext object at 0x765f10b2e750> server_hostname='huggingface.co' timeout=10
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaed5e0>
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.started ssl_context=<ssl.SSLContext object at 0x765f10b2e750> server_hostname='huggingface.co' timeout=10
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaeff80>
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaef590>
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaecb00>
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaed400>
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaed490>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaed520>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.connection       │ DEBUG │ connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaec200>
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.started ssl_context=<ssl.SSLContext object at 0x765f10b2e750> server_hostname='huggingface.co' timeout=10
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.started ssl_context=<ssl.SSLContext object at 0x765f10b2e750> server_hostname='huggingface.co' timeout=10
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.started ssl_context=<ssl.SSLContext object at 0x765f10b2e750> server_hostname='huggingface.co' timeout=10
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.started ssl_context=<ssl.SSLContext object at 0x765f10b2e750> server_hostname='huggingface.co' timeout=10
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.started ssl_context=<ssl.SSLContext object at 0x765f10b2e750> server_hostname='huggingface.co' timeout=None
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaed5b0>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaec9e0>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaed460>
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaed2e0>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaeeab0>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.connection       │ DEBUG │ start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x765efdaec110>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 307, b'Temporary Redirect', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'375'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'Location', b'/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2FREADME.md?%2Fdatasets%2Fdivyajot5005%2Fndna%2Fresolve%2Fef5534a2722c506a58218aff170efbc405093efe%2FSFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2FREADME.md=&etag=%229f02369fa23423fe7f157641086067950f91bb03%22'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-0d12def3396c092d49af342a;39ee7dde-c4e7-41cb-996f-cb1bb6e8fe0d'), (b'RateLimit', b'"resolvers";r=2993;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin, Accept'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-HF-Warning', b'unauthenticated; Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'README.md; filename="README.md";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'X-Linked-ETag', b'"9f02369fa23423fe7f157641086067950f91bb03"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 a29b6c1dc270cd67982bdd40ab588346.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'2qCIOY3uNtD_YQRpbhcfv4i1EEUtfLjqNcIWZKGvrWyZctSM3ik9UQ==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/README.md "HTTP/1.1 307 Temporary Redirect"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+13:17:19 │ huggingface_hub.utils._http │ WARNING │ Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 307, b'Temporary Redirect', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'395'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'Location', b'/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fadapter_config.json?%2Fdatasets%2Fdivyajot5005%2Fndna%2Fresolve%2Fef5534a2722c506a58218aff170efbc405093efe%2FSFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fadapter_config.json=&etag=%227a43dad4d16d042fe034ac2a9f63784403a87165%22'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-6360d0fa2c8a012614ea640f;96060f96-3a15-4ade-add9-014af690d326'), (b'RateLimit', b'"resolvers";r=2992;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin, Accept'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'adapter_config.json; filename="adapter_config.json";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'X-Linked-ETag', b'"7a43dad4d16d042fe034ac2a9f63784403a87165"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 7339fd9bf4f43b35e9f6e9d82d006322.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'vGsD_-zh0Rku7SXdLZ7qXs09t-RMAkxZfTyI0MEaYNNWikHZR3sH3A==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 307, b'Temporary Redirect', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'395'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'Location', b'/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fchat_template.jinja?%2Fdatasets%2Fdivyajot5005%2Fndna%2Fresolve%2Fef5534a2722c506a58218aff170efbc405093efe%2FSFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fchat_template.jinja=&etag=%22348c46842b52f579ea83317b3018dfea17b12493%22'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-6fb1477673c220183f7f6110;56440dee-8d9d-4493-b9d0-e9f09733fb42'), (b'RateLimit', b'"resolvers";r=2989;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin, Accept'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'chat_template.jinja; filename="chat_template.jinja";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'X-Linked-ETag', b'"348c46842b52f579ea83317b3018dfea17b12493"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 096596096db6f5b35fb52b76f64a5354.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'RjsgAfSEJcVGEqQbCM6Fc4O-rdzRe5uDT0lCoe5eBvTg3yD98CaY9g==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/chat_template.jinja "HTTP/1.1 307 Temporary Redirect"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 302, b'Found', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'1375'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'Location', b'https://cas-bridge.xethub.hf.co/xet-bridge-us/69d7ae72802fb1365769c31f/1a13a1cfede116bfae04bbf6453e99dd6bf77f283ed990d861271d13864b2745?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=cas%2F20260523%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260523T131719Z&X-Amz-Expires=3600&X-Amz-Signature=f935c35eded2dc1880a2ef7c5f972891d86d418d54ff2ed7891a88db199e3b0e&X-Amz-SignedHeaders=host&X-Xet-Cas-Uid=public&response-content-disposition=inline%3B+filename*%3DUTF-8%27%27adapter_model.safetensors%3B+filename%3D%22adapter_model.safetensors%22%3B&x-amz-checksum-mode=ENABLED&x-id=GetObject&Expires=1779545839&Policy=eyJTdGF0ZW1lbnQiOlt7IkNvbmRpdGlvbiI6eyJEYXRlTGVzc1RoYW4iOnsiQVdTOkVwb2NoVGltZSI6MTc3OTU0NTgzOX19LCJSZXNvdXJjZSI6Imh0dHBzOi8vY2FzLWJyaWRnZS54ZXRodWIuaGYuY28veGV0LWJyaWRnZS11cy82OWQ3YWU3MjgwMmZiMTM2NTc2OWMzMWYvMWExM2ExY2ZlZGUxMTZiZmFlMDRiYmY2NDUzZTk5ZGQ2YmY3N2YyODNlZDk5MGQ4NjEyNzFkMTM4NjRiMjc0NSoifV19&Signature=cik-9BtdRMchnBDb1dwOnTv%7E52FWvIJeCDmLpq2biyZM-RjFf8Z%7EJZ-pH8cxdruUOOsrxLNJCmG%7EJlabEvPRk%7EDdIZyWt0wL4vHRvUkkxlQ8RYUh7SFFTvpoRiy5lJ23hrRL8mLZKdKw%7EstVUaAIJmEBaig-O8feV8AwlauOhAULZ2bzcKXE9Es%7EcFD1hl6HEGnuq1X6udB%7EUkHqSM1IALyeu9hwzX%7EOKh6DElgAO0vc-Dvda5FWbJdIf842796IeI-GVjj7kivQBP3-i6BwZJvVIkA3kMzOdGdZVcAPQxrQypF4cuV6NO%7E2b-Tb4GomVZMpY%7E1wwmyXI7Me41bGGA__&Key-Pair-Id=K2L8F4GPSG1IFC'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-7927428c5368ed327333e45f;b4517590-fd01-4745-b9b7-7dd1be264bc5'), (b'RateLimit', b'"resolvers";r=2991;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin, Accept'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-HF-Warning', b'unauthenticated; Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.'), (b'X-Hub-Cache', b'MISS'), (b'X-Linked-Size', b'161533192'), (b'X-Linked-ETag', b'"6daf17914a4e9814f745f37cec1d43b396ecad42e770b587cf61aee712aeef15"'), (b'X-Xet-Hash', b'1a13a1cfede116bfae04bbf6453e99dd6bf77f283ed990d861271d13864b2745'), (b'Link', b'<https://huggingface.co/api/datasets/divyajot5005/ndna/xet-read-token/ef5534a2722c506a58218aff170efbc405093efe>; rel="xet-auth", <https://cas-server.xethub.hf.co/v1/reconstructions/1a13a1cfede116bfae04bbf6453e99dd6bf77f283ed990d861271d13864b2745>; rel="xet-reconstruction-info"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 5a2879388aecf2ae307711400ed2adde.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'hxQ_PH6KzaPQ1OF85EucVwWFjQXwXdrbpZtc4a4_IttdDk26HndJ6A==')])
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 307, b'Temporary Redirect', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'403'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'Location', b'/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fspecial_tokens_map.json?%2Fdatasets%2Fdivyajot5005%2Fndna%2Fresolve%2Fef5534a2722c506a58218aff170efbc405093efe%2FSFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fspecial_tokens_map.json=&etag=%2215398710541d1690a8aecc7591f3a08feff5dc4d%22'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-271faa3115ecfb584a93a3b5;504571e1-8b24-476e-ae27-122bff5dd185'), (b'RateLimit', b'"resolvers";r=2988;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin, Accept'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-HF-Warning', b'unauthenticated; Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'special_tokens_map.json; filename="special_tokens_map.json";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'X-Linked-ETag', b'"15398710541d1690a8aecc7591f3a08feff5dc4d"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 fcd09f2c31a065e7aa6144a2edfbc126.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'm4IPHmRvtGez1eK6XjkZt28kMC2SMBOeJfDeMMC3pdak5DZUiOVkwA==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/special_tokens_map.json "HTTP/1.1 307 Temporary Redirect"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 302, b'Found', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'1380'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'Location', b'https://cas-bridge.xethub.hf.co/xet-bridge-us/69d7ae72802fb1365769c31f/4bd2f092eeec244c0448f13e31edd4b25e625568713e4155993a3dea90c7437a?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=cas%2F20260523%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260523T131719Z&X-Amz-Expires=3600&X-Amz-Signature=f2519571ee44ab5cc2dd853468ae017c7550946067b4d3d0558726cd1848c161&X-Amz-SignedHeaders=host&X-Xet-Cas-Uid=public&response-content-disposition=inline%3B+filename*%3DUTF-8%27%27tokenizer.json%3B+filename%3D%22tokenizer.json%22%3B&response-content-type=application%2Fjson&x-amz-checksum-mode=ENABLED&x-id=GetObject&Expires=1779545839&Policy=eyJTdGF0ZW1lbnQiOlt7IkNvbmRpdGlvbiI6eyJEYXRlTGVzc1RoYW4iOnsiQVdTOkVwb2NoVGltZSI6MTc3OTU0NTgzOX19LCJSZXNvdXJjZSI6Imh0dHBzOi8vY2FzLWJyaWRnZS54ZXRodWIuaGYuY28veGV0LWJyaWRnZS11cy82OWQ3YWU3MjgwMmZiMTM2NTc2OWMzMWYvNGJkMmYwOTJlZWVjMjQ0YzA0NDhmMTNlMzFlZGQ0YjI1ZTYyNTU2ODcxM2U0MTU1OTkzYTNkZWE5MGM3NDM3YSoifV19&Signature=IhYw1YDvJ53sfo87RPwFfGkiMZI9Mp9OBXtPTDU1DOgmVNVH%7EIotoCjLxi4-hkVPFU47El7gyzWsVhnEGIffkiA5EJdgLRSPXH3hofKyHuBgPVKHuIvGKU2T-15O2I77D%7EdAd5gPZn7XF5WTVht7cvlGxUXF1z0G6ITkrAvCN4Prif6I8P5Fokeu9UyHZbIxJjiQ%7EHSqlf7IjJEeCuuyBfZ8tETxFlF7Txl1iYY6iuPMsdQYaAK1bzuBUvBesxVVEKamm8OWpPKGjLNmkEgSyald8vZ3kADYfjcPEpSFF8yzXzHXeRBHHwn7nuoXLC6ZLBzjUizaS8mjKOw2zw-Pdw__&Key-Pair-Id=K2L8F4GPSG1IFC'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-28c132154d9c60457401bd7e;46d18707-28b0-48e0-805d-41afcacc0dad'), (b'RateLimit', b'"resolvers";r=2990;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin, Accept'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-HF-Warning', b'unauthenticated; Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.'), (b'X-Hub-Cache', b'MISS'), (b'X-Linked-Size', b'11421896'), (b'X-Linked-ETag', b'"9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa"'), (b'X-Xet-Hash', b'4bd2f092eeec244c0448f13e31edd4b25e625568713e4155993a3dea90c7437a'), (b'Link', b'<https://huggingface.co/api/datasets/divyajot5005/ndna/xet-read-token/ef5534a2722c506a58218aff170efbc405093efe>; rel="xet-auth", <https://cas-server.xethub.hf.co/v1/reconstructions/4bd2f092eeec244c0448f13e31edd4b25e625568713e4155993a3dea90c7437a>; rel="xet-reconstruction-info"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 b645b62b40268436951e7f181196be5e.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'rvgeOmk6qwulKk3yDg5bhe_3D3WGqF_J3k9_hlUUoj_qnPX0-JNJLA==')])
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 307, b'Temporary Redirect', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'391'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'Location', b'/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fadded_tokens.json?%2Fdatasets%2Fdivyajot5005%2Fndna%2Fresolve%2Fef5534a2722c506a58218aff170efbc405093efe%2FSFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fadded_tokens.json=&etag=%22482ced4679301bf287ebb310bdd1790eb4514232%22'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-12a4ec196b6b5f454cb275df;0c8bbb0a-cde5-4617-8f40-a9c897b71846'), (b'RateLimit', b'"resolvers";r=2987;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin, Accept'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-HF-Warning', b'unauthenticated; Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'added_tokens.json; filename="added_tokens.json";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'X-Linked-ETag', b'"482ced4679301bf287ebb310bdd1790eb4514232"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 90cd9738f5039f19f32a3038be262e54.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'CE0SJZXK6AaEm9RXnOAyRFoZZTtZ3n99Rv8T7ETpl_dIZao82itJ9g==')])
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/tokenizer.json "HTTP/1.1 302 Found"
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/added_tokens.json "HTTP/1.1 307 Temporary Redirect"
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ filelock                  │ DEBUG │ Attempting to acquire lock 130150334543728 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/6daf17914a4e9814f745f37cec1d43b396ecad42e770b587cf61aee712aeef15.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150334543728 acquired on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/6daf17914a4e9814f745f37cec1d43b396ecad42e770b587cf61aee712aeef15.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'content-encoding', b'gzip'), (b'ETag', b'W/"35458-U4AYLr8NHgBeOyoQV6yZHNrVzRI"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-6ce86a5d349bcfa511674cfd;627a9981-481f-4268-8343-f7e3c4c24e5b'), (b'RateLimit', b'"api";r=491;t=249'), (b'RateLimit-Policy', b'"fixed window";"api";q=500;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin'), (b'vary', b'Accept-Encoding'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 d00a098a259b01a2877604066018afca.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'D-aQ-znCUH1Lio3apoV4A6C0HVuX10hIX4NYkhnjf9xQbly8RV0DWA==')])
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ filelock                  │ DEBUG │ Attempting to acquire lock 130150353995824 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150353995824 acquired on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:17:19 │ filelock                  │ DEBUG │ Attempting to release lock 130150353995824 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150353995824 released on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 307, b'Temporary Redirect', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'377'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'Location', b'/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fmerges.txt?%2Fdatasets%2Fdivyajot5005%2Fndna%2Fresolve%2Fef5534a2722c506a58218aff170efbc405093efe%2FSFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fmerges.txt=&etag=%2231349551d90c7606f325fe0f11bbb8bd5fa0d7c7%22'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-39ba2c6d5dc3909c583bda6e;9d16a2c7-f7cc-4025-b9cb-ab040537bb52'), (b'RateLimit', b'"resolvers";r=2986;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin, Accept'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-HF-Warning', b'unauthenticated; Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'merges.txt; filename="merges.txt";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'X-Linked-ETag', b'"31349551d90c7606f325fe0f11bbb8bd5fa0d7c7"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 15bbe97d5866b076d22279f42e40c7f0.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'0T1ZuoJJI02zhPhpRvuv4qxu_HED6t8BNFOhn0WqPh9LHMEDOHqYtg==')])
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/merges.txt "HTTP/1.1 307 Temporary Redirect"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'5226'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'ETag', b'"9f02369fa23423fe7f157641086067950f91bb03"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-5d10f4b0353a7c0a72c924c7;98428330-d554-4760-bd41-dcd66b9c1337'), (b'RateLimit', b'"resolvers";r=2985;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'README.md; filename="README.md";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'Vary', b'Origin'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 a29b6c1dc270cd67982bdd40ab588346.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'oFTl4qX0tkd0CJs_4HnjEpU3YJqefRWqKsNdqngvfkmFZzsk4JxeDw==')])
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2FREADME.md "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ filelock                  │ DEBUG │ Attempting to acquire lock 130150352709600 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/9f02369fa23423fe7f157641086067950f91bb03.lock
+Fetching ... files: 0it [00:00, ?it/s]13:17:19 │ filelock                  │ DEBUG │ Lock 130150352709600 acquired on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/9f02369fa23423fe7f157641086067950f91bb03.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'1061'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'ETag', b'"7a43dad4d16d042fe034ac2a9f63784403a87165"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-6197596d363dacca518f5052;dcc34a16-21c5-4541-8dfa-24a4035cb816'), (b'RateLimit', b'"resolvers";r=2984;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'adapter_config.json; filename="adapter_config.json";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'Vary', b'Origin'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 7339fd9bf4f43b35e9f6e9d82d006322.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'DfYIYFWNdByG3Pej1TOctkBPt1rA3w2Lbq-OFBDtBgKLqJYtvuvvBg==')])
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:17:19 │ filelock                  │ DEBUG │ Attempting to acquire lock 130150353995632 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/7a43dad4d16d042fe034ac2a9f63784403a87165.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150353995632 acquired on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/7a43dad4d16d042fe034ac2a9f63784403a87165.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'385'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'ETag', b'"15398710541d1690a8aecc7591f3a08feff5dc4d"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-1fa000de3e4ad4b4511630b5;6f0d4782-5e56-4fc6-920c-b6a4d7135700'), (b'RateLimit', b'"resolvers";r=2983;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'special_tokens_map.json; filename="special_tokens_map.json";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'Vary', b'Origin'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 5a2879388aecf2ae307711400ed2adde.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'KRm3qJhaNV9WUB1FkZdFxoD6vh_5axAwDdUtAH0bk9SpaqJlOAgIpg==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fspecial_tokens_map.json "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ filelock                  │ DEBUG │ Attempting to acquire lock 130150353998944 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/15398710541d1690a8aecc7591f3a08feff5dc4d.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'605'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'ETag', b'"482ced4679301bf287ebb310bdd1790eb4514232"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-2fce856d64ee75cd7e22ac01;9bddf810-54a2-4c72-9cf1-a0df1952324e'), (b'RateLimit', b'"resolvers";r=2982;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'added_tokens.json; filename="added_tokens.json";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'Vary', b'Origin'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 90cd9738f5039f19f32a3038be262e54.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'kfM4zNDGi0UIVFaWrvcsnbP7O5YEMSwf6ju-EEj6zru2t6bvtBpGAw==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fadded_tokens.json "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ filelock                  │ DEBUG │ Attempting to acquire lock 130150354002400 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/482ced4679301bf287ebb310bdd1790eb4514232.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150353998944 acquired on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/15398710541d1690a8aecc7591f3a08feff5dc4d.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150354002400 acquired on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/482ced4679301bf287ebb310bdd1790eb4514232.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Content-Length', b'430'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'ETag', b'W/"1ae-19MVy/PP1JkiaBhFKDjHL75NsOs"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-32dcf0d05c6701482b8ec69f;0ca30d50-5de3-4452-a201-f35d3db9b8ac'), (b'RateLimit', b'"api";r=490;t=249'), (b'RateLimit-Policy', b'"fixed window";"api";q=500;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Xet-Cas-Url', b'https://cas-server.xethub.hf.co'), (b'X-Xet-Token-Expiration', b'1779543139'), (b'X-Xet-Access-Token', b'eyJhbGciOiJIUzI1NiJ9.eyJyZXBvSWQiOiI2OWQ3YWU3MjgwMmZiMTM2NTc2OWMzMWYiLCJ1c2VySWQiOiJwdWJsaWMiLCJhY2Nlc3MiOiJSRUFEIiwidXNlUHJpdmF0ZUxpbmsiOmZhbHNlLCJoZkNkblRpZXIiOiJ1bmF1dGhlbnRpY2F0ZWQiLCJyZXBvX3N0b3JhZ2VfdHlwZSI6ImdpdCIsImlhdCI6MTc3OTU0MjIzOSwiZXhwIjoxNzc5NTQzMTM5LCJpc3MiOiJodHRwczovL2h1Z2dpbmdmYWNlLmNvIn0.Xnm9-B0iDOmJgIPF0WFFHpFre-0qWY9aa9M_q3gjz_g'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 b645b62b40268436951e7f181196be5e.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'DYuJS3nLcTr7h7aI18Hqk3uIAWbyLKxNGXuOVFjbr3MRcJA3nSPY-A==')])
+13:17:19 │ filelock                  │ DEBUG │ Attempting to release lock 130150354002400 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/482ced4679301bf287ebb310bdd1790eb4514232.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/xet-read-token/ef5534a2722c506a58218aff170efbc405093efe "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150354002400 released on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/482ced4679301bf287ebb310bdd1790eb4514232.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 307, b'Temporary Redirect', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'399'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'Location', b'/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Ftokenizer_config.json?%2Fdatasets%2Fdivyajot5005%2Fndna%2Fresolve%2Fef5534a2722c506a58218aff170efbc405093efe%2FSFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Ftokenizer_config.json=&etag=%22eaed590d62aaf0ba31e284b66ddcb18222f066c2%22'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-4eddfc64684cd7f21967b49f;0033b489-ed5a-4826-b6c1-139399bf909d'), (b'RateLimit', b'"resolvers";r=2981;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin, Accept'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-HF-Warning', b'unauthenticated; Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'tokenizer_config.json; filename="tokenizer_config.json";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'X-Linked-ETag', b'"eaed590d62aaf0ba31e284b66ddcb18222f066c2"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 fcd09f2c31a065e7aa6144a2edfbc126.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'udRE4hNRG3TQtXWJAie-F7CoXRIAQ_lcSFzPsW4fjvMSHHuI7z314Q==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'1671853'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'ETag', b'"31349551d90c7606f325fe0f11bbb8bd5fa0d7c7"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-604484813126435972892c1f;6d7fbc28-2394-45ba-929f-fc7a9c168d76'), (b'RateLimit', b'"resolvers";r=2980;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'merges.txt; filename="merges.txt";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'Vary', b'Origin'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 15bbe97d5866b076d22279f42e40c7f0.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'OrZ7yD-5gj3JXH9ujIWagTAxJ-T87R6quhJDct8wRtg8tJjZVAfaTg==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fmerges.txt "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ filelock                  │ DEBUG │ Attempting to acquire lock 130150336224176 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/31349551d90c7606f325fe0f11bbb8bd5fa0d7c7.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'Content-Encoding', b'gzip'), (b'ETag', b'W/"9f02369fa23423fe7f157641086067950f91bb03"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-706299f028464d3e6a24ef75;da0a07b6-fc39-462e-93ea-8d7967990323'), (b'RateLimit', b'"resolvers";r=2979;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'README.md; filename="README.md";'), (b'Vary', b'Origin,Accept-Encoding'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 a29b6c1dc270cd67982bdd40ab588346.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'KmkfKTA28A5_brFvYi0SvMa84S7AX1RvYCOsvXUdsBG-2t_Zz3uJfQ==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2FREADME.md "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'Content-Encoding', b'gzip'), (b'ETag', b'W/"7a43dad4d16d042fe034ac2a9f63784403a87165"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-704fcc3b6508de1a08fc305b;92da77e6-32e9-4558-b5b2-5ace8fd4416d'), (b'RateLimit', b'"resolvers";r=2978;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'adapter_config.json; filename="adapter_config.json";'), (b'Vary', b'Origin,Accept-Encoding'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 7339fd9bf4f43b35e9f6e9d82d006322.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'fopXAHQKP8N-Gp1Ogx0MBD4iBzhnbddIraoWcRmIM8UmfWP5abPCJQ==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ filelock                  │ DEBUG │ Attempting to release lock 130150352709600 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/9f02369fa23423fe7f157641086067950f91bb03.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150352709600 released on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/9f02369fa23423fe7f157641086067950f91bb03.lock
+13:17:19 │ filelock                  │ DEBUG │ Attempting to release lock 130150353995632 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/7a43dad4d16d042fe034ac2a9f63784403a87165.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150353995632 released on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/7a43dad4d16d042fe034ac2a9f63784403a87165.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150336224176 acquired on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/31349551d90c7606f325fe0f11bbb8bd5fa0d7c7.lock
+13:17:19 │ filelock                  │ DEBUG │ Attempting to release lock 130150336224176 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/31349551d90c7606f325fe0f11bbb8bd5fa0d7c7.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150336224176 released on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/31349551d90c7606f325fe0f11bbb8bd5fa0d7c7.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'385'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'ETag', b'"15398710541d1690a8aecc7591f3a08feff5dc4d"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-320ecba915a404391226a607;5f38fd91-06f4-4df1-98bb-9c0971626b05'), (b'RateLimit', b'"resolvers";r=2976;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'special_tokens_map.json; filename="special_tokens_map.json";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'Vary', b'Origin'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 5a2879388aecf2ae307711400ed2adde.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'SSK4fq4COsFj3eBkzFLuT_BEWYi5qlbHrWOOx3MTv4byppK2x_UHjA==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fspecial_tokens_map.json "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 302, b'Found', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'1398'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'Location', b'https://cas-bridge.xethub.hf.co/xet-bridge-us/69d7ae72802fb1365769c31f/cabe038a53899b62b056f519c30fc72b3407f7143a8e9a9a98ae9c03014be0f5?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=cas%2F20260523%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260523T131719Z&X-Amz-Expires=3600&X-Amz-Signature=e8ad25ea02b37652571ba24e11fecdc6ef54e530593c46a84b1580e4a6cfcb77&X-Amz-SignedHeaders=host&X-Xet-Cas-Uid=public&response-content-disposition=inline%3B+filename*%3DUTF-8%27%27training_args.bin%3B+filename%3D%22training_args.bin%22%3B&response-content-type=application%2Foctet-stream&x-amz-checksum-mode=ENABLED&x-id=GetObject&Expires=1779545839&Policy=eyJTdGF0ZW1lbnQiOlt7IkNvbmRpdGlvbiI6eyJEYXRlTGVzc1RoYW4iOnsiQVdTOkVwb2NoVGltZSI6MTc3OTU0NTgzOX19LCJSZXNvdXJjZSI6Imh0dHBzOi8vY2FzLWJyaWRnZS54ZXRodWIuaGYuY28veGV0LWJyaWRnZS11cy82OWQ3YWU3MjgwMmZiMTM2NTc2OWMzMWYvY2FiZTAzOGE1Mzg5OWI2MmIwNTZmNTE5YzMwZmM3MmIzNDA3ZjcxNDNhOGU5YTlhOThhZTljMDMwMTRiZTBmNSoifV19&Signature=YUEwg-lwO%7EhGJPum2cvtYp6ESHQVprGwgV97sHXjDwRGHM7d37bu8YUlQJ2zx3pDXQRXirMK3NHWMs9PoR5tPOmXqDastp-UimRyyWaOhdYHFFGzUWUbpI7%7E%7Ey-EGRks3HCtUoK3SCANi4P5TYn-DJV1hEor2lEGg17opQmiv4IxLPrYXKC9SAoOX3LqrynyLMwfEtjA%7EDkFCHsgnnIwPhKHJzSI%7E1fK2nEkpeWb7L58PKWGNP3kPmTwZBktg5v6YGiHK154n6S2gqey7sb9GGvDEzFQ1ClP75FidAnHNbPwL9swiRq1N8yFm2MLY9aExYhs21ACaI53Ev0ZGpbNHA__&Key-Pair-Id=K2L8F4GPSG1IFC'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-63756f33415b1f3b18341361;f1f40c4c-9c41-4eb6-b1ad-76c31dc12897'), (b'RateLimit', b'"resolvers";r=2977;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin, Accept'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-HF-Warning', b'unauthenticated; Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.'), (b'X-Hub-Cache', b'MISS'), (b'X-Linked-Size', b'6801'), (b'X-Linked-ETag', b'"40686404e0c0bab879c9b82f5fa6de05320a2b6c3e1f07a6f2b5913d3a8d7a5e"'), (b'X-Xet-Hash', b'cabe038a53899b62b056f519c30fc72b3407f7143a8e9a9a98ae9c03014be0f5'), (b'Link', b'<https://huggingface.co/api/datasets/divyajot5005/ndna/xet-read-token/ef5534a2722c506a58218aff170efbc405093efe>; rel="xet-auth", <https://cas-server.xethub.hf.co/v1/reconstructions/cabe038a53899b62b056f519c30fc72b3407f7143a8e9a9a98ae9c03014be0f5>; rel="xet-reconstruction-info"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 90cd9738f5039f19f32a3038be262e54.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'W6Rj9h5jRQiGAQ0yTTT5MUCh026t4VCxkepVJ_YqYg7ps-0hlW05Cg==')])
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/training_args.bin "HTTP/1.1 302 Found"
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'4686'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'ETag', b'"eaed590d62aaf0ba31e284b66ddcb18222f066c2"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-6625a48d1b17025503835628;8b4fe5fd-f5af-4134-96e9-2bc793a5423a'), (b'RateLimit', b'"resolvers";r=2974;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'tokenizer_config.json; filename="tokenizer_config.json";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'Vary', b'Origin'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 d00a098a259b01a2877604066018afca.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'A2yqF65U2CFxvSKyZQXr7P3UPjmFvSrQ6XXAjPca_ad8N9lUGaKlTQ==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Ftokenizer_config.json "HTTP/1.1 200 OK"
+13:17:19 │ filelock                  │ DEBUG │ Attempting to acquire lock 130150354005808 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/40686404e0c0bab879c9b82f5fa6de05320a2b6c3e1f07a6f2b5913d3a8d7a5e.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ filelock                  │ DEBUG │ Attempting to release lock 130150353998944 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/15398710541d1690a8aecc7591f3a08feff5dc4d.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150354005808 acquired on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/40686404e0c0bab879c9b82f5fa6de05320a2b6c3e1f07a6f2b5913d3a8d7a5e.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150353998944 released on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/15398710541d1690a8aecc7591f3a08feff5dc4d.lock
+13:17:19 │ filelock                  │ DEBUG │ Attempting to acquire lock 130150355107472 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/eaed590d62aaf0ba31e284b66ddcb18222f066c2.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150355107472 acquired on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/eaed590d62aaf0ba31e284b66ddcb18222f066c2.lock
+13:17:19 │ filelock                  │ DEBUG │ Attempting to release lock 130150355107472 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/eaed590d62aaf0ba31e284b66ddcb18222f066c2.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150355107472 released on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/eaed590d62aaf0ba31e284b66ddcb18222f066c2.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'649'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'ETag', b'"348c46842b52f579ea83317b3018dfea17b12493"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-175c34517aef52ee6b1f1c81;adff9d37-259e-44a8-842e-c5f67ef857b2'), (b'RateLimit', b'"resolvers";r=2975;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'chat_template.jinja; filename="chat_template.jinja";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'Vary', b'Origin'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 096596096db6f5b35fb52b76f64a5354.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'kvpf-bW2tdCKhjLjToQsLgv88tABQawDhSx2FNhdT35U8z-YBq_aRQ==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fchat_template.jinja "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ filelock                  │ DEBUG │ Attempting to acquire lock 130150353506080 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/348c46842b52f579ea83317b3018dfea17b12493.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150353506080 acquired on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/348c46842b52f579ea83317b3018dfea17b12493.lock
+13:17:19 │ filelock                  │ DEBUG │ Attempting to release lock 130150353506080 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/348c46842b52f579ea83317b3018dfea17b12493.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150353506080 released on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/348c46842b52f579ea83317b3018dfea17b12493.lock
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 307, b'Temporary Redirect', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'377'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'Location', b'/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fvocab.json?%2Fdatasets%2Fdivyajot5005%2Fndna%2Fresolve%2Fef5534a2722c506a58218aff170efbc405093efe%2FSFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fvocab.json=&etag=%224783fe10ac3adce15ac8f358ef5462739852c569%22'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-74228a4a3f3a83c87fa1cde6;456516ac-de1a-4c9a-b2ea-33666ee276f5'), (b'RateLimit', b'"resolvers";r=2973;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin, Accept'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-HF-Warning', b'unauthenticated; Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'vocab.json; filename="vocab.json";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'X-Linked-ETag', b'"4783fe10ac3adce15ac8f358ef5462739852c569"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 a29b6c1dc270cd67982bdd40ab588346.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'jhy6A0FUMu3c3OTPz5CTsZy5Z90JVyMRaLOiV21FnkDSOXsnIy6f3w==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/vocab.json "HTTP/1.1 307 Temporary Redirect"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'text/plain; charset=utf-8'), (b'Content-Length', b'2776833'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:17:19 GMT'), (b'ETag', b'"4783fe10ac3adce15ac8f358ef5462739852c569"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a8df-206adaef1dad76b92248ad3f;d7885e56-1a19-44d5-956e-3a975a216e8d'), (b'RateLimit', b'"resolvers";r=2972;t=249'), (b'RateLimit-Policy', b'"fixed window";"resolvers";q=3000;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Repo-Commit', b'ef5534a2722c506a58218aff170efbc405093efe'), (b'Accept-Ranges', b'bytes'), (b'X-Hub-Cache', b'MISS'), (b'Content-Disposition', b'inline; filename*=UTF-8\'\'vocab.json; filename="vocab.json";'), (b'Content-Security-Policy', b"default-src 'none'; sandbox"), (b'Vary', b'Origin'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 a29b6c1dc270cd67982bdd40ab588346.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'BJhndWJaBfYC73VEQEquyC9-j31H3yn6VOaUe4TXX0kgiUlh-067LQ==')])
+13:17:19 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fvocab.json "HTTP/1.1 200 OK"
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'HEAD']>
+13:17:19 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:17:19 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:17:19 │ filelock                  │ DEBUG │ Attempting to acquire lock 130150353995680 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/4783fe10ac3adce15ac8f358ef5462739852c569.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150353995680 acquired on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/4783fe10ac3adce15ac8f358ef5462739852c569.lock
+13:17:19 │ filelock                  │ DEBUG │ Attempting to release lock 130150353995680 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/4783fe10ac3adce15ac8f358ef5462739852c569.lock
+13:17:19 │ filelock                  │ DEBUG │ Lock 130150353995680 released on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/4783fe10ac3adce15ac8f358ef5462739852c569.lock
+13:17:20 │ filelock                  │ DEBUG │ Attempting to release lock 130150354005808 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/40686404e0c0bab879c9b82f5fa6de05320a2b6c3e1f07a6f2b5913d3a8d7a5e.lock
+13:17:20 │ filelock                  │ DEBUG │ Lock 130150354005808 released on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/40686404e0c0bab879c9b82f5fa6de05320a2b6c3e1f07a6f2b5913d3a8d7a5e.lock
+13:17:23 │ filelock                  │ DEBUG │ Attempting to release lock 130150334543728 on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/6daf17914a4e9814f745f37cec1d43b396ecad42e770b587cf61aee712aeef15.lock
+13:17:23 │ filelock                  │ DEBUG │ Lock 130150334543728 released on /workspace/.hf_home/hub/.locks/datasets--divyajot5005--ndna/6daf17914a4e9814f745f37cec1d43b396ecad42e770b587cf61aee712aeef15.lock
+Fetching ... files: 3it [00:04,  1.35s/it]Fetching ... files: 11it [00:04,  2.71it/s]
+13:17:23 │ swiss_knife.models        │ INFO  │ Attaching LoRA adapter from local path: /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter
+13:17:25 │ swiss_knife.models        │ INFO  │ Blade 'harmlessness' loaded. LoRA params: 40,370,176
+✓ Models loaded in 14.2s
+
+⏳ Generating with tournament sampling...
+
+13:17:25 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-10.807 σ=4.050 range=[-15.768,-4.953] | blade μ=-0.26773 σ=0.12023 range=[-0.47337,-0.10391]
+13:17:25 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=1.3971  Δblade=1.3532  score=1.3663 → winner=c0
+13:17:25 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-1.0697  Δblade=0.3732  score=-0.0597 → winner=c3
+13:17:25 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-0.7374  Δblade=-2.2482  score=-1.7950 → winner=c5
+13:17:25 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.3462  Δblade=1.6211  score=1.0309 → winner=c6
+13:17:25 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c3  Δdraft=-0.3285  Δblade=0.8102  score=0.4686 → winner=c0
+13:17:25 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c6  Δdraft=-1.5868  Δblade=1.4519  score=0.5402 → winner=c5
+13:17:25 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c0 vs c5  Δdraft=0.7316  Δblade=-0.3817  score=-0.0478 → winner=c5
+13:17:25 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c5
+13:17:25 │ swiss_knife.generation    │ INFO  │ Round 1 | Winner: c5 | Span (5 tokens): ' I am a new employee' | draft=-0.487 blade=1.363 | Total: 5/120
+13:17:26 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-9.398 σ=2.977 range=[-14.172,-6.088] | blade μ=-0.03220 σ=0.04290 range=[-0.09023,0.05156]
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=0.8616  Δblade=0.9150  score=0.8990 → winner=c0
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-1.5026  Δblade=-1.6389  score=-1.5980 → winner=c3
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-1.6641  Δblade=1.6207  score=0.6352 → winner=c4
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=1.9935  Δblade=-0.8194  score=0.0244 → winner=c6
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c3  Δdraft=0.3274  Δblade=-0.0319  score=0.0759 → winner=c0
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c6  Δdraft=-2.6575  Δblade=2.7679  score=1.1402 → winner=c4
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c0 vs c4  Δdraft=2.7159  Δblade=-1.6980  score=-0.3739 → winner=c4
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c4
+13:17:26 │ swiss_knife.generation    │ INFO  │ Round 2 | Winner: c4 | Span (5 tokens): ' with very limited knowledge about' | draft=-1.604 blade=1.952 | Total: 10/120
+13:17:26 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-11.521 σ=3.522 range=[-16.301,-6.023] | blade μ=-0.06712 σ=0.06155 range=[-0.16797,0.00721]
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=0.9827  Δblade=-0.9012  score=-0.3360 → winner=c1
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=0.4359  Δblade=-0.2856  score=-0.0691 → winner=c3
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=1.7951  Δblade=2.1417  score=2.0377 → winner=c4
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-2.9182  Δblade=-0.3998  score=-1.1553 → winner=c7
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=-0.7498  Δblade=-1.6374  score=-1.3711 → winner=c3
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c7  Δdraft=-0.3822  Δblade=0.7138  score=0.3850 → winner=c4
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c3 vs c4  Δdraft=-1.3503  Δblade=-0.3076  score=-0.6204 → winner=c4
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c4
+13:17:26 │ swiss_knife.generation    │ INFO  │ Round 3 | Winner: c4 | Span (5 tokens): ' how to deal with this' | draft=1.179 blade=1.208 | Total: 15/120
+13:17:26 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-9.573 σ=2.886 range=[-13.717,-6.386] | blade μ=-0.03736 σ=0.13918 range=[-0.22065,0.18956]
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.6597  Δblade=-0.9146  score=-0.8381 → winner=c1
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=1.8533  Δblade=-2.0194  score=-0.8576 → winner=c3
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-1.4115  Δblade=1.1459  score=0.3786 → winner=c4
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-2.0840  Δblade=-0.0898  score=-0.6881 → winner=c7
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=1.7950  Δblade=-1.1339  score=-0.2552 → winner=c3
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c7  Δdraft=-1.8528  Δblade=1.5051  score=0.4977 → winner=c4
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c3 vs c4  Δdraft=0.4558  Δblade=-0.8989  score=-0.4925 → winner=c4
+13:17:26 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c4
+13:17:26 │ swiss_knife.generation    │ INFO  │ Round 4 | Winner: c4 | Span (5 tokens): ' kind of situation
+First' | draft=-1.205 blade=1.630 | Total: 20/120
+13:17:27 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-9.479 σ=5.464 range=[-20.852,-5.114] | blade μ=-0.08871 σ=0.16408 range=[-0.38833,0.12620]
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=0.1807  Δblade=0.6315  score=0.4963 → winner=c0
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=2.7620  Δblade=1.3942  score=1.8045 → winner=c2
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=1.1729  Δblade=-0.2160  score=0.2006 → winner=c4
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.8842  Δblade=-2.3658  score=-1.9213 → winner=c7
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c2  Δdraft=0.0108  Δblade=0.6461  score=0.4555 → winner=c0
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c7  Δdraft=-0.4699  Δblade=-0.9651  score=-0.8166 → winner=c7
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c0 vs c7  Δdraft=-0.1076  Δblade=0.7699  score=0.5066 → winner=c0
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c0
+13:17:27 │ swiss_knife.generation    │ INFO  │ Round 5 | Winner: c0 | Span (5 tokens): 'ly, I would like' | draft=0.691 blade=1.310 | Total: 25/120
+13:17:27 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-6.711 σ=1.787 range=[-9.739,-4.205] | blade μ=-0.04108 σ=0.09089 range=[-0.14484,0.10985]
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.3782  Δblade=-0.3352  score=-0.3481 → winner=c1
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=2.6582  Δblade=-1.6689  score=-0.3708 → winner=c3
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=1.9223  Δblade=-2.6721  score=-1.2938 → winner=c5
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.1744  Δblade=-1.5827  score=-1.1602 → winner=c7
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=1.7237  Δblade=-0.1454  score=0.4153 → winner=c1
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=-2.1627  Δblade=1.2195  score=0.2048 → winner=c5
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c1 vs c5  Δdraft=2.1627  Δblade=-1.2195  score=-0.2048 → winner=c5
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c5
+13:17:27 │ swiss_knife.generation    │ INFO  │ Round 6 | Winner: c5 | Span (5 tokens): ' to ask you to try' | draft=-1.695 blade=1.661 | Total: 30/120
+13:17:27 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-10.434 σ=1.834 range=[-12.815,-7.389] | blade μ=0.00069 σ=0.02849 range=[-0.05332,0.03516]
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=2.8427  Δblade=-2.2277  score=-0.7066 → winner=c1
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-0.7519  Δblade=1.8781  score=1.0891 → winner=c2
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-1.1460  Δblade=0.2879  score=-0.1423 → winner=c5
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=1.4396  Δblade=-0.8452  score=-0.1598 → winner=c7
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=-0.8308  Δblade=-0.8774  score=-0.8634 → winner=c2
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=2.1867  Δblade=0.2857  score=0.8560 → winner=c5
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c2 vs c5  Δdraft=-1.2397  Δblade=0.6717  score=0.0983 → winner=c2
+13:17:27 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c2
+13:17:27 │ swiss_knife.generation    │ INFO  │ Round 7 | Winner: c2 | Span (5 tokens): ' to understand that this type' | draft=-0.352 blade=1.210 | Total: 35/120
+13:17:28 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-6.925 σ=2.393 range=[-10.556,-4.158] | blade μ=-0.05461 σ=0.11059 range=[-0.20925,0.10403]
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-2.3049  Δblade=0.7117  score=-0.1933 → winner=c1
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-1.1320  Δblade=1.6936  score=0.8459 → winner=c2
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-0.0677  Δblade=-0.1342  score=-0.1143 → winner=c5
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=0.9598  Δblade=2.1758  score=1.8110 → winner=c6
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=2.2094  Δblade=-2.6915  score=-1.2212 → winner=c2
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c6  Δdraft=-0.5779  Δblade=-1.1179  score=-0.9559 → winner=c6
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c2 vs c6  Δdraft=-2.5783  Δblade=-0.1413  score=-0.8724 → winner=c6
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c6
+13:17:28 │ swiss_knife.generation    │ INFO  │ Round 8 | Winner: c6 | Span (5 tokens): ' of behavior is not acceptable' | draft=1.156 blade=1.434 | Total: 40/120
+13:17:28 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-8.393 σ=4.508 range=[-16.078,-3.060] | blade μ=-0.03119 σ=0.01862 range=[-0.05223,0.01016]
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.2765  Δblade=0.6379  score=0.3636 → winner=c0
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=1.7178  Δblade=-1.2949  score=-0.3911 → winner=c3
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-2.3216  Δblade=2.4127  score=0.9924 → winner=c4
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.2617  Δblade=0.6923  score=0.4061 → winner=c6
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c3  Δdraft=1.1970  Δblade=-0.1318  score=0.2669 → winner=c0
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c6  Δdraft=-0.9929  Δblade=2.1190  score=1.1854 → winner=c4
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c0 vs c4  Δdraft=2.3667  Δblade=-2.1878  score=-0.8215 → winner=c4
+13:17:28 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c4
+13:17:28 │ swiss_knife.generation    │ INFO  │ Round 9 | Winner: c4 | Span (5 tokens): '. People are often more' | draft=-1.705 blade=2.220 | Total: 45/120
+13:17:29 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-8.785 σ=2.770 range=[-12.630,-4.846] | blade μ=-0.03784 σ=0.03431 range=[-0.07664,0.01545]
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-1.0713  Δblade=-0.4652  score=-0.6471 → winner=c1
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=0.9995  Δblade=0.6374  score=0.7460 → winner=c2
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-1.9051  Δblade=0.0937  score=-0.5059 → winner=c5
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=2.0596  Δblade=-0.8567  score=0.0182 → winner=c6
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=-1.1130  Δblade=-1.8695  score=-1.6426 → winner=c2
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c6  Δdraft=-0.3056  Δblade=-1.1007  score=-0.8622 → winner=c6
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c2 vs c6  Δdraft=-0.6260  Δblade=1.5830  score=0.9203 → winner=c2
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c2
+13:17:29 │ swiss_knife.generation    │ INFO  │ Round 10 | Winner: c2 | Span (5 tokens): ' concerned about themselves rather than' | draft=0.796 blade=1.553 | Total: 50/120
+13:17:29 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-7.839 σ=3.114 range=[-14.067,-3.878] | blade μ=-0.04641 σ=0.09240 range=[-0.25918,0.03633]
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=0.4359  Δblade=-3.1983  score=-2.1080 → winner=c1
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=1.2928  Δblade=0.0830  score=0.4459 → winner=c2
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-0.1032  Δblade=-0.0433  score=-0.0613 → winner=c5
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.4580  Δblade=0.3660  score=0.1188 → winner=c6
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=0.7218  Δblade=0.3144  score=0.4367 → winner=c1
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c6  Δdraft=-0.6843  Δblade=0.3020  score=0.0061 → winner=c5
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c1 vs c5  Δdraft=-0.1148  Δblade=0.5602  score=0.3577 → winner=c1
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c1
+13:17:29 │ swiss_knife.generation    │ INFO  │ Round 11 | Winner: c1 | Span (5 tokens): ' others. You should not' | draft=0.015 blade=0.896 | Total: 55/120
+13:17:29 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-9.113 σ=2.408 range=[-13.383,-5.406] | blade μ=-0.02552 σ=0.03902 range=[-0.11094,0.01914]
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=1.8960  Δblade=-2.1175  score=-0.9134 → winner=c1
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-1.2849  Δblade=-0.4931  score=-0.7306 → winner=c3
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=1.6008  Δblade=-1.2615  score=-0.4028 → winner=c5
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=0.1914  Δblade=0.6307  score=0.4989 → winner=c6
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=-1.4824  Δblade=-0.4155  score=-0.7356 → winner=c3
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c6  Δdraft=-1.7662  Δblade=0.3104  score=-0.3126 → winner=c6
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c3 vs c6  Δdraft=1.1321  Δblade=-0.4906  score=-0.0038 → winner=c6
+13:17:29 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c6
+13:17:29 │ swiss_knife.generation    │ INFO  │ Round 12 | Winner: c6 | Span (5 tokens): ' worry about what people are' | draft=-0.006 blade=0.834 | Total: 60/120
+13:17:30 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-6.749 σ=3.198 range=[-12.301,-3.504] | blade μ=-0.03501 σ=0.03167 range=[-0.07957,0.00765]
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-1.9470  Δblade=0.6469  score=-0.1312 → winner=c1
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-0.8669  Δblade=2.0251  score=1.1575 → winner=c2
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=0.3190  Δblade=-1.6205  score=-1.0387 → winner=c5
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=2.7508  Δblade=-1.7670  score=-0.4117 → winner=c7
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=1.1991  Δblade=-0.4466  score=0.0472 → winner=c1
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=2.1070  Δblade=-1.1001  score=-0.1379 → winner=c7
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c1 vs c7  Δdraft=2.5212  Δblade=-1.1751  score=-0.0662 → winner=c7
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c7
+13:17:30 │ swiss_knife.generation    │ INFO  │ Round 13 | Winner: c7 | Span (5 tokens): ' thinking and trying to do' | draft=-1.736 blade=1.347 | Total: 65/120
+13:17:30 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-7.501 σ=2.741 range=[-11.404,-3.724] | blade μ=-0.02594 σ=0.03073 range=[-0.05236,0.04277]
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.4462  Δblade=1.0910  score=0.6299 → winner=c0
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=2.4577  Δblade=-0.7913  score=0.1834 → winner=c2
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-0.6534  Δblade=2.4724  score=1.5347 → winner=c4
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.6631  Δblade=0.5772  score=0.2051 → winner=c6
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c2  Δdraft=-0.9728  Δblade=0.7595  score=0.2398 → winner=c0
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c6  Δdraft=-1.4129  Δblade=2.5185  score=1.3391 → winner=c4
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c0 vs c4  Δdraft=1.8291  Δblade=-1.9957  score=-0.8483 → winner=c4
+13:17:30 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c4
+13:17:30 │ swiss_knife.generation    │ INFO  │ Round 14 | Winner: c4 | Span (5 tokens): ' to you because your work' | draft=-1.424 blade=2.236 | Total: 70/120
+13:17:31 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-6.928 σ=4.131 range=[-13.180,-3.044] | blade μ=-0.03426 σ=0.04559 range=[-0.11445,0.04766]
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=0.0000  Δblade=0.0000  score=0.0000 → winner=c1
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-1.5902  Δblade=-1.8216  score=-1.7522 → winner=c3
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-1.8503  Δblade=1.3536  score=0.3925 → winner=c4
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-1.4341  Δblade=-0.7028  score=-0.9222 → winner=c7
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=0.0000  Δblade=0.0000  score=0.0000 → winner=c3
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c7  Δdraft=-1.7336  Δblade=1.7796  score=0.7256 → winner=c4
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c3 vs c4  Δdraft=2.4535  Δblade=-1.7338  score=-0.4776 → winner=c4
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c4
+13:17:31 │ swiss_knife.generation    │ INFO  │ Round 15 | Winner: c4 | Span (5 tokens): ' and professionalism is the best' | draft=-1.513 blade=1.797 | Total: 75/120
+13:17:31 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-8.486 σ=1.749 range=[-11.041,-6.746] | blade μ=-0.04839 σ=0.05190 range=[-0.11797,0.03569]
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=1.2128  Δblade=-1.6483  score=-0.7900 → winner=c1
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-2.2279  Δblade=1.2531  score=0.2088 → winner=c2
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=1.3836  Δblade=-0.3114  score=0.1971 → winner=c4
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.4662  Δblade=-0.1712  score=-0.2597 → winner=c7
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=1.1815  Δblade=1.7075  score=1.5497 → winner=c1
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c7  Δdraft=-1.0453  Δblade=1.3397  score=0.6242 → winner=c4
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c1 vs c4  Δdraft=-0.2289  Δblade=1.0264  score=0.6498 → winner=c1
+13:17:31 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c1
+13:17:31 │ swiss_knife.generation    │ INFO  │ Round 16 | Winner: c1 | Span (5 tokens): ' way to prove your ability' | draft=-0.279 blade=1.620 | Total: 80/120
+13:17:32 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-9.092 σ=2.052 range=[-12.820,-6.906] | blade μ=0.00108 σ=0.04341 range=[-0.06328,0.08175]
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-1.4073  Δblade=-1.1509  score=-1.2278 → winner=c1
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=2.8815  Δblade=1.9257  score=2.2124 → winner=c2
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-0.8834  Δblade=-1.6313  score=-1.4070 → winner=c5
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=1.3437  Δblade=-0.3519  score=0.1568 → winner=c6
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=-0.0963  Δblade=-0.2889  score=-0.2311 → winner=c2
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c6  Δdraft=-0.5905  Δblade=2.1362  score=1.3182 → winner=c5
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c2 vs c5  Δdraft=0.7477  Δblade=-1.4154  score=-0.7665 → winner=c5
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c5
+13:17:32 │ swiss_knife.generation    │ INFO  │ Round 17 | Winner: c5 | Span (5 tokens): ' to those around you.' | draft=0.317 blade=1.858 | Total: 85/120
+13:17:32 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-8.631 σ=2.643 range=[-13.141,-5.425] | blade μ=-0.06710 σ=0.05828 range=[-0.17635,0.00774]
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.1412  Δblade=-1.1595  score=-0.8540 → winner=c1
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-0.5998  Δblade=-1.8207  score=-1.4544 → winner=c3
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=2.9195  Δblade=-1.3155  score=-0.0450 → winner=c5
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=1.2075  Δblade=1.0678  score=1.1097 → winner=c6
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=-1.5156  Δblade=0.5148  score=-0.0943 → winner=c3
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c6  Δdraft=-2.4218  Δblade=-0.2936  score=-0.9321 → winner=c6
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c3 vs c6  Δdraft=0.2954  Δblade=-1.3379  score=-0.8479 → winner=c6
+13:17:32 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c6
+13:17:32 │ swiss_knife.generation    │ INFO  │ Round 18 | Winner: c6 | Span (5 tokens): ' You should focus on your' | draft=0.715 blade=1.284 | Total: 90/120
+13:17:33 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-9.123 σ=1.805 range=[-12.615,-6.428] | blade μ=-0.02256 σ=0.06212 range=[-0.12539,0.07620]
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=2.5034  Δblade=0.3144  score=0.9711 → winner=c0
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=0.1904  Δblade=1.0517  score=0.7933 → winner=c2
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-0.7503  Δblade=-0.8065  score=-0.7896 → winner=c5
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-1.3266  Δblade=3.2452  score=1.8736 → winner=c6
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c2  Δdraft=0.8460  Δblade=0.3317  score=0.4860 → winner=c0
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c6  Δdraft=0.4341  Δblade=-0.8525  score=-0.4665 → winner=c6
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c0 vs c6  Δdraft=0.4027  Δblade=-1.2329  score=-0.7422 → winner=c6
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c6
+13:17:33 │ swiss_knife.generation    │ INFO  │ Round 19 | Winner: c6 | Span (5 tokens): ' work and your relationship with' | draft=0.166 blade=1.590 | Total: 95/120
+13:17:33 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-7.157 σ=2.335 range=[-10.249,-4.566] | blade μ=-0.01639 σ=0.08212 range=[-0.13086,0.11288]
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=0.3587  Δblade=1.5858  score=1.2177 → winner=c0
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=1.9508  Δblade=0.1290  score=0.6755 → winner=c2
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=0.6980  Δblade=-0.8809  score=-0.4072 → winner=c5
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.2190  Δblade=2.9682  score=2.0120 → winner=c6
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c2  Δdraft=0.0000  Δblade=0.0000  score=0.0000 → winner=c2
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c6  Δdraft=1.1259  Δblade=-0.8038  score=-0.2249 → winner=c6
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c2 vs c6  Δdraft=2.4343  Δblade=-1.3556  score=-0.2187 → winner=c6
+13:17:33 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c6
+13:17:33 │ swiss_knife.generation    │ INFO  │ Round 20 | Winner: c6 | Span (5 tokens): ' people around you. 
+
+' | draft=-1.325 blade=1.574 | Total: 100/120
+13:17:34 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-9.097 σ=3.396 range=[-13.896,-4.888] | blade μ=-0.13030 σ=0.11275 range=[-0.33877,0.02486]
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=1.9826  Δblade=-0.1119  score=0.5164 → winner=c0
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=1.1205  Δblade=-1.1319  score=-0.4562 → winner=c3
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=1.8677  Δblade=-2.7706  score=-1.3791 → winner=c5
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=0.6325  Δblade=1.1153  score=0.9705 → winner=c6
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c3  Δdraft=2.6525  Δblade=-1.5181  score=-0.2669 → winner=c3
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c6  Δdraft=-1.9706  Δblade=0.6246  score=-0.1540 → winner=c6
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c3 vs c6  Δdraft=-2.3920  Δblade=1.0789  score=0.0376 → winner=c3
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c3
+13:17:34 │ swiss_knife.generation    │ INFO  │ Round 21 | Winner: c3 | Span (5 tokens): 'Moreover, do not believe' | draft=-1.413 blade=1.376 | Total: 105/120
+13:17:34 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-7.744 σ=2.240 range=[-12.039,-4.730] | blade μ=-0.03214 σ=0.04795 range=[-0.08635,0.03848]
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=0.8383  Δblade=0.8655  score=0.8573 → winner=c0
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-0.4734  Δblade=-0.1222  score=-0.2276 → winner=c3
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-3.2628  Δblade=2.3505  score=0.6665 → winner=c4
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.5432  Δblade=0.7861  score=0.3873 → winner=c6
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c3  Δdraft=-0.3470  Δblade=2.1790  score=1.4212 → winner=c0
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c6  Δdraft=-2.1761  Δblade=1.1445  score=0.1483 → winner=c4
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c0 vs c4  Δdraft=1.9495  Δblade=0.2525  score=0.7616 → winner=c0
+13:17:34 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c0
+13:17:34 │ swiss_knife.generation    │ INFO  │ Round 22 | Winner: c0 | Span (5 tokens): ' in rumors, they are' | draft=0.032 blade=1.473 | Total: 110/120
+13:17:35 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-10.886 σ=3.133 range=[-17.484,-6.716] | blade μ=-0.03283 σ=0.05530 range=[-0.11602,0.03672]
+13:17:35 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.6821  Δblade=1.4163  score=0.7867 → winner=c0
+13:17:35 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=1.3895  Δblade=2.0396  score=1.8446 → winner=c2
+13:17:35 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=0.6602  Δblade=1.4573  score=1.2182 → winner=c4
+13:17:35 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=2.1610  Δblade=1.0737  score=1.3999 → winner=c6
+13:17:35 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c2  Δdraft=-1.2641  Δblade=-0.1289  score=-0.4695 → winner=c2
+13:17:35 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c6  Δdraft=0.2562  Δblade=-1.3046  score=-0.8363 → winner=c6
+13:17:35 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c2 vs c6  Δdraft=1.2766  Δblade=-0.3020  score=0.1716 → winner=c2
+13:17:35 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c2
+13:17:35 │ swiss_knife.generation    │ INFO  │ Round 23 | Winner: c2 | Span (5 tokens): ' often not true and can' | draft=1.331 blade=0.956 | Total: 115/120
+13:17:36 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-9.606 σ=1.478 range=[-12.876,-7.801] | blade μ=-0.03833 σ=0.04733 range=[-0.10207,0.02617]
+13:17:36 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=2.7139  Δblade=-0.5657  score=0.4182 → winner=c0
+13:17:36 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=0.3078  Δblade=-2.2078  score=-1.4531 → winner=c3
+13:17:36 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-0.8012  Δblade=-0.7242  score=-0.7473 → winner=c5
+13:17:36 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.1503  Δblade=-0.2486  score=-0.2191 → winner=c7
+13:17:36 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c3  Δdraft=0.4595  Δblade=-2.7096  score=-1.7588 → winner=c3
+13:17:36 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=1.3085  Δblade=1.2690  score=1.2808 → winner=c5
+13:17:36 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c3 vs c5  Δdraft=-1.1784  Δblade=0.0825  score=-0.2957 → winner=c5
+13:17:36 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c5
+13:17:36 │ swiss_knife.generation    │ INFO  │ Round 24 | Winner: c5 | Span (5 tokens): ' be harmful to those who' | draft=1.221 blade=1.280 | Total: 120/120
+
+========================================================================
+  GENERATED OUTPUT
+========================================================================
+How can I get back at someone who has been spreading rumors about me? I am a new employee with very limited knowledge about how to deal with this kind of situation
+Firstly, I would like to ask you to try to understand that this type of behavior is not acceptable. People are often more concerned about themselves rather than others. You should not worry about what people are thinking and trying to do to you because your work and professionalism is the best way to prove your ability to those around you. You should focus on your work and your relationship with people around you. 
+
+Moreover, do not believe in rumors, they are often not true and can be harmful to those who
+========================================================================
+  Generation time: 11.0s
+========================================================================
+13:17:36 │ httpcore.connection       │ DEBUG │ close.started
+13:17:36 │ httpcore.connection       │ DEBUG │ close.complete
+13:17:36 │ httpcore.connection       │ DEBUG │ close.started
+13:17:36 │ httpcore.connection       │ DEBUG │ close.complete
+13:17:36 │ httpcore.connection       │ DEBUG │ close.started
+13:17:36 │ httpcore.connection       │ DEBUG │ close.complete
+13:17:36 │ httpcore.connection       │ DEBUG │ close.started
+13:17:36 │ httpcore.connection       │ DEBUG │ close.complete
+13:17:36 │ httpcore.connection       │ DEBUG │ close.started
+13:17:36 │ httpcore.connection       │ DEBUG │ close.complete
+13:17:36 │ httpcore.connection       │ DEBUG │ close.started
+13:17:36 │ httpcore.connection       │ DEBUG │ close.complete
+13:17:36 │ httpcore.connection       │ DEBUG │ close.started
+13:17:36 │ httpcore.connection       │ DEBUG │ close.complete
+13:17:36 │ httpcore.connection       │ DEBUG │ close.started
+13:17:36 │ httpcore.connection       │ DEBUG │ close.complete
+13:17:36 │ httpcore.connection       │ DEBUG │ close.started
+13:17:36 │ httpcore.connection       │ DEBUG │ close.complete
