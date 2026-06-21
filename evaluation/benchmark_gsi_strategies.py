@@ -166,6 +166,9 @@ def run_single_strategy(
             return_stats=True,
         )
         generated = output[len(prompt):].strip()
+        
+        # Calculate rough word length
+        gen_length = len(generated.split())
 
         score = scorer(
             prompt,
@@ -177,6 +180,7 @@ def run_single_strategy(
             "prompt": prompt[:200],
             "generated": generated,
             "reward_score": score,
+            "gen_length": gen_length  # Track the length
         })
         all_stats.append(stats.to_dict())
 
@@ -196,10 +200,12 @@ def run_single_strategy(
     elapsed = time.perf_counter() - t_start
     all_scores = [r["reward_score"] for r in all_responses]
     avg_reward = sum(all_scores) / len(all_scores)
+    avg_length = sum(r["gen_length"] for r in all_responses) / len(all_responses)
 
     return {
         "strategy": strategy_name,
         "avg_reward_score": round(avg_reward, 4),
+        "avg_length": round(avg_length, 1),  # Add to output dictionary
         "num_prompts": len(test_prompts),
         "elapsed_s": round(elapsed, 1),
         "responses": all_responses,
@@ -346,8 +352,10 @@ def main():
 
         all_results[strat_name] = {
             "avg_reward_score": result["avg_reward_score"],
+            "avg_length": result["avg_length"],
             "num_prompts": result["num_prompts"],
             "elapsed_s": result["elapsed_s"],
+            "responses": result["responses"],
         }
 
         # Save per-strategy detailed results
