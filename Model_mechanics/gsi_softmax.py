@@ -4,19 +4,7 @@ Swiss Knife — GSI Strategy 1: Soft Best-of-N with Softmax Selection
 
 Implements Algorithm 1 from the GSI paper (Guided Speculative Inference,
 ICLR 2026), adapted for Swiss Knife blades as reward models.
-
-At each reasoning step:
-    1. Sample n candidate reasoning steps from the base model.
-    2. Score each step: blade reward r_i = β·(log π_blade - log π_ref)
-    3. Compute tilted rewards: r̃_i = r_i  (since πS = πB, log-ratio = 0)
-    4. Select winner: i* ~ softmax(β · r̃_1, ..., β · r̃_n)
-    5. If r̃_{i*} >= threshold u:
-         Accept: y ← y ⊕ y_{i*}
-       Else:
-         Resample n steps from base model, rescore, soft-select, accept.
-
-This is the standard GSI selection — softmax-weighted sampling over
-blade rewards. No pairwise comparisons, no tournament structure.
+Uses LLaMA 3.2 3B as the drafter and Qwen 2.5 7B as the verifier/base.
 """
 
 import logging
@@ -32,6 +20,9 @@ from peft import PeftModel
 
 from .config import SwissKnifeConfig
 from .blades import DPOBlade
+
+# Import retokenisation utilities from evaluation
+from evaluation.benchmark_gsi_harmless import compute_logprob, retokenize_step
 
 logger = logging.getLogger(__name__)
 
@@ -103,26 +94,39 @@ class GSISoftmaxGenerator:
     ----------
     cfg : SwissKnifeConfig
         Full pipeline configuration.
-    tokenizer : PreTrainedTokenizer
-        Shared tokenizer.
-    base_model : PreTrainedModel
-        Base model — serves as BOTH the drafter (sample steps) AND π_ref.
+    drafter_model : PreTrainedModel
+        The draft model (e.g. LLaMA 3.2 3B).
+    drafter_tokenizer : PreTrainedTokenizer
+        Tokenizer for the draft model.
+    verifier_model : PreTrainedModel
+        The verifier model (e.g. Qwen 2.5 7B).
+    verifier_tokenizer : PreTrainedTokenizer
+        Tokenizer for the verifier model.
     blade_model : PeftModel
-        Active DPO blade adapter (π_blade).
+        Active DPO blade adapter on the verifier model.
     """
 
     def __init__(
         self,
         cfg: SwissKnifeConfig,
-        tokenizer: PreTrainedTokenizer,
-        base_model: PreTrainedModel,
+        drafter_model: PreTrainedModel,
+        drafter_tokenizer: PreTrainedTokenizer,
+        verifier_model: PreTrainedModel,
+        verifier_tokenizer: PreTrainedTokenizer,
         blade_model: PeftModel,
     ):
         self.cfg = cfg
-        self.tokenizer = tokenizer
-        self.base_model = base_model
+        self.drafter_model = drafter_model
+        self.drafter_tokenizer = drafter_tokenizer
+        self.verifier_model = verifier_model
+        self.verifier_tokenizer = verifier_tokenizer
         self.blade_model = blade_model
-        self.blade = DPOBlade(cfg, base_model, blade_model, tokenizer)
+        # Construct internal DPOBlade with verifier model and tokenizer
+        self.blade = DPOBlade(cfg, verifier_model, blade_model, verifier_tokenizer)
+
+        # Set devices
+        self.drafter_device = next(drafter_model.parameters()).device
+        self.verifier_device = next(verifier_model.parameters()).device
 
         logger.info(
             "GSISoftmaxGenerator initialized: n=%d, β=%.3f, threshold=%.3f, "
@@ -135,36 +139,37 @@ class GSISoftmaxGenerator:
     @torch.no_grad()
     def _sample_reasoning_steps(
         self,
+        model: PreTrainedModel,
+        tokenizer: PreTrainedTokenizer,
         prefix_ids: torch.Tensor,
         n: int,
+        device: torch.device,
     ) -> Tuple[List[torch.Tensor], List[str]]:
-        """Sample n reasoning steps from the base model.
-
-        Each step is generated until the step delimiter (e.g. '\\n\\n') is
-        encountered or max_step_tokens is reached.
+        """Sample n reasoning steps from a model.
 
         Parameters
         ----------
+        model : PreTrainedModel
+        tokenizer : PreTrainedTokenizer
         prefix_ids : torch.Tensor
-            Shape ``[1, prefix_len]`` — current context.
+            Shape ``[1, prefix_len]``.
         n : int
             Number of candidate steps to sample.
+        device : torch.device
 
         Returns
         -------
         step_ids_list : list of torch.Tensor
             n tensors, each of shape ``[step_len_i]`` — token IDs for the step.
         step_texts : list of str
-            Decoded text for each step (for logging/diagnostics).
+            Decoded text for each step.
         """
-        device = prefix_ids.device
-
         # Expand prefix for batched generation
         batch_ids = prefix_ids.expand(n, -1).contiguous()
         batch_mask = torch.ones_like(batch_ids)
 
         # Generate up to max_step_tokens
-        outputs = self.base_model.generate(
+        outputs = model.generate(
             input_ids=batch_ids,
             attention_mask=batch_mask,
             max_new_tokens=self.cfg.gsi_max_step_tokens,
@@ -172,7 +177,7 @@ class GSISoftmaxGenerator:
             temperature=self.cfg.temperature,
             top_k=self.cfg.top_k,
             top_p=self.cfg.top_p,
-            pad_token_id=self.tokenizer.pad_token_id,
+            pad_token_id=tokenizer.pad_token_id,
         )
 
         prefix_len = prefix_ids.shape[1]
@@ -183,28 +188,22 @@ class GSISoftmaxGenerator:
 
         for i in range(n):
             new_tokens = outputs[i, prefix_len:]
-
-            # Decode to find the step delimiter
-            decoded = self.tokenizer.decode(new_tokens, skip_special_tokens=True)
+            decoded = tokenizer.decode(new_tokens, skip_special_tokens=True)
 
             delim_pos = decoded.find(delimiter)
             if delim_pos >= 0:
-                # Truncate at delimiter (include delimiter in the step)
                 step_text = decoded[:delim_pos + len(delimiter)]
             else:
-                # No delimiter found — use the whole generation
                 step_text = decoded
 
-            # Re-tokenize the truncated step to get exact token IDs
-            step_tokens = self.tokenizer.encode(
+            step_tokens = tokenizer.encode(
                 step_text, add_special_tokens=False, return_tensors="pt"
             ).squeeze(0).to(device)
 
-            # Handle EOS — truncate at first EOS if present
-            eos_positions = (step_tokens == self.tokenizer.eos_token_id).nonzero(as_tuple=True)[0]
+            eos_positions = (step_tokens == tokenizer.eos_token_id).nonzero(as_tuple=True)[0]
             if len(eos_positions) > 0:
                 step_tokens = step_tokens[:eos_positions[0]]
-                step_text = self.tokenizer.decode(step_tokens, skip_special_tokens=True)
+                step_text = tokenizer.decode(step_tokens, skip_special_tokens=True)
 
             step_ids_list.append(step_tokens)
             step_texts.append(step_text)
@@ -268,116 +267,172 @@ class GSISoftmaxGenerator:
         beta = self.cfg.beta
         threshold = self.cfg.gsi_threshold
 
-        # Tokenize prompt
-        encoded = self.tokenizer(
-            prompt, return_tensors="pt", padding=False, truncation=True,
-        )
-        device = next(self.base_model.parameters()).device
-        prompt_ids = encoded["input_ids"].to(device)
+        llama_prefix_text = prompt
+        qwen_prefix_text = prompt
 
-        # ── GSI main loop: y ← () ───────────────────────────────────────
-        generated_ids: List[int] = []
+        generated_qwen_tokens: List[int] = []
         stats = GSISoftmaxStats()
         t_start = time.perf_counter()
 
-        while len(generated_ids) < max_tokens:
+        # Tokenize first prompt context to establish loop start
+        qwen_encoded = self.verifier_tokenizer(
+            qwen_prefix_text, return_tensors="pt", padding=False, truncation=True
+        )
+        qwen_prefix_ids = qwen_encoded["input_ids"].squeeze(0).to(self.verifier_device)
+
+        while len(generated_qwen_tokens) < max_tokens:
             stats.total_steps += 1
 
-            # Current prefix = prompt ⊕ generated-so-far
-            if generated_ids:
-                gen_tensor = torch.tensor(
-                    generated_ids, dtype=torch.long, device=device
-                ).unsqueeze(0)
-                prefix_ids = torch.cat([prompt_ids, gen_tensor], dim=1)
-            else:
-                prefix_ids = prompt_ids
+            # Prepare prefix token IDs for both tokenizers
+            llama_encoded = self.drafter_tokenizer(
+                llama_prefix_text, return_tensors="pt", padding=False, truncation=True
+            )
+            llama_prefix_ids = llama_encoded["input_ids"].squeeze(0).to(self.drafter_device)
 
-            # ── Step 1: Sample n reasoning steps ────────────────────────
-            step_ids_list, step_texts = self._sample_reasoning_steps(prefix_ids, n)
+            qwen_encoded = self.verifier_tokenizer(
+                qwen_prefix_text, return_tensors="pt", padding=False, truncation=True
+            )
+            qwen_prefix_ids = qwen_encoded["input_ids"].squeeze(0).to(self.verifier_device)
+
+            # ── Step 1: Sample n reasoning steps from LLaMA ────────────────
+            llama_step_ids_list, step_texts = self._sample_reasoning_steps(
+                self.drafter_model, self.drafter_tokenizer, llama_prefix_ids.unsqueeze(0), n, self.drafter_device
+            )
             stats.total_candidates_scored += n
 
             # Filter empty steps
-            non_empty = [(ids, txt) for ids, txt in zip(step_ids_list, step_texts) if len(ids) > 0]
+            non_empty = [(ids, txt) for ids, txt in zip(llama_step_ids_list, step_texts) if len(ids) > 0]
             if not non_empty:
                 logger.info("All candidate steps empty (EOS). Stopping.")
                 break
-            step_ids_list = [x[0] for x in non_empty]
+            llama_step_ids_list = [x[0] for x in non_empty]
             step_texts = [x[1] for x in non_empty]
+            n_actual = len(step_texts)
 
-            # ── Step 2: Score with blade ────────────────────────────────
-            blade_rewards = self.blade.score_reasoning_steps(prefix_ids, step_ids_list)
+            # ── Step 2: Retokenize and compute logprobs + blade rewards ────
+            tilted_rewards = []
+            softmax_logits = []
+            r_blades = []
+            qwen_step_ids_list = []
 
-            # Since πS = πB, tilted reward = blade reward (log ratio = 0)
-            tilted_rewards = blade_rewards
+            for i in range(n_actual):
+                step_text = step_texts[i]
+                llama_step_ids = llama_step_ids_list[i]
 
-            # ── Step 3: Soft select via softmax(β · r̃) ─────────────────
-            selected_idx = self._soft_select(tilted_rewards, beta)
-            selected_reward = tilted_rewards[selected_idx].item()
+                # Compute LLaMA log probability on exact generated IDs
+                llama_lp = compute_logprob(self.drafter_model, llama_prefix_ids, llama_step_ids)
 
-            # ── Step 4: Rejection threshold check ───────────────────────
-            if selected_reward >= threshold:
-                # Accept
+                # Qwen retokenization
+                qwen_step_ids = retokenize_step(
+                    self.verifier_tokenizer, qwen_prefix_text, step_text, qwen_prefix_ids, self.verifier_device
+                )
+                qwen_step_ids_list.append(qwen_step_ids)
+
+                # Compute Qwen log probability
+                qwen_lp = compute_logprob(self.verifier_model, qwen_prefix_ids, qwen_step_ids)
+
+                # Compute DPO blade reward
+                r_blade = self.blade.score_reasoning_steps(
+                    qwen_prefix_ids.unsqueeze(0), [qwen_step_ids]
+                )[0].item()
+                r_blades.append(r_blade)
+
+                # Tilted reward: r_blade + (1 / beta) * (qwen_lp - llama_lp)
+                tilted_r = r_blade + (1.0 / beta) * (qwen_lp - llama_lp)
+                tilted_rewards.append(tilted_r)
+
+                # Softmax logit: beta * tilted_r = beta * r_blade + qwen_lp - llama_lp
+                logit = beta * r_blade + qwen_lp - llama_lp
+                softmax_logits.append(logit)
+
+            if not softmax_logits:
+                logger.info("All candidate steps yielded empty evaluations. Stopping.")
+                break
+
+            # ── Step 3: Soft select winner ──────────────────────────────────
+            logits_tensor = torch.tensor(softmax_logits, dtype=torch.float, device=self.verifier_device)
+            logits_tensor = logits_tensor - logits_tensor.max()  # stable
+            probs = F.softmax(logits_tensor, dim=0)
+            selected_idx = int(torch.multinomial(probs, num_samples=1).item())
+
+            selected_tilted_reward = tilted_rewards[selected_idx]
+            selected_r_blade = r_blades[selected_idx]
+
+            # ── Step 4: Rejection threshold check ───────────────────────────
+            if selected_tilted_reward >= threshold:
                 stats.accepted_steps += 1
-                winner_ids = step_ids_list[selected_idx]
                 winner_text = step_texts[selected_idx]
+                winner_qwen_step_ids = qwen_step_ids_list[selected_idx]
             else:
-                # Reject → resample and soft-select again
                 stats.rejected_steps += 1
                 logger.debug(
-                    "Step %d: Rejected (reward=%.4f < threshold=%.4f). Resampling...",
-                    stats.total_steps, selected_reward, threshold,
+                    "Step %d: Rejected (tilted_r=%.4f < threshold=%.4f). Resampling from Qwen...",
+                    stats.total_steps, selected_tilted_reward, threshold,
                 )
-                resample_ids_list, resample_texts = self._sample_reasoning_steps(
-                    prefix_ids, n,
+                
+                # Resample n steps from base Qwen model
+                qwen_resample_ids, qwen_resample_texts = self._sample_reasoning_steps(
+                    self.verifier_model, self.verifier_tokenizer, qwen_prefix_ids.unsqueeze(0), n, self.verifier_device
                 )
                 stats.total_candidates_scored += n
 
-                resample_ids_list_clean = []
-                resample_texts_clean = []
-                for ids, txt in zip(resample_ids_list, resample_texts):
-                    if len(ids) > 0:
-                        resample_ids_list_clean.append(ids)
-                        resample_texts_clean.append(txt)
-
-                if not resample_ids_list_clean:
+                res_non_empty = [
+                    (ids, txt) for ids, txt in zip(qwen_resample_ids, qwen_resample_texts) if len(ids) > 0
+                ]
+                if not res_non_empty:
                     logger.info("Resample produced all empty steps. Stopping.")
                     break
+                qwen_resample_ids = [x[0] for x in res_non_empty]
+                qwen_resample_texts = [x[1] for x in res_non_empty]
+                n_res = len(qwen_resample_texts)
 
-                resample_rewards = self.blade.score_reasoning_steps(
-                    prefix_ids, resample_ids_list_clean,
-                )
-                resample_idx = self._soft_select(resample_rewards, beta)
-                selected_reward = resample_rewards[resample_idx].item()
-                winner_ids = resample_ids_list_clean[resample_idx]
-                winner_text = resample_texts_clean[resample_idx]
+                # Score Qwen resamples with DPO blade
+                resample_r_blades = []
+                for i in range(n_res):
+                    r_b = self.blade.score_reasoning_steps(
+                        qwen_prefix_ids.unsqueeze(0), [qwen_resample_ids[i]]
+                    )[0].item()
+                    resample_r_blades.append(r_b)
 
-            stats.step_rewards.append(selected_reward)
+                # Soft-select using softmax(beta * r_blade)
+                res_logits = torch.tensor(resample_r_blades, dtype=torch.float, device=self.verifier_device)
+                res_logits = beta * res_logits
+                res_logits = res_logits - res_logits.max()
+                res_probs = F.softmax(res_logits, dim=0)
+                res_selected_idx = int(torch.multinomial(res_probs, num_samples=1).item())
 
-            # ── Step 5: Commit ──────────────────────────────────────────
-            winner_tokens = winner_ids.tolist()
+                winner_text = qwen_resample_texts[res_selected_idx]
+                winner_qwen_step_ids = qwen_resample_ids[res_selected_idx]
+                selected_r_blade = resample_r_blades[res_selected_idx]
+                selected_tilted_reward = selected_r_blade  # no log ratio term on fallback
 
-            # Truncate to budget
-            remaining = max_tokens - len(generated_ids)
+            stats.step_rewards.append(selected_tilted_reward)
+
+            # ── Step 5: Commit ──────────────────────────────────────────────
+            winner_tokens = winner_qwen_step_ids.tolist()
+            remaining = max_tokens - len(generated_qwen_tokens)
             winner_tokens = winner_tokens[:remaining]
 
-            # Check for EOS
             eos_hit = False
             clean_tokens = []
             for tok in winner_tokens:
-                if tok == self.tokenizer.eos_token_id:
+                if tok == self.verifier_tokenizer.eos_token_id:
                     eos_hit = True
                     break
                 clean_tokens.append(tok)
 
-            generated_ids.extend(clean_tokens)
+            generated_qwen_tokens.extend(clean_tokens)
             stats.total_tokens += len(clean_tokens)
+
+            # Update text prefixes for next iteration
+            llama_prefix_text = llama_prefix_text + winner_text
+            qwen_prefix_text = qwen_prefix_text + winner_text
 
             if verbose:
                 logger.info(
                     "Step %d | reward=%.4f | tokens=%d | accepted=%s | text='%s'",
-                    stats.total_steps, selected_reward, len(clean_tokens),
-                    "yes" if stats.total_steps == stats.accepted_steps + stats.rejected_steps
-                    and selected_reward >= threshold else "resample",
+                    stats.total_steps, selected_tilted_reward, len(clean_tokens),
+                    "yes" if selected_tilted_reward >= threshold else "resample",
                     winner_text[:80],
                 )
 
@@ -388,8 +443,8 @@ class GSISoftmaxGenerator:
         # ── Finalize ─────────────────────────────────────────────────────
         stats.total_time_s = time.perf_counter() - t_start
 
-        all_ids = prompt_ids.squeeze(0).tolist() + generated_ids
-        output_text = self.tokenizer.decode(all_ids, skip_special_tokens=True)
+        all_ids = qwen_encoded["input_ids"].squeeze(0).tolist()[:qwen_prefix_ids.shape[0]] + generated_qwen_tokens
+        output_text = self.verifier_tokenizer.decode(all_ids, skip_special_tokens=True)
 
         if verbose:
             logger.info(
@@ -409,4 +464,3 @@ class GSISoftmaxGenerator:
         self.blade_model = new_blade.blade_model
         self.blade = new_blade
         return profile
-

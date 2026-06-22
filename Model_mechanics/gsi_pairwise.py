@@ -15,17 +15,14 @@ where MATCH(A, B) uses the Swiss Knife match function:
 and τ is a temperature parameter controlling selection sharpness.
 
 At each reasoning step:
-    1. Sample n candidate reasoning steps from the base model.
-    2. Score each step with blade reward AND draft log-probability.
+    1. Sample n candidate reasoning steps from the LLaMA drafter model.
+    2. Score each step with blade reward (Qwen) AND draft log-probability (LLaMA).
     3. Run all n(n-1)/2 pairwise comparisons using Bradley-Terry.
     4. Accumulate win probabilities into a score vector.
     5. Select winner proportional to cumulative win probability.
-    6. Apply rejection threshold as in standard GSI.
-
-This is a probabilistic, noise-robust alternative to both hard
-tournament selection and pure softmax. The pairwise structure means
-the selection is influenced by *relative* quality between candidates,
-not just absolute scores.
+    6. Compute verifier log-probability and tilted reward only for the winner.
+    7. Apply rejection threshold u on the winner's tilted reward. If rejected,
+       fall back to resampling from Qwen verifier model.
 """
 
 import logging
@@ -41,6 +38,9 @@ from peft import PeftModel
 
 from .config import SwissKnifeConfig
 from .blades import DPOBlade
+
+# Import retokenisation utilities from evaluation
+from evaluation.benchmark_gsi_harmless import compute_logprob, retokenize_step
 
 logger = logging.getLogger(__name__)
 
@@ -177,26 +177,38 @@ class GSIPairwiseGenerator:
     ----------
     cfg : SwissKnifeConfig
         Full pipeline configuration.
-    tokenizer : PreTrainedTokenizer
-        Shared tokenizer.
-    base_model : PreTrainedModel
-        Base model — serves as BOTH the drafter AND π_ref.
+    drafter_model : PreTrainedModel
+        The draft model (e.g. LLaMA 3.2 3B).
+    drafter_tokenizer : PreTrainedTokenizer
+        Tokenizer for the draft model.
+    verifier_model : PreTrainedModel
+        The verifier model (e.g. Qwen 2.5 7B).
+    verifier_tokenizer : PreTrainedTokenizer
+        Tokenizer for the verifier model.
     blade_model : PeftModel
-        Active DPO blade adapter (π_blade).
+        Active DPO blade adapter on the verifier model.
     """
 
     def __init__(
         self,
         cfg: SwissKnifeConfig,
-        tokenizer: PreTrainedTokenizer,
-        base_model: PreTrainedModel,
+        drafter_model: PreTrainedModel,
+        drafter_tokenizer: PreTrainedTokenizer,
+        verifier_model: PreTrainedModel,
+        verifier_tokenizer: PreTrainedTokenizer,
         blade_model: PeftModel,
     ):
         self.cfg = cfg
-        self.tokenizer = tokenizer
-        self.base_model = base_model
+        self.drafter_model = drafter_model
+        self.drafter_tokenizer = drafter_tokenizer
+        self.verifier_model = verifier_model
+        self.verifier_tokenizer = verifier_tokenizer
         self.blade_model = blade_model
-        self.blade = DPOBlade(cfg, base_model, blade_model, tokenizer)
+        self.blade = DPOBlade(cfg, verifier_model, blade_model, verifier_tokenizer)
+
+        # Set devices
+        self.drafter_device = next(drafter_model.parameters()).device
+        self.verifier_device = next(verifier_model.parameters()).device
 
         logger.info(
             "GSIPairwiseGenerator initialized: n=%d, α=%.2f, β=%.3f, τ=%.3f, "
@@ -209,31 +221,33 @@ class GSIPairwiseGenerator:
     @torch.no_grad()
     def _sample_reasoning_steps(
         self,
+        model: PreTrainedModel,
+        tokenizer: PreTrainedTokenizer,
         prefix_ids: torch.Tensor,
         n: int,
+        device: torch.device,
     ) -> Tuple[List[torch.Tensor], List[str]]:
-        """Sample n reasoning steps from the base model.
-
-        Each step is generated until the step delimiter is encountered
-        or gsi_max_step_tokens is reached.
+        """Sample n reasoning steps from a model.
 
         Parameters
         ----------
+        model : PreTrainedModel
+        tokenizer : PreTrainedTokenizer
         prefix_ids : torch.Tensor
             Shape ``[1, prefix_len]``.
         n : int
             Number of candidate steps.
+        device : torch.device
 
         Returns
         -------
         step_ids_list : list of torch.Tensor
         step_texts : list of str
         """
-        device = prefix_ids.device
         batch_ids = prefix_ids.expand(n, -1).contiguous()
         batch_mask = torch.ones_like(batch_ids)
 
-        outputs = self.base_model.generate(
+        outputs = model.generate(
             input_ids=batch_ids,
             attention_mask=batch_mask,
             max_new_tokens=self.cfg.gsi_max_step_tokens,
@@ -241,7 +255,7 @@ class GSIPairwiseGenerator:
             temperature=self.cfg.temperature,
             top_k=self.cfg.top_k,
             top_p=self.cfg.top_p,
-            pad_token_id=self.tokenizer.pad_token_id,
+            pad_token_id=tokenizer.pad_token_id,
         )
 
         prefix_len = prefix_ids.shape[1]
@@ -252,7 +266,7 @@ class GSIPairwiseGenerator:
 
         for i in range(n):
             new_tokens = outputs[i, prefix_len:]
-            decoded = self.tokenizer.decode(new_tokens, skip_special_tokens=True)
+            decoded = tokenizer.decode(new_tokens, skip_special_tokens=True)
 
             delim_pos = decoded.find(delimiter)
             if delim_pos >= 0:
@@ -260,14 +274,14 @@ class GSIPairwiseGenerator:
             else:
                 step_text = decoded
 
-            step_tokens = self.tokenizer.encode(
+            step_tokens = tokenizer.encode(
                 step_text, add_special_tokens=False, return_tensors="pt"
             ).squeeze(0).to(device)
 
-            eos_positions = (step_tokens == self.tokenizer.eos_token_id).nonzero(as_tuple=True)[0]
+            eos_positions = (step_tokens == tokenizer.eos_token_id).nonzero(as_tuple=True)[0]
             if len(eos_positions) > 0:
                 step_tokens = step_tokens[:eos_positions[0]]
-                step_text = self.tokenizer.decode(step_tokens, skip_special_tokens=True)
+                step_text = tokenizer.decode(step_tokens, skip_special_tokens=True)
 
             step_ids_list.append(step_tokens)
             step_texts.append(step_text)
@@ -308,63 +322,93 @@ class GSIPairwiseGenerator:
         tau = self.cfg.gsi_tau
         threshold = self.cfg.gsi_threshold
 
-        encoded = self.tokenizer(
-            prompt, return_tensors="pt", padding=False, truncation=True,
-        )
-        device = next(self.base_model.parameters()).device
-        prompt_ids = encoded["input_ids"].to(device)
+        llama_prefix_text = prompt
+        qwen_prefix_text = prompt
 
-        generated_ids: List[int] = []
+        generated_qwen_tokens: List[int] = []
         stats = GSIPairwiseStats()
         t_start = time.perf_counter()
 
-        while len(generated_ids) < max_tokens:
+        while len(generated_qwen_tokens) < max_tokens:
             stats.total_steps += 1
 
-            if generated_ids:
-                gen_tensor = torch.tensor(
-                    generated_ids, dtype=torch.long, device=device
-                ).unsqueeze(0)
-                prefix_ids = torch.cat([prompt_ids, gen_tensor], dim=1)
-            else:
-                prefix_ids = prompt_ids
+            # Prepare tokenized prefixes for both tokenizers
+            llama_encoded = self.drafter_tokenizer(
+                llama_prefix_text, return_tensors="pt", padding=False, truncation=True
+            )
+            llama_prefix_ids = llama_encoded["input_ids"].squeeze(0).to(self.drafter_device)
 
-            # ── Step 1: Sample n reasoning steps ────────────────────────
-            step_ids_list, step_texts = self._sample_reasoning_steps(prefix_ids, n)
+            qwen_encoded = self.verifier_tokenizer(
+                qwen_prefix_text, return_tensors="pt", padding=False, truncation=True
+            )
+            qwen_prefix_ids = qwen_encoded["input_ids"].squeeze(0).to(self.verifier_device)
+
+            # ── Step 1: Sample n reasoning steps from LLaMA ────────────────
+            llama_step_ids_list, step_texts = self._sample_reasoning_steps(
+                self.drafter_model, self.drafter_tokenizer, llama_prefix_ids.unsqueeze(0), n, self.drafter_device
+            )
             stats.total_candidates_scored += n
 
-            non_empty = [(ids, txt) for ids, txt in zip(step_ids_list, step_texts) if len(ids) > 0]
+            non_empty = [(ids, txt) for ids, txt in zip(llama_step_ids_list, step_texts) if len(ids) > 0]
             if not non_empty:
                 logger.info("All candidate steps empty (EOS). Stopping.")
                 break
-            step_ids_list = [x[0] for x in non_empty]
+            llama_step_ids_list = [x[0] for x in non_empty]
             step_texts = [x[1] for x in non_empty]
+            n_actual = len(step_texts)
 
-            # ── Step 2: Score with blade AND draft ──────────────────────
-            blade_rewards = self.blade.score_reasoning_steps(prefix_ids, step_ids_list)
-            draft_logprobs = self.blade.compute_step_draft_logprobs(prefix_ids, step_ids_list)
+            # Compute LLaMA logprobs & retokenize to Qwen for DPO blade scoring
+            draft_logprobs_list = []
+            qwen_step_ids_list = []
+            for i in range(n_actual):
+                step_text = step_texts[i]
+                llama_step_ids = llama_step_ids_list[i]
 
-            # ── Step 3: Pairwise Bradley-Terry selection ────────────────
+                # Compute LLaMA log probability on exact generated IDs
+                llama_lp = compute_logprob(self.drafter_model, llama_prefix_ids, llama_step_ids)
+                draft_logprobs_list.append(llama_lp)
+
+                # Qwen retokenization
+                qwen_step_ids = retokenize_step(
+                    self.verifier_tokenizer, qwen_prefix_text, step_text, qwen_prefix_ids, self.verifier_device
+                )
+                qwen_step_ids_list.append(qwen_step_ids)
+
+            if not draft_logprobs_list:
+                logger.info("All candidate steps empty. Stopping.")
+                break
+
+            draft_logprobs = torch.tensor(draft_logprobs_list, dtype=torch.float, device=self.verifier_device)
+
+            # Compute blade rewards for all candidates on Qwen-tokenized IDs
+            blade_rewards = self.blade.score_reasoning_steps(qwen_prefix_ids.unsqueeze(0), qwen_step_ids_list)
+
+            # ── Step 2: Pairwise Bradley-Terry selection ────────────────
             selected_idx, n_comps = pairwise_bradley_terry_select(
                 draft_logprobs, blade_rewards, alpha, tau,
             )
             stats.total_pairwise_comparisons += n_comps
 
             selected_reward = blade_rewards[selected_idx].item()
+            winner_draft_lp = draft_logprobs_list[selected_idx]
+            winner_qwen_step_ids = qwen_step_ids_list[selected_idx]
+
+            # ── Step 3: Compute tilted reward for the winner ────────────────
+            winner_target_lp = compute_logprob(self.verifier_model, qwen_prefix_ids, winner_qwen_step_ids)
+            selected_tilted_reward = selected_reward + (1.0 / beta) * (winner_target_lp - winner_draft_lp)
 
             # ── Step 4: Rejection threshold check ───────────────────────
-            if selected_reward >= threshold:
+            if selected_tilted_reward >= threshold:
                 stats.accepted_steps += 1
-                winner_ids = step_ids_list[selected_idx]
                 winner_text = step_texts[selected_idx]
             else:
                 stats.rejected_steps += 1
                 logger.debug(
-                    "Step %d: Rejected (reward=%.4f < threshold=%.4f). Resampling...",
-                    stats.total_steps, selected_reward, threshold,
+                    "Step %d: Rejected (tilted_r=%.4f < threshold=%.4f). Resampling from Qwen...",
+                    stats.total_steps, selected_tilted_reward, threshold,
                 )
                 resample_ids_list, resample_texts = self._sample_reasoning_steps(
-                    prefix_ids, n,
+                    self.verifier_model, self.verifier_tokenizer, qwen_prefix_ids.unsqueeze(0), n, self.verifier_device
                 )
                 stats.total_candidates_scored += n
 
@@ -380,43 +424,46 @@ class GSIPairwiseGenerator:
                     break
 
                 resample_blade = self.blade.score_reasoning_steps(
-                    prefix_ids, resample_ids_list_clean,
+                    qwen_prefix_ids.unsqueeze(0), resample_ids_list_clean,
                 )
                 resample_draft = self.blade.compute_step_draft_logprobs(
-                    prefix_ids, resample_ids_list_clean,
+                    qwen_prefix_ids.unsqueeze(0), resample_ids_list_clean,
                 )
                 resample_idx, n_comps2 = pairwise_bradley_terry_select(
                     resample_draft, resample_blade, alpha, tau,
                 )
                 stats.total_pairwise_comparisons += n_comps2
                 selected_reward = resample_blade[resample_idx].item()
-                winner_ids = resample_ids_list_clean[resample_idx]
+                selected_tilted_reward = selected_reward  # no log ratio term on fallback
+                winner_qwen_step_ids = resample_ids_list_clean[resample_idx]
                 winner_text = resample_texts_clean[resample_idx]
 
-            stats.step_rewards.append(selected_reward)
+            stats.step_rewards.append(selected_tilted_reward)
 
             # ── Step 5: Commit ──────────────────────────────────────────
-            winner_tokens = winner_ids.tolist()
-            remaining = max_tokens - len(generated_ids)
+            winner_tokens = winner_qwen_step_ids.tolist()
+            remaining = max_tokens - len(generated_qwen_tokens)
             winner_tokens = winner_tokens[:remaining]
 
             eos_hit = False
             clean_tokens = []
             for tok in winner_tokens:
-                if tok == self.tokenizer.eos_token_id:
+                if tok == self.verifier_tokenizer.eos_token_id:
                     eos_hit = True
                     break
                 clean_tokens.append(tok)
 
-            generated_ids.extend(clean_tokens)
+            generated_qwen_tokens.extend(clean_tokens)
             stats.total_tokens += len(clean_tokens)
+
+            # Update prefixes for next iteration
+            llama_prefix_text = llama_prefix_text + winner_text
+            qwen_prefix_text = qwen_prefix_text + winner_text
 
             if verbose:
                 logger.info(
-                    "Step %d | reward=%.4f | draft_lp=%.3f | tokens=%d | "
-                    "pairwise_comps=%d | text='%s'",
-                    stats.total_steps, selected_reward,
-                    draft_logprobs[selected_idx].item() if selected_reward >= threshold else 0.0,
+                    "Step %d | tilted_r=%.4f | tokens=%d | pairwise_comps=%d | text='%s'",
+                    stats.total_steps, selected_tilted_reward,
                     len(clean_tokens), n_comps,
                     winner_text[:80],
                 )
@@ -428,8 +475,8 @@ class GSIPairwiseGenerator:
         # ── Finalize ─────────────────────────────────────────────────────
         stats.total_time_s = time.perf_counter() - t_start
 
-        all_ids = prompt_ids.squeeze(0).tolist() + generated_ids
-        output_text = self.tokenizer.decode(all_ids, skip_special_tokens=True)
+        all_ids = qwen_encoded["input_ids"].squeeze(0).tolist()[:qwen_prefix_ids.shape[0]] + generated_qwen_tokens
+        output_text = self.verifier_tokenizer.decode(all_ids, skip_special_tokens=True)
 
         if verbose:
             logger.info(
