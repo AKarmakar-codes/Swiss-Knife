@@ -2,7 +2,7 @@
 Swiss Knife — GSI Five-Strategy Harmlessness Benchmark
 =======================================================
 
-Variant of evaluation/benchmark_gsi_strategies.py that:
+Harmlessness-focused GSI benchmark that:
     - Uses the HARMLESSNESS blade instead of helpfulness.
     - Samples prompts from Anthropic/hh-rlhf's harmless-base subset
       (https://huggingface.co/datasets/Anthropic/hh-rlhf/tree/main/harmless-base)
