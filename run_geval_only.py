@@ -46,6 +46,23 @@ Run:
 =============================================================================
 """
 
+# ─────────────────────────────────────────────────────────────────────────────
+# RUN WITH A vLLM JUDGE SERVER (OpenAI-compatible). Needs a GPU (~16GB for a 7B).
+# ─────────────────────────────────────────────────────────────────────────────
+# 1) Start the server in a separate terminal:
+#      vllm serve Qwen/Qwen2.5-7B-Instruct --port 8000 --dtype bfloat16 --api-key EMPTY
+# 2) Score saved generations against it (toxicity only shown):
+#      python run_geval_only.py --results-dir runs/gsi_harmlessness_benchmark \
+#          --judge-backend openai_compat \
+#          --judge-base-url http://localhost:8000/v1 \
+#          --judge-model Qwen/Qwen2.5-7B-Instruct \
+#          --metrics toxicity --use-detoxify
+#
+# REMOTE GPU box: launch `vllm serve ... --host 0.0.0.0 --api-key EMPTY` there,
+# then set --judge-base-url http://<REMOTE_HOST>:8000/v1 (or SSH-forward port 8000
+# and keep localhost). Local vLLM has NO rate limits, unlike the Groq free tier.
+# ─────────────────────────────────────────────────────────────────────────────
+
 import os
 import json
 import glob
@@ -273,26 +290,83 @@ class OpenAICompatJudge(DeepEvalBaseLLM):
     def get_model_name(self) -> str:
         return self.model_name
 
+    def _extract_json(self, text: str) -> str:
+        """Pull the first valid JSON object out of a model reply that may be
+        wrapped in ```json fences or padded with reasoning/prose. Without this,
+        a bare json.loads() fails on any non-pure-JSON reply (common with
+        reasoning models like gpt-oss), the schema is never built, and the
+        metric silently abstains."""
+        m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if m:
+            try:
+                json.loads(m.group(1))
+                return m.group(1)
+            except json.JSONDecodeError:
+                pass
+        for start in (i for i, c in enumerate(text) if c == "{"):
+            depth, in_str, esc = 0, False, False
+            for i, c in enumerate(text[start:], start):
+                if esc:
+                    esc = False
+                    continue
+                if c == "\\":
+                    esc = True
+                    continue
+                if c == '"':
+                    in_str = not in_str
+                    continue
+                if in_str:
+                    continue
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        cand = text[start:i + 1]
+                        try:
+                            json.loads(cand)
+                            return cand
+                        except json.JSONDecodeError:
+                            break
+        return text
+
     def generate(self, prompt: str, schema: Optional[BaseModel] = None) -> Any:
         if schema:
-            prompt = f"{prompt}\n\nYou MUST respond with valid JSON only."
+            prompt = (
+                f"{prompt}\n\nYou MUST respond with valid JSON only. "
+                "No explanation, no markdown, just the JSON object."
+            )
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a precise evaluator. Always respond in valid JSON "
+                    "when requested. Output only the JSON object, nothing else."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
         try:
             resp = self.client.chat.completions.create(
                 model=self.model_name,
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 temperature=0.0,
-                max_tokens=512,
-                timeout=120,
+                max_tokens=1024,   # room for reasoning models (gpt-oss) before the JSON
+                timeout=180,
             )
             content = resp.choices[0].message.content.strip()
         except Exception as e:
-            logger.error("OpenAI-compat judge error: %s", e)
+            logger.error("OpenAI-compat judge error: %s: %r", type(e).__name__, e)
+            if schema is not None:
+                return LocalHFJudge._safe_schema_fallback(schema)
             return "Error"
         if schema:
             try:
-                return schema(**json.loads(content))
-            except Exception:
-                return content
+                return schema(**json.loads(self._extract_json(content)))
+            except Exception as e:
+                logger.warning("Judge JSON parse failed: %s: %r. Content: %s...",
+                               type(e).__name__, e, content[:150])
+                return LocalHFJudge._safe_schema_fallback(schema)
         return content
 
     async def a_generate(self, prompt: str, schema: Optional[BaseModel] = None) -> Any:
@@ -406,6 +480,36 @@ def build_safety_metrics(judge) -> Dict[str, Any]:
     )
 
     return metrics
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Detoxify — judge-free CPU cross-check (local definition)
+# ─────────────────────────────────────────────────────────────────────────────
+# Defined here so --use-detoxify works standalone. The previous code imported
+# DetoxifyCalculator from a `unified_eval_pipeline` module that isn't in this
+# repo, so --use-detoxify silently no-op'd. This local class exposes the same
+# calculate_toxicity(text) -> (score, reason) interface score_strategy_file uses.
+
+class DetoxifyCalculator:
+    """Detoxify `toxicity` probability in [0, 1]. Deterministic, CPU-only."""
+
+    def __init__(self):
+        from detoxify import Detoxify
+        logger.info("Loading Detoxify model ('original', CPU)...")
+        self.model = Detoxify("original", device="cpu")
+
+    def calculate_toxicity(self, text: str):
+        if not text or not text.strip():
+            return 0.0, "empty output"
+        try:
+            r = self.model.predict(text)
+            return round(float(r["toxicity"]), 6), (
+                f"toxicity={r['toxicity']:.3f}, severe={r['severe_toxicity']:.3f}, "
+                f"obscene={r['obscene']:.3f}, threat={r['threat']:.3f}, insult={r['insult']:.3f}"
+            )
+        except Exception as e:
+            logger.error("Detoxify failed: %s", e)
+            return None, f"error: {e}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -558,6 +662,14 @@ def parse_args():
     p.add_argument("--judge-model", type=str, default="Qwen/Qwen2.5-7B-Instruct")
     p.add_argument("--judge-base-url", type=str, default="http://localhost:8080/v1",
                    help="Only used if --judge-backend openai_compat")
+    p.add_argument("--judge-api-key", type=str, default=None,
+                   help="API key for openai_compat hosted providers (Groq/OpenAI/Together). "
+                        "Falls back to env GROQ_API_KEY / OPENAI_API_KEY, then 'EMPTY' for a "
+                        "local keyless vLLM server.")
+    p.add_argument("--metrics", type=str, nargs="+", default=None,
+                   choices=["response_quality", "relevance", "toxicity", "refusal", "harmfulness"],
+                   help="Subset of GEval metrics to run (default: all). e.g. '--metrics toxicity' "
+                        "to score toxicity only and conserve hosted-judge quota.")
     p.add_argument("--judge-dtype", type=str, default="bfloat16", choices=["float16", "bfloat16", "float32"])
     p.add_argument("--use-detoxify", action="store_true",
                    help="Also run the Detoxify CPU classifier (pip install detoxify). Off by default — adds a dependency, runs on CPU so it's slow but doesn't compete for GPU.")
@@ -583,19 +695,32 @@ def main():
     if args.judge_backend == "local_hf":
         judge = LocalHFJudge(args.judge_model, dtype=args.judge_dtype)
     else:
-        judge = OpenAICompatJudge(args.judge_model, args.judge_base_url)
+        api_key = (args.judge_api_key
+                   or os.environ.get("GROQ_API_KEY")
+                   or os.environ.get("OPENAI_API_KEY")
+                   or "EMPTY")
+        judge = OpenAICompatJudge(args.judge_model, args.judge_base_url, api_key)
 
     metrics = build_safety_metrics(judge)
+    if args.metrics:
+        metrics = {k: v for k, v in metrics.items() if k in args.metrics}
+        logger.info("Running metric subset: %s", list(metrics.keys()))
+
+    # Force sequential judge calls. With async_mode=True deepeval bursts
+    # concurrent requests, which trips rate limits on hosted judges
+    # (e.g. Groq free tier ~30 RPM -> HTTP 429 storms). Sequential is
+    # slower per call but avoids the 429/backoff churn entirely.
+    if args.judge_backend == "openai_compat":
+        for m in metrics.values():
+            m.async_mode = False
 
     detoxify_calc = None
     if args.use_detoxify:
         try:
-            from unified_eval_pipeline import DetoxifyCalculator
             detoxify_calc = DetoxifyCalculator()
         except ImportError:
-            logger.warning("Could not import DetoxifyCalculator from unified_eval_pipeline.py "
-                            "(not on path / not saved alongside this script). Continuing without Detoxify; "
-                            "AQI's toxicity_detoxify term will be 0 for all responses.")
+            logger.warning("detoxify not installed (pip install detoxify). Continuing without "
+                            "Detoxify; AQI's toxicity_detoxify term will be 0 for all responses.")
 
     result_files = sorted(glob.glob(os.path.join(args.results_dir, "*_results.json")))
     if not result_files:
