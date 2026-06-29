@@ -142,6 +142,27 @@ class SwissKnifeConfig:
     """Device for model placement.  'auto' uses accelerate device_map.
     On CPU-only machines, 'cpu' is set automatically when no CUDA is found."""
 
+    # ── Stochastic Auditor hyperparameters ──────────────────────────────
+    use_stochastic_auditor: bool = False
+    """If True, use stochastic functional mapping (e.g. MC dropout, random projection,
+    head subsampling) instead of deterministic blade scores."""
+
+    stochastic_mode: str = "mc_dropout"
+    """Stochastic functional family to use: 'mc_dropout', 'random_proj', 'head_subsample'."""
+
+    stochastic_dropout_p: float = 0.1
+    """Dropout probability for mc_dropout mode."""
+
+    stochastic_proj_epsilon: float = 0.1
+    """Perturbation weight epsilon for random_proj mode."""
+
+    stochastic_head_frac: float = 0.5
+    """Fraction of attention heads to keep active in head_subsample mode."""
+
+    stochastic_num_layers_to_mask: int = 2
+    """Number of final transformer layers to mask attention heads in head_subsample mode."""
+
+
     dtype: str = "float32"
     """Compute dtype: 'float16', 'bfloat16', or 'float32'.
     float32 is the safe default for CPU.  Use float16/bfloat16 on GPU only.
@@ -197,4 +218,18 @@ class SwissKnifeConfig:
             assert self.gsi_max_step_tokens >= 1, \
                 f"gsi_max_step_tokens must be ≥ 1, got {self.gsi_max_step_tokens}"
             assert self.gsi_tau > 0, f"gsi_tau must be positive, got {self.gsi_tau}"
+
+        # Stochastic Auditor validation
+        if self.use_stochastic_auditor:
+            assert self.generation_mode == "option_b", \
+                "Stochastic auditor is currently only supported in speculative decoding Option B."
+            _valid_stochastic_modes = ("mc_dropout", "random_proj", "head_subsample")
+            assert self.stochastic_mode in _valid_stochastic_modes, \
+                f"stochastic_mode must be one of {_valid_stochastic_modes}, got '{self.stochastic_mode}'"
+            assert 0.0 <= self.stochastic_dropout_p <= 1.0, f"stochastic_dropout_p must be in [0,1], got {self.stochastic_dropout_p}"
+            assert self.stochastic_proj_epsilon >= 0.0, f"stochastic_proj_epsilon must be non-negative, got {self.stochastic_proj_epsilon}"
+            assert 0.0 < self.stochastic_head_frac <= 1.0, f"stochastic_head_frac must be in (0,1], got {self.stochastic_head_frac}"
+            assert self.stochastic_num_layers_to_mask >= 0, f"stochastic_num_layers_to_mask must be non-negative, got {self.stochastic_num_layers_to_mask}"
+
+
 

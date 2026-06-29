@@ -102,6 +102,79 @@ def knockout_bracket(
     return champion
 
 
+def stochastic_knockout_bracket(
+    draft_scores: torch.Tensor,
+    auditor,
+    context_ids: torch.Tensor,
+    candidate_matrix: torch.Tensor,
+    ref_logprobs: torch.Tensor,
+    position_idx: int,
+    alpha: float,
+    normalize: bool = True,
+) -> int:
+    """Run a single-elimination knockout bracket over K candidates with a stochastic auditor.
+
+    Draws a new stochastic functional of the blade's internal state independently
+    for each match.
+    """
+    K = draft_scores.shape[0]
+    active: List[int] = list(range(K))
+
+    round_num = 0
+    while len(active) > 1:
+        round_num += 1
+        next_round: List[int] = []
+
+        for i in range(0, len(active) - 1, 2):
+            a, b = active[i], active[i + 1]
+
+            # Draw a fresh functional per match
+            auditor.draw_fresh_functional()
+            stochastic_rewards = auditor.score_candidates_for_match(
+                context_ids, candidate_matrix, ref_logprobs
+            )
+            auditor.clear_functional()
+
+            # Extract the scores for the current position
+            bs_i = stochastic_rewards[position_idx]
+
+            # Z-score normalize if requested
+            ts_i = draft_scores
+            if normalize:
+                def _znorm(t: torch.Tensor) -> torch.Tensor:
+                    return (t - t.mean()) / (t.std() + 1e-6)
+                ts_i = _znorm(ts_i)
+                bs_i = _znorm(bs_i)
+
+            delta_draft = ts_i[a] - ts_i[b]
+            delta_blade = bs_i[a] - bs_i[b]
+            score = alpha * delta_draft + (1.0 - alpha) * delta_blade
+
+            winner = a if score > 0 else b
+            next_round.append(winner)
+
+            logger.debug(
+                "Round %d | Match: c%d vs c%d (stochastic)  "
+                "Δdraft=%.4f  Δblade=%.4f  score=%.4f → winner=c%d",
+                round_num, a, b,
+                delta_draft.item(), delta_blade.item(), score.item(),
+                winner,
+            )
+
+        # Bye
+        if len(active) % 2 == 1:
+            bye_idx = active[-1]
+            next_round.append(bye_idx)
+            logger.debug("Round %d | Bye: c%d advances", round_num, bye_idx)
+
+        active = next_round
+
+    champion = active[0]
+    logger.debug("Stochastic tournament champion: c%d", champion)
+    return champion
+
+
+
 def tournament_score_matrix(
     draft_scores: torch.Tensor,
     blade_scores: torch.Tensor,

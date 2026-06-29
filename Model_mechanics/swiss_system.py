@@ -169,6 +169,119 @@ def swiss_system_bracket(
     return champion
 
 
+def stochastic_swiss_bracket(
+    target_scores: torch.Tensor,
+    auditor,
+    context_ids: torch.Tensor,
+    candidate_matrix: torch.Tensor,
+    ref_logprobs: torch.Tensor,
+    position_idx: int,
+    alpha: float,
+    rounds: int = 0,
+    normalize: bool = True,
+) -> int:
+    """Run a Swiss-system tournament over K candidates at a single token position using a stochastic auditor.
+
+    Draws a new stochastic functional of the blade's internal state independently
+    for each match.
+    """
+    K = target_scores.shape[0]
+    if rounds == 0:
+        rounds = max(1, math.ceil(math.log2(K)))
+
+    # Cumulative wins for each candidate
+    cum_wins = [0.0] * K
+    # Track past pairings to avoid rematches
+    paired_before = set()
+    # Original index mapping
+    indices = list(range(K))
+
+    round_num = 0
+    for _ in range(rounds):
+        round_num += 1
+
+        # Sort by (cumulative wins DESC, original index ASC for tie-break)
+        sorted_by_score = sorted(
+            indices,
+            key=lambda i: (-cum_wins[i], i),
+        )
+
+        pairs: List[tuple] = []
+        unpaired = list(sorted_by_score)
+
+        while len(unpaired) >= 2:
+            a = unpaired[0]
+            unpaired.pop(0)
+
+            # Find best pairing partner: prefer same score, avoid rematch
+            best_partner_pos = None
+            for pos, b in enumerate(unpaired):
+                pair_key = (min(a, b), max(a, b))
+                if pair_key not in paired_before:
+                    best_partner_pos = pos
+                    break
+
+            if best_partner_pos is None:
+                best_partner_pos = 0
+
+            b = unpaired.pop(best_partner_pos)
+            pairs.append((a, b))
+            paired_before.add((min(a, b), max(a, b)))
+
+        # Bye
+        if unpaired:
+            bye_idx = unpaired[0]
+            cum_wins[bye_idx] += 0.5
+            logger.debug("Round %d | Bye: c%d", round_num, bye_idx)
+
+        # Execute matches
+        for a, b in pairs:
+            # Draw a fresh functional per match
+            auditor.draw_fresh_functional()
+            stochastic_rewards = auditor.score_candidates_for_match(
+                context_ids, candidate_matrix, ref_logprobs
+            )
+            auditor.clear_functional()
+
+            bs_i = stochastic_rewards[position_idx]
+
+            # Z-score normalize if requested
+            ts_i = target_scores
+            if normalize:
+                def _znorm(t: torch.Tensor) -> torch.Tensor:
+                    return (t - t.mean()) / (t.std() + 1e-6)
+                ts_i = _znorm(ts_i)
+                bs_i = _znorm(bs_i)
+
+            delta_target = ts_i[a] - ts_i[b]
+            delta_blade  = bs_i[a]  - bs_i[b]
+            score = alpha * delta_target + (1.0 - alpha) * delta_blade
+
+            if score > 0:
+                winner, loser = a, b
+            else:
+                winner, loser = b, a
+
+            cum_wins[winner] += 1.0
+            logger.debug(
+                "Round %d | c%d vs c%d (stochastic) → winner=c%d "
+                "(Δtgt=%.4f Δblade=%.4f score=%.4f)",
+                round_num, a, b, winner,
+                delta_target.item(), delta_blade.item(), score.item(),
+            )
+
+    # Determine champion (use target_scores for tie-breaks)
+    champion = max(
+        indices,
+        key=lambda i: (cum_wins[i], target_scores[i].item()),
+    )
+    logger.debug(
+        "Stochastic Swiss champion: c%d  (wins=%.1f)", champion, cum_wins[champion]
+    )
+    return champion
+
+
+
 def swiss_score_summary(
     target_scores: torch.Tensor,
     blade_scores: torch.Tensor,

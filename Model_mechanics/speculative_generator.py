@@ -44,8 +44,8 @@ from peft import PeftModel
 
 from .config import SwissKnifeConfig
 from .blades import DPOBlade
-from .tournament import knockout_bracket
-from .swiss_system import swiss_system_bracket
+from .tournament import knockout_bracket, stochastic_knockout_bracket
+from .swiss_system import swiss_system_bracket, stochastic_swiss_bracket
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +161,19 @@ class SwissKnifeSpeculativeGenerator:
         self.blade_model = blade_model
         self.blade = DPOBlade(cfg, base_model, blade_model, tokenizer)
 
+        if cfg.use_stochastic_auditor:
+            from .stochastic_auditor import StochasticAuditor, StochasticAuditorConfig
+            auditor_cfg = StochasticAuditorConfig(
+                mode=cfg.stochastic_mode,
+                dropout_p=cfg.stochastic_dropout_p,
+                proj_epsilon=cfg.stochastic_proj_epsilon,
+                head_frac=cfg.stochastic_head_frac,
+                num_layers_to_mask=cfg.stochastic_num_layers_to_mask,
+            )
+            self.auditor = StochasticAuditor(self.blade, cfg, auditor_cfg)
+        else:
+            self.auditor = None
+
         # Select tournament function based on config
         self._run_tournament = (
             self._knockout_at_position
@@ -170,9 +183,11 @@ class SwissKnifeSpeculativeGenerator:
 
         logger.info(
             "SwissKnifeSpeculativeGenerator initialized: "
-            "γ=%d, K=%d, α=%.2f, β=%.3f, tournament=%s",
+            "γ=%d, K=%d, α=%.2f, β=%.3f, tournament=%s, stochastic=%s",
             cfg.gamma, cfg.K, cfg.alpha, cfg.beta, cfg.tournament_mode,
+            cfg.use_stochastic_auditor,
         )
+
 
     # ── Draft proposal: [γ, K] candidate tensor ──────────────────────────
 
@@ -334,14 +349,17 @@ class SwissKnifeSpeculativeGenerator:
             stats.target_forward_passes += 1
 
             # ── Step 3: rb ← blade.score_parallel(D | context) [γ, K] ───
-            blade_scores = self.blade.score_parallel(
-                context_ids, candidate_matrix,
-            )  # [γ, K]
-            stats.blade_forward_passes += 1
-
-            # Apply blade bias if set (calibration invariance probe)
-            if self.cfg.blade_bias != 0.0:
-                blade_scores = blade_scores + self.cfg.blade_bias
+            if not self.cfg.use_stochastic_auditor:
+                blade_scores = self.blade.score_parallel(
+                    context_ids, candidate_matrix,
+                )  # [γ, K]
+                # Apply blade bias if set (calibration invariance probe)
+                if self.cfg.blade_bias != 0.0:
+                    blade_scores = blade_scores + self.cfg.blade_bias
+                stats.blade_forward_passes += 1
+            else:
+                blade_scores = None
+                self.auditor.forward_passes = 0
 
             # ── Steps 6-12: per-position tournament + acceptance ─────────
             accepted_prefix: List[int] = []
@@ -354,16 +372,44 @@ class SwissKnifeSpeculativeGenerator:
                     break
 
                 ts_i = target_logprobs[i]  # [K]
-                bs_i = blade_scores[i]     # [K]
 
-                # Z-score normalize if configured
-                if self.cfg.normalize_scores:
-                    ts_i = self._znorm(ts_i)
-                    bs_i = self._znorm(bs_i)
+                if self.cfg.use_stochastic_auditor:
+                    if self.cfg.tournament_mode == "knockout":
+                        wi = stochastic_knockout_bracket(
+                            draft_scores=ts_i,
+                            auditor=self.auditor,
+                            context_ids=context_ids,
+                            candidate_matrix=candidate_matrix,
+                            ref_logprobs=target_logprobs,
+                            position_idx=i,
+                            alpha=self.cfg.alpha,
+                            normalize=self.cfg.normalize_scores,
+                        )
+                    else:
+                        wi = stochastic_swiss_bracket(
+                            target_scores=ts_i,
+                            auditor=self.auditor,
+                            context_ids=context_ids,
+                            candidate_matrix=candidate_matrix,
+                            ref_logprobs=target_logprobs,
+                            position_idx=i,
+                            alpha=self.cfg.alpha,
+                            rounds=self.cfg.swiss_rounds,
+                            normalize=self.cfg.normalize_scores,
+                        )
+                else:
+                    bs_i = blade_scores[i]     # [K]
 
-                # wi ← Tournament(D[i,:], ℓt[i,:], rb[i,:], α)
-                wi = self._run_tournament(ts_i, bs_i)
+                    # Z-score normalize if configured
+                    if self.cfg.normalize_scores:
+                        ts_i = self._znorm(ts_i)
+                        bs_i = self._znorm(bs_i)
+
+                    # wi ← Tournament(D[i,:], ℓt[i,:], rb[i,:], α)
+                    wi = self._run_tournament(ts_i, bs_i)
+
                 stats.tournament_calls += 1
+
 
                 logger.debug(
                     "Position %d: tournament_winner=c%d (greedy=c0, token_id=%d→%d)",
@@ -411,6 +457,9 @@ class SwissKnifeSpeculativeGenerator:
                         "Round %d | Full accept (%d tok): '%s'",
                         stats.total_rounds, gamma, span_text,
                     )
+
+            if self.cfg.use_stochastic_auditor:
+                stats.blade_forward_passes += self.auditor.forward_passes
 
             # ── Commit accepted tokens ───────────────────────────────────
             # Filter to budget

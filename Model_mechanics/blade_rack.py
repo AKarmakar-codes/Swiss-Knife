@@ -214,6 +214,21 @@ class BladeRack:
             len(self._blades), list(self._blades.keys()),
         )
 
+    def get_stochastic_auditor(self, blade_name: str, auditor_cfg = None) -> "StochasticAuditor":
+        """Get a StochasticAuditor instance for a loaded blade."""
+        from .stochastic_auditor import StochasticAuditor, StochasticAuditorConfig
+        blade = self.load_blade(blade_name)
+        if auditor_cfg is None:
+            auditor_cfg = StochasticAuditorConfig(
+                mode=self.cfg.stochastic_mode,
+                dropout_p=self.cfg.stochastic_dropout_p,
+                proj_epsilon=self.cfg.stochastic_proj_epsilon,
+                head_frac=self.cfg.stochastic_head_frac,
+                num_layers_to_mask=self.cfg.stochastic_num_layers_to_mask,
+            )
+        return StochasticAuditor(blade, self.cfg, auditor_cfg)
+
+
     # ── Hot-swap ─────────────────────────────────────────────────────────
 
     def swap(self, blade_name: str) -> Tuple[DPOBlade, ReconfigurationProfile]:

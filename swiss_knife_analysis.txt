@@ -1,0 +1,1596 @@
+Swiss Knife
+
+Decode-Time Alignment via Tournament Sampling
+
+A critical analysis: positioning, novelty, implementation
+
+Lab
+Document type
+Status
+Predecessor
+
+Pragya Lab, BITS Pilani Goa
+Design critique & implementation guide
+Pre-implementation, Level 2 (Swiss Knife)
+ECLIPTICA/CITA (Level 1)
+
+Generated 2026-04-23
+
+Swiss Knife Analysis
+
+Pragya Lab
+
+Contents
+1
+
+Executive Summary
+
+2
+
+2
+
+The Decode-Time Alignment Landscape
+
+3
+
+2.1
+
+What exists and what each method does . . . . . . . . . . . . . . . . . . . . . . .
+
+3
+
+2.2
+
+The three closest rivals, in detail
+
+3
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+3
+
+What Swiss Knife Actually Contributes
+
+5
+
+4
+
+Tournament Sampling: The Mechanics
+
+6
+
+4.1
+
+Why pairwise comparisons?
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+6
+
+4.2
+
+Format 1: Knockout bracket . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+6
+
+4.3
+
+Format 2: Swiss-system schedule
+
+7
+
+4.4
+
+5
+
+6
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+4.3.1
+
+How Swiss-system works . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+7
+
+4.3.2
+
+Pairing rule in each round . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+7
+
+4.3.3
+
+Complexity
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+7
+
+4.3.4
+
+Why use Swiss-system over knockout for Swiss Knife . . . . . . . . . . . .
+
+7
+
+The match score function
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+Option A: Non-Speculative (Best-of-K Tournament)
+
+8
+
+9
+
+5.1
+
+What Option A is honest about . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+9
+
+5.2
+
+Why Option A is strictly weaker than Option B . . . . . . . . . . . . . . . . . . .
+
+10
+
+Option B: Speculative-Decoding-Integrated Tournament
+
+11
+
+6.1
+
+Recap: standard speculative decoding
+
+11
+
+6.2
+
+The reframing: verier as alignment socket
+
+. . . . . . . . . . . . . . . . . . . . .
+
+11
+
+6.3
+
+What makes this actually speculative . . . . . . . . . . . . . . . . . . . . . . . . .
+
+11
+
+6.4
+
+Compute prole . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+12
+
+6.5
+
+Architecture diagram . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+13
+
+. . . . . . . . . . . . . . . . . . . . . . . .
+
+7
+
+Fitting Swiss Knife into the Alignment Framework
+
+14
+
+8
+
+Implementation Plan
+
+15
+
+9
+
+8.1
+
+The one-sentence novelty claim
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+8.2
+
+Revised priority order
+
+15
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+15
+
+8.3
+
+Decision points
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+15
+
+8.4
+
+The question reviewers will ask, with your answer . . . . . . . . . . . . . . . . . .
+
+16
+
+Summary Table: What to Do Next Week
+
+1
+
+17
+
+Swiss Knife Analysis
+
+1
+
+Pragya Lab
+
+Executive Summary
+
+This document re-examines the Swiss Knife proposal against the current decode-time alignment
+literature (as of early 2026) and identies three issues with the draft framing, along with the
+corrective path.
+1.
+
+The multi-head framing is not novel in itself. MOD (Shi et al., NeurIPS 2024), GenARM (Xu et al., ICLR 2025), PARM (2025), Collab (2025), and several others already operate in the frozen generator + swappable objective modules regime. The claim decode-time
+alignment with modular heads that can hot-swap is taken.
+
+2.
+
+The genuine novelty is the tournament selection rule. Existing methods combine
+objective scores either by linear mixture (MOD) or by argmax (ARGS, DeAL). Swiss Knife
+proposes pairwise tournament aggregation, which is mechanically dierent and provides a specic defense against reward-maximisation degeneracies (refuse-always, boilerplate collapse).
+
+3.
+
+The speculative decoding framing in the abstract is currently aspirational. The
+algorithm described in the plan document is Best-of-N with a tournament selector; it is not
+speculative decoding in the sense of Leviathan et al. (2023). Two honest paths exist: (A) drop
+the speculative framing and position as decode-time tournament alignment, or (B) actually
+build the speculative-decoding-integrated version where the auditor replaces the verier. This
+document recommends path B, and details it.
+
+Key insight. The paper that works is: Tournament-based decode-time alignment, implemented as a replacement verier step inside a speculative-decoding loop, with a pluggable
+objective blade. Every word in that sentence is doing load-bearing work, and the experiments must defend each.
+
+2
+
+Swiss Knife Analysis
+
+2
+
+Pragya Lab
+
+The Decode-Time Alignment Landscape
+
+2.1 What exists and what each method does
+Table 1 catalogues seventeen relevant methods along the dimensions that actually matter for
+positioning Swiss Knife. The axes are: (a) what the method combines, (b) how it combines them,
+(c) whether it supports multiple objectives, (d) whether objectives can be hot-swapped postdeployment, (e) whether it has any defense against reward-max degeneracies, and (f ) whether
+the generator backbone is frozen.
+
+#
+
+Method
+
+Year Combination rule
+
+Multi-obj?
+
+Hotswap?
+
+Frozen?
+
+1
+2
+
+ARGS
+DeAL
+
+2024
+2024
+
+Draft logit + λ · r, argmax
+Beam search + reward rerank
+
+No
+Partial
+
+Yes
+Yes
+
+3
+4
+5
+
+CARDS
+Transfer Q⋆
+
+MOD
+
+2024
+2024
+2024
+
+Span-level rejection sampling
+Learned Q-function guidance
+
+No
+No
+Yes (weight w)
+
+No
+Promptonly
+No
+No
+Yes
+
+Yes
+Yes
+Yes
+
+6
+
+GenARM
+
+2025
+
+Token-level ARM reward addition
+
+Yes
+
+Yes
+
+7
+
+PARM
+
+2025
+
+Preference-aware single ARM
+
+Yes
+
+Yes
+
+8
+9
+10
+
+PAD
+Collab
+Darwin
+
+2025
+2025
+2024
+
+Yes
+Yes
+No
+
+Yes
+Yes
+Yes
+
+11
+12
+13
+
+RSD
+GSI
+Nudging
+
+2025
+2025
+2025
+
+Personalized token reward
+Q-function-based agent switching
+Evolutionary tree search + beam replacement
+Process-reward rejection (speculative)
+Soft best-of-N over speculative samples
+Small-aligned model token hando
+
+Yes
+(multiARM sum)
+Yes (pref vector)
+Per-user
+Yes
+No
+No
+No
+No
+
+Yes
+Yes
+Yes
+
+14
+15
+
+SteerLM
+2023
+Arithmetic
+2024
+Ctrl.
+ECLIPTICA/CITA
+2025
+(L1)
+
+No
+
+16
+
+SKlightSwiss
+17
+(L2)
+
+Knife
+
+2026
+
+Linear mixture of next-token distributions
+
+Attribute labels in prompt (SFT)
+Directional pref. w/ reward vectors
+
+Partial
+Yes
+
+No
+No
+Modellevel
+No
+Partial
+
+Instruction-conditioned policy
+
+Yes
+
+No
+
+Tournament over K draft candidates
+
+Yes
+(active
+blade)
+
+Yes
+Yes
+(pointer)
+
+No
+No
+
+Table 1: The decode-time alignment landscape. Rows 116 are prior work; row 17 is the proposed
+method. Note that rows 5, 6, 7, 9 already claim modular multi-objective hot-swap.
+
+2.2 The three closest rivals, in detail
+The methods Swiss Knife must defeat (or at least dierentiate from) are MOD, GenARM, and
+Collab. Table 2 breaks down the mechanical dierences precisely.
+
+3
+
+Swiss Knife Analysis
+
+Pragya Lab
+
+Dimension
+
+MOD
+
+GenARM
+
+Collab
+
+Swiss Knife
+
+Core operator
+
+Linear mixture of
+logits from K full
+LMs
+
+Weighted
+sum
+of ARM rewards
+added to base
+logits
+
+Q-function policy
+switch per token
+
+Discrete tournament
+over sampled candidates
+
+Per-step compute
+
+All K objective
+LMs run
+
+Base LM + all K
+ARMs
+
+All K agent LMs
+run
+
+One draft + one active auditor
+
+Objective mode
+
+Continuous blend,
+Pareto front
+
+Continuous blend
+
+Per-token agent selection
+
+Single blade active; α
+blends with uency
+
+Degeneracy defense
+
+None explicit
+
+None explicit
+
+Implicit
+function
+ing
+
+Speculative framing
+
+No
+
+No
+
+No
+
+Table 2: Swiss Knife vs.
+
+its three closest rivals.
+
+Qsmooth-
+
+Condorcet
+aggregation
++
+draft-likelihood
+tie-break
+Yes
+(Option
+Sec. 6)
+
+Rows in bold type indicate the dimensions
+
+where Swiss Knife is genuinely dierent, not merely rebranded.
+
+Caveat. Reviewers familiar with MOD will ask: Is Swiss Knife not just MOD with a
+one-hot weight vector w ? The answer must cover three mechanical dierences: (i) MOD
+combines full distributions every step, Swiss Knife runs one auditor on sampled candidates;
+(ii) MOD has no degeneracy defense, Swiss Knife's tournament structure provably resists
+
+pairwise dierences
+
+single-reward domination; (iii) tournament aggregation is not argmax over linear combination  it uses only
+
+, which are robust to auditor miscalibration in ways
+
+absolute scores are not.
+
+4
+
+B,
+
+Swiss Knife Analysis
+
+3
+
+Pragya Lab
+
+What Swiss Knife Actually Contributes
+
+After cross-referencing with the literature, the four-part novelty claim from the original plan
+document should be restated:
+
+Taken by MOD, GenARM, PARM, Collab.
+Taken by MOD (reweight w), GenARM (reweight
+
+✗ Decode-time alignment with modular heads.
+✗ Hot-swap objectives post-deployment.
+
+ARMs).
+
+✗ Speculative decoding for eciency.
+
+verier (Option B).
+
+Taken by RSD, GSI  unless actually integrated into
+
+✓ Tournament selection as alternative to linear/weighted combination.
+
+new.
+
+Genuinely
+
+✓ Tournament structure as built-in defense against reward-max degeneracy.
+
+uinely new, theoretically defensible.
+
+✓ Single-blade-active switching (not Pareto blending).
+
+real deployment scenarios.
+
+Framing dierence that matches
+
+Three defensible contributions is a solid paper. Four was dilution.
+
+5
+
+Gen-
+
+Swiss Knife Analysis
+
+4
+
+Pragya Lab
+
+Tournament Sampling: The Mechanics
+
+4.1 Why pairwise comparisons?
+DPO reward models are well-known to be miscalibrated on absolute scale: the log-ratio β log[πblade /πref ]
+is a valid preference signal but not a calibrated reward. Argmax-based methods (ARGS, DeAL)
+use absolute scores and are therefore vulnerable to calibration drift  a blade that assigns
+inated scores to "I
+
+cannot" tokens will collapse the output distribution to refusals.
+A better than B ?) use only
+of scores, which are
+
+dierences
+
+Pairwise comparisons (is
+
+invariant under additive constant shifts:
+
+∆rblade (A, B) = rblade (A) − rblade (B)
+A blade that is miscalibrated by a constant oset produces ∆ = 0 on everything, so the draft/target likelihood term takes over. This is the mechanical reason tournaments are more robust
+than argmax.
+
+Key insight. Tournament selection uses only
+
+dierences
+
+of scores. This makes it invariant
+
+to additive miscalibration of the auditor, which argmax-based methods cannot claim. The
+paper's theoretical backbone rests on this observation.
+
+4.2 Format 1: Knockout bracket
+A single-elimination bracket. Given K candidates, the tournament runs log2 K rounds of parallel
+pairwise matches. Each round halves the eld. Total matches: K − 1. Sequential depth: log2 K .
+
+Round 1 (K/2 matches) Round 2
+
+Final
+
+c1
+w1
+c2
+
+f1
+
+champion
+
+c3
+w2
+c4
+
+c5
+w3
+c6
+
+f2
+
+c7
+w4
+c8
+Pros. Minimal auditor calls, trivially parallel within rounds.
+Cons. Pairing is fragile  a strong candidate can be eliminated in round 1 if paired with
+another strong candidate. Noisy auditors hurt knockout disproportionately.
+
+6
+
+Swiss Knife Analysis
+
+Pragya Lab
+
+4.3 Format 2: Swiss-system schedule
+
+no candidate is
+
+This is the format the original plan document mentions without explaining. It is borrowed from
+
+eliminated after a single loss.
+
+competitive chess/go tournaments and solves exactly the weakness of knockout:
+
+4.3.1
+
+Every candidate plays every round.
+
+How Swiss-system works
+
+in each round, match candidates with the same or closest cumulative score.
+
+Each candidate carries a cumulative score (number of match wins, possibly weighted).
+pairing rule is:
+
+The
+
+Concrete example. K = 8 candidates, R = 3 rounds.
+
+#
+
+Candidate
+
+1
+2
+3
+4
+5
+6
+7
+8
+
+c1
+c2
+c3
+c4
+c5
+c6
+c7
+c8
+
+Round 1
+Opponent Result
+c2
+c1
+c4
+c3
+c6
+c5
+c8
+c7
+
+Round 2
+Opponent Result
+
+W (1)
+L (0)
+W (1)
+L (0)
+W (1)
+L (0)
+W (1)
+L (0)
+
+c3
+c4
+c1
+c2
+c7
+c8
+c5
+c6
+
+W (2)
+W (1)
+L (1)
+L (0)
+W (2)
+W (1)
+L (1)
+L (0)
+
+Round 3
+Opponent Result
+c5
+c6
+c2
+c8
+c1
+c2
+c3
+c4
+
+W (3)
+W (2)
+L (1)
+W (1)
+L (2)
+L (1)
+W (2)
+L (0)
+
+Final
+score
+3
+2
+1
+1
+2
+1
+2
+0
+
+After 3 rounds, c1 has 3/3 wins, clearly the strongest. Candidates c2 , c5 , c7 all have 2 wins,
+broken by tie-break rules.
+
+4.3.2
+
+Pairing rule in each round
+
+1. Group candidates by current cumulative score.
+2. Within each score group, pair adjacent candidates (by some secondary order  e.g., initial
+draft rank).
+3. If a score group has odd size, one candidate oats to pair with the closest candidate in the
+next score group. This rarely matters for small K .
+4. Avoid repeat pairings when possible (standard Swiss constraint).
+
+4.3.3
+
+Complexity
+
+For K candidates and R rounds: R · K/2 matches total. Typical choice R = ⌈log2 K⌉:
+
+ K = 4, R = 2: 4 matches (vs. knockout: 3).
+ K = 8, R = 3: 12 matches (vs. knockout: 7).
+ K = 16, R = 4: 32 matches (vs. knockout: 15).
+Roughly 2× the matches of knockout, but considerably more robust to auditor noise because
+every candidate's nal score reects multiple matches.
+
+4.3.4
+
+Why use Swiss-system over knockout for Swiss Knife
+
+The name Swiss Knife is actually motivated by the Swiss-system pairing: the paper's branding
+hinges on this format doing something knockout cannot. That something is:
+
+ Robustness to auditor noise. A candidate that loses one close match still has chances to
+recover.
+
+7
+
+Swiss Knife Analysis
+
+Pragya Lab
+
+ Better at selecting second-best candidates cleanly. Useful for diversity metrics (SelfBLEU).
+
+ Tie-break structure that can incorporate draft likelihood as secondary criterion.
+
+knockout is a good default; Swiss-system wins when
+the auditor is miscalibrated or when K is large (≥ 16)
+The experimental claim to defend is:
+
+.
+
+If this is not true in experiments,
+
+Swiss-system is dead weight and the paper should drop it.
+
+Caveat. If knockout works just as well as Swiss-system across all tested K and auditor
+conditions, the Swiss-system format becomes unjustied and the paper's name becomes
+awkward. Run this ablation rst, not last.
+
+4.4 The match score function
+Regardless of tournament format, each individual match between candidates A and B uses the
+same score:
+
+match(A, B) = α · log πdraft(A) − log πdraft(B) + (1 − α) · rblade(A) − rblade(B)
+h
+
+with A winning i
+
+i
+
+h
+
+i
+
+match(A, B) > 0.
+
+Here α ∈ [0, 1] is a mixing coecient (α ≈ 0.5 as the default), and rblade is the DPO-implicit
+reward:
+
+rblade (y|x) = β · log
+
+πblade (y|x)
+πref (y|x)
+
+This formulation has three virtues:
+1. Uses only
+
+dierences
+
+ robust to additive auditor miscalibration.
+
+2. Uses your existing DPO blades with zero additional training  no DeBERTa auditor to train.
+3. Combines uency (draft likelihood) and alignment (blade reward) linearly, so α is a welldened knob.
+
+8
+
+Swiss Knife Analysis
+
+5
+
+Pragya Lab
+
+Option A: Non-Speculative (Best-of-K Tournament)
+
+This is the algorithm described implicitly in the original plan document: at each span, the draft
+samples K candidates, a tournament picks one, commit and loop.
+
+Algorithm 1 Swiss Knife (Option A)  Non-speculative tournament decoding
+Require: prompt x, active blade b, mixing α, candidates K , span length L
+
+1: y ← []
+2: while not done do
+3:
+C ← draft.sample(x ⊕ y, num = K, len = L)
+4:
+sd ← draft.logprob(C | x ⊕ y)
+5:
+sb ← blade.logratio(C | x ⊕ y)
+6:
+w←
+(C, sd , sb , α)
+7:
+y ← y ⊕ C[w]
+8: end while
+9: return y
+
+KnockoutBracket
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+
+▷ K independent spans
+▷ batched
+▷ batched; log(πb /πref )
+
+def knockout_bracket ( candidates , draft_scores , blade_scores , alpha ) :
+"""
+candidates :
+list of K candidate spans ( strings or token ids )
+draft_scores :
+tensor of shape [ K ]
+log pi_draft ( span | x )
+blade_scores :
+tensor of shape [ K ]
+log pi_blade ( span | x )
+- log pi_ref ( span | x )
+alpha :
+float in [0 , 1]
+draft - vs - blade mixing
+weight
+returns :
+int
+index of winning
+candidate
+"""
+active = list ( range ( len ( candidates ) ) )
+while len ( active ) > 1:
+next_round = []
+for i in range (0 , len ( active ) , 2) :
+a , b = active [ i ] , active [ i + 1]
+delta_draft = draft_scores [ a ] - draft_scores [ b ]
+delta_blade = blade_scores [ a ] - blade_scores [ b ]
+score = alpha * delta_draft + (1 - alpha ) * delta_blade
+next_round . append ( a if score > 0 else b )
+active = next_round
+return active [0]
+Listing 1: Option A knockout bracket, plain Python/PyTorch sketch.
+
+Key insight. Option A is what the original plan actually described. It works, it's simple,
+and it's defensible as tournament-based decode-time alignment. But it is
+
+not
+
+speculative
+
+decoding in any meaningful sense  it's Best-of-K with a tournament selection rule.
+
+5.1 What Option A is honest about
+ No target model is in the loop. Only draft + auditor.
+ No acceptance/rejection of speculative sequences. Just candidate scoring.
+ No γ -ahead proposal. Just sample K independent spans.
+ Speedup relative to vanilla only via the small-draft + small-auditor cost model.
+9
+
+Swiss Knife Analysis
+
+Pragya Lab
+
+5.2 Why Option A is strictly weaker than Option B
+Option A competes directly with Best-of-N, CARDS, Darwin, and the non-speculative members
+of the decode-time alignment family. The tournament rule is the only novelty. If a reviewer says
+run CARDS with a tournament selector, you have nothing to push back with beyond we're
+the rst.
+
+10
+
+Swiss Knife Analysis
+
+6
+
+Pragya Lab
+
+Option B: Speculative-Decoding-Integrated Tournament
+
+This is what the abstract
+
+claims
+
+Swiss Knife is, and what the name alignment socket demands.
+
+The tournament sits in the verier slot of a speculative decoding loop.
+
+6.1 Recap: standard speculative decoding
+In Leviathan-style speculative decoding, the draft model proposes γ future tokens in one autoregressive sweep. The target model then does
+
+one
+
+forward pass computing πtarget for all γ positions.
+
+At each position i, the verier accepts token ti with probability min(1, πtarget (ti )/πdraft (ti )). On
+the rst rejection, resample from (πtarget − πdraft )+ and discard the tail. This is
+output distribution matches πtarget exactly.
+
+lossless
+
+ the
+
+6.2 The reframing: verier as alignment socket
+Swiss Knife's claim: replace the Leviathan verier with a tournament over candidate tokens at
+each speculative position. The tournament uses πtarget (for calibrated uency) and rblade (for
+alignment).
+
+Algorithm 2 Swiss Knife (Option B)  Speculative tournament verier
+Require: prompt x, active blade b, mixing α, lookahead γ , per-position candidates K
+
+1: y ← []
+2: while not done do
+3:
+D ← draft.propose(x ⊕ y, lookahead = γ, topK = K)
+▷ shape [γ, K]
+4:
+ℓt ← target.logprob_parallel(D | x ⊕ y)
+▷ ONE forward pass, shape [γ, K]
+5:
+rb ← blade.score_parallel(D | x ⊕ y)
+▷ shape [γ, K]
+6:
+for i = 1 to γ do
+7:
+wi ←
+(D[i, :], ℓt [i, :], rb [i, :], α)
+8:
+if D[i, wi ] ̸= D[i, 0] then
+▷ Winner diers from draft's top-1
+9:
+y ← y ⊕ D[1 : i − 1, 0] ⊕ D[i, wi ]
+10:
+break
+▷ discard tail, restart draft
+11:
+end if
+12:
+end for
+13:
+if no rejection occurred then
+14:
+y ← y ⊕ D[:, 0]
+▷ accept all γ tokens
+15:
+end if
+16: end while
+17: return y
+
+Tournament
+
+6.3 What makes this actually speculative
+1.
+
+One target forward pass per γ positions. This is where the throughput advantage lives.
+Without this, you're paying γ target passes.
+
+2.
+
+Positional acceptance propagation. First rejection discards the tail  standard speculative decoding mechanics.
+
+3.
+
+Calibrated likelihoods. Target model provides πtarget for the draft-agreement term, not a
+hand-wavy uency proxy.
+
+4.
+
+Alignment socket. Blade plugs into the verier; replace it, alignment objective changes.
+Hot-swap is a pointer operation.
+
+11
+
+Swiss Knife Analysis
+
+Pragya Lab
+
+6.4 Compute prole
+Per generated span of expected length ℓ̄:
+
+ Draft forward passes: γ (autoregressive proposal).
+ Target forward passes: 1 (parallel verication).
+ Blade forward passes: 1 (parallel scoring over [γ, K] candidates).
+ Tournament matches: γ · (K − 1) if knockout, γ · (K/2) · R if Swiss.
+Throughput relative to vanilla autoregressive target: ≈ 0.50.8× depending on γ and acceptance rate. Matches the envelope reported by RSD.
+
+12
+
+Swiss Knife Analysis
+
+Pragya Lab
+
+6.5 Architecture diagram
+
+Prompt x
+DRAFT MODEL (frozen)
+
+proposes γ tokens, top-K per position
+⇒ candidate tensor [γ, K]
+[γ, K] draft
+TARGET / GENERATOR (frozen)
+
+ONE forward pass over [γ, K] candidates
+⇒ log πtarget matrix
+log πtarget
+
+ALIGNMENT SOCKET  Tournament Sampling Auditor (TSA)
+At each position i: tournament over K candidates
+match(A, B) = α · ∆ log πtarget + (1 − α) · ∆rblade
+
+active
+Safety
+
+Helpful.
+
+Harmless.
+
+Truthful.
+
+Style
+
+accepted prex
+
+Response y
+The socket is where the standard Leviathan verier would sit. In Swiss Knife, a blade plugs
+into that slot; dierent blades produce dierent alignment behaviors. This is the one-sentence
+pitch made concrete.
+
+13
+
+on rejecti
+
+Swiss Knife Analysis
+
+7
+
+Pragya Lab
+
+Fitting Swiss Knife into the Alignment Framework
+
+The evolutionary narrative the lab has been using:
+
+Level
+
+Approach
+
+Example methods
+
+Where alignment lives
+
+0
+
+Static alignment
+
+DPO, PPO, RLHF, GRPO,
+ORPO
+
+Baked into weights; one policy per checkpoint
+
+1
+
+Instructionconditioned switching
+
+ECLIPTICA/CITA, SteerLM
+
+Inside the backbone, conditioned on prompt
+
+2a
+
+Decode-time distribution mixture
+
+MOD, GenARM, PARM
+
+In the logit/reward combiner
+
+SKlight
+
+2b
+
+Decode-time
+tournament
+
+Key insight. Swiss Knife is
+exists.
+
+not
+
+Swiss Knife
+
+In the verier slot of
+a speculative-decoding
+loop
+
+a new level above L1. It is a renement of L2 that already
+
+The honest pitch: MOD and GenARM put alignment in the logit combiner; we
+
+put it in the speculative-decoding verier slot and make the combination rule a tournament
+instead of a linear mixture.
+
+The three things Option B gains over Option A and over the L2a methods:
+1.
+
+Throughput. One target forward pass checks γ positions.
+
+2.
+
+Rigor. Calibrated likelihoods from target, not hand-wavy uency proxy.
+
+3.
+
+Identity. We reframed the verier is a clean one-sentence pitch that MOD and GenARM
+cannot claim.
+
+14
+
+Swiss Knife Analysis
+
+8
+
+Pragya Lab
+
+Implementation Plan
+
+8.1 The one-sentence novelty claim
+Write this on paper, now:
+
+Swiss Knife replaces the Leviathan-style distribution-matching verier in speculative
+decoding with a tournament aggregation over per-position candidates, scored by a
+pluggable alignment blade, yielding a decode-time alignment method that is switchable
+(single active blade), robust to auditor miscalibration (pairwise comparisons), and
+resistant to reward-max degeneracies (tournament structure prevents single-candidate
+domination).
+
+If that sentence survives the experiments, the paper exists. If it doesn't, it doesn't.
+
+8.2 Revised priority order
+The original plan document priorities the CITA comparison early. This is wrong. MOD is a
+stronger rival than CITA for Swiss Knife's specic claim. MOD must be beaten rst.
+
+Week
+
+Task
+
+Goal / deliverable
+
+1
+
+Pipeline v0, Option A
+
+12
+
+MOD vs. TSA bake-o
+
+Working knockout bracket with 3 DPO blades. Sanity
+check: outputs are coherent and behave like the active
+blade.
+Same 3 DPO blades, same prompts. Cong A: MOD with
+one-hot w. Cong B: Swiss Knife TSA. Measure: crossobj separation, refuse-always rate, Self-BLEU, latency.
+
+This is the paper's life-or-death experiment.
+23
+
+Degeneracy battery
+
+Refuse-always (500 benign prompts) and Self-BLEU vs.
+argmax-reward AND vs. MOD linear mix.
+
+34
+
+Cross-objective
+matrix
+
+3 × 3 matrix on ECLIPTICA's 300 prompts. Diagonal
+≫ o-diagonal is the claim.
+
+45
+
+Option B upgrade
+
+Integrate into speculative decoding loop properly. Measure acceptance rate, auditor calls/token, end-to-end latency.
+
+56
+
+Tournament format ablation
+
+Knockout vs. Swiss-system, K ∈ {4, 8, 16, 32}. If Swisssystem never wins, drop it.
+
+67
+
+α sweep and span-length ablation
+
+Find operating point; conrm span-level > token-level
+for tournament.
+
+78
+
+Adversarial battery
+
+HarmBench + GCG attacks on Safety-analog blade.
+
+810
+
+ECLIPTICA
+comparison
+and paper writing
+
+Final ablation table; draft submission.
+
+separation
+
+8.3 Decision points
+ If TSA beats MOD on degeneracy but matches on alignment: Lead the paper with
+
+robustness
+
+. Title: Tournament-Based Decoding for Robust Multi-Objective Alignment.
+
+ If TSA matches MOD on degeneracy but wins on latency: Lead with
+
+ciency
+
+. Positioning: one-active-blade vs. all-models-every-step.
+
+systems/e-
+
+ If TSA loses to MOD on both: Pivot to the deployment story (single-objective guarantees
+for safety-critical apps) or drop the multi-objective framing entirely and pitch as a robust
+single-objective decode-time method.
+
+ If TSA wins on both: Full Swiss Knife paper; submit to NeurIPS/ICLR.
+15
+
+Swiss Knife Analysis
+
+Pragya Lab
+
+8.4 The question reviewers will ask, with your answer
+Q. Why is tournament selection better than linear combination of token-level rewards?
+
+A. Three reasons:
+1.
+
+Theoretical:
+
+Linear combination uses absolute scores and is vulnerable to additive
+
+miscalibration. Tournament uses only pairwise dierences, which are invariant to
+
+Empirical:
+
+constant shifts in auditor output.
+2.
+
+Our refuse-always and Self-BLEU results (Weeks 23) show tourna-
+
+ment resists the degenerate-solution collapse that plagues argmax-reward decod-
+
+Practical:
+
+ing on the same blades.
+3.
+
+Single-active-blade switching matches real deployment scenarios.
+
+A
+
+safety-critical app does not want a 60%-safety-40%-helpfulness Pareto blend; it
+wants safety mode or helpfulness mode, with the ability to swap without redeployment.
+This answer must be defensible on day one of the rebuttal. Write it into the introduction
+now; the rest of the paper follows.
+
+16
+
+Swiss Knife Analysis
+
+Pragya Lab
+
+9
+
+Summary Table: What to Do Next Week
+
+#
+
+Action
+
+1
+
+Why
+
+Stop
+
+writing.
+
+Implement
+
+the
+
+Until the pipeline runs end-to-end on one blade, further design discussion is speculation.
+
+50-line knockout
+function
+
+from
+
+4.
+2
+
+Verify
+
+DPO
+
+If the match rule doesn't prefer the clearly-better candidate in a toy
+
+log-ratio
+
+com-
+
+test, nothing downstream works.
+
+putation
+
+on
+
+synthetic
+
+A/B
+
+pairs.
+3
+
+Commit to span-
+
+Token-level puts you in latency competition with GenARM/RSD which
+
+level (n = 510),
+
+you'll lose.
+
+not token-level.
+4
+
+Commit to Op-
+
+Without it, the abstract's alignment socket framing is a marketing
+
+tion B (specula-
+
+lie.
+
+tive verier integration).
+5
+
+Run
+
+the
+
+bake-o
+
+MOD
+as
+
+It's the paper's existence test. Failing it early saves 6 weeks.
+
+ex-
+
+periment #1.
+6
+
+Decide knockout
+
+If Swiss-system never beats knockout in your setup, the name Swiss
+
+vs. Swiss-system
+
+Knife is aesthetic, and the paper should say so.
+
+empirically,
+
+not
+
+rhetorically.
+7
+
+Kill
+
+the
+
+small-
+
+Use ≥7B draft or self-speculative 8B. Small-draft zone is crowded.
+
+draft setup (1B
+draft).
+8
+
+Write
+
+the
+
+3-
+
+If you can't write it, the paper isn't ready.
+
+reason answer to
+the
+
+reviewer
+
+Q
+
+from 8.4 before
+submission.
+
+The bottom line
+Swiss Knife is a real paper if and only if tournament selection provably beats linear
+combination on degeneracy metrics. Everything else  the blade metaphor, the
+speculative socket framing, the hot-swap pitch  is supporting scaolding. Build the
+bake-o rst, decide whether the paper exists, then design the rest.
+
+17
+
+
