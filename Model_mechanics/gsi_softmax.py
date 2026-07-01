@@ -275,10 +275,10 @@ class GSISoftmaxGenerator:
         t_start = time.perf_counter()
 
         # Tokenize first prompt context to establish loop start
-        qwen_encoded = self.verifier_tokenizer(
-            qwen_prefix_text, return_tensors="pt", padding=False, truncation=True
+        initial_qwen_encoded = self.verifier_tokenizer(
+            prompt, return_tensors="pt", padding=False, truncation=True
         )
-        qwen_prefix_ids = qwen_encoded["input_ids"].squeeze(0).to(self.verifier_device)
+        initial_qwen_prefix_ids = initial_qwen_encoded["input_ids"].squeeze(0).tolist()
 
         while len(generated_qwen_tokens) < max_tokens:
             stats.total_steps += 1
@@ -443,7 +443,7 @@ class GSISoftmaxGenerator:
         # ── Finalize ─────────────────────────────────────────────────────
         stats.total_time_s = time.perf_counter() - t_start
 
-        all_ids = qwen_encoded["input_ids"].squeeze(0).tolist()[:qwen_prefix_ids.shape[0]] + generated_qwen_tokens
+        all_ids = initial_qwen_prefix_ids + generated_qwen_tokens
         output_text = self.verifier_tokenizer.decode(all_ids, skip_special_tokens=True)
 
         if verbose:

@@ -1,0 +1,94 @@
+================================================================================
+                       SWISS KNIFE NEW SESSION CONTEXT
+================================================================================
+
+1. CORE GOAL & SYSTEM ARCHITECTURE
+----------------------------------
+We are building a Token-Level Speculative Tournament Decoding system (Swiss Knife)
+that integrates Guided Speculative Inference (GSI) for test-time alignment.
+
+* Models:
+  - Drafter: LLaMA 3.2 3B (fast, autoregressive generation of candidate drafts).
+  - Verifier: Qwen 2.5 7B (base model).
+  - DPO Blade: Qwen 2.5 7B with Harmlessness DPO LoRA adapter (divyajot5005/ndna).
+    The adapter path is in 'huggingface.txt' (subfolder SFT/qwen25_dpo_output/final_dpo_adapter).
+* Task: Harmlessness evaluation on Anthropic HH-RLHF (15 prompts).
+* Output: Matches and evaluations evaluated via Tribunal and plotted.
+
+2. RETOKENIZATION LOGIC (LLaMA TO Qwen)
+---------------------------------------
+LLaMA 3.2 3B and Qwen 2.5 7B use different tokenizers. Thus, we cannot directly
+feed LLaMA token IDs into Qwen.
+* Retokenization Loop:
+  1. LLaMA proposes a draft of length \gamma (e.g., 4). At each step, it produces
+     a top-K distribution (e.g., K = 8).
+  2. For each candidate path, we decode LLaMA's draft token IDs to string text.
+  3. We append this text to the current prefix text.
+  4. We tokenize the combined text using Qwen's tokenizer.
+  5. Suffix Extraction: We match the Qwen-tokenized candidate sequence against
+     the Qwen-tokenized prefix sequence to isolate the newly added suffix tokens
+     (which may have a variable length due to tokenization boundaries or EOS).
+  6. These Qwen suffix token ID tensors are passed to the tournament for scoring.
+
+3. TOURNAMENT MECHANICS & STOCHASTIC PERTURBATIONS
+--------------------------------------------------
+At each speculative position (out of \gamma), we run a single-elimination
+knockout tournament over the K candidates.
+* Match Score:
+  For candidates A and B, the match score is:
+    Match(A, B) = \alpha * (\log \pi_verifier(A) - \log \pi_verifier(B))
+                + (1 - \alpha) * (r_blade'(A) - r_blade'(B))
+  Candidate A wins if Match(A, B) > 0, else B wins.
+* DPO Blade Reward definition:
+  r_blade(A) = \beta_DPO * (\log \pi_blade(A) - \log \pi_ref(A))
+* Stochastic Auditor:
+  To justify the tournament structure, each match is judged by a fresh perturbed
+  "auditor" functional (which introduces intransitivity):
+  - MC Dropout (mc_dropout): Applies a fresh dropout mask on the final hidden layer
+    before lm_head.
+  - Random Projection (random_proj): Applies a fresh random projection matrix R
+    to the final hidden states (h_new = h + eps * h @ R).
+  - Attention Head Subsampling (head_subsample): Randomly zeroes out a subset
+    of attention heads in the final layers.
+  Before each individual match, we draw a fresh functional, evaluate the match,
+  and then clear it.
+
+4. GSI TILTED REWARD & AUTOREGRESSIVE FALLBACK
+----------------------------------------------
+* GSI Tilted Reward (Algorithm 1 / 2):
+  Once the tournament winner at position i is chosen, we evaluate its tilted
+  reward using the CLEAN (unperturbed) model representations:
+    \tilde{r}(w) = r_blade(w) + (1 / \beta_GSI) * (\log \pi_verifier(w) - \log \pi_draft(w))
+* Acceptance Rule:
+  - If \tilde{r} >= u (threshold, default 0.0), the winner is ACCEPTED. We update
+    the prefix and proceed to step i+1.
+  - If \tilde{r} < u, the candidate is REJECTED. Speculative decoding terminates
+    for the current draft phase, and we run the Fallback Logic.
+* Fallback Logic:
+  - Fallback does NOT involve GSI or LLaMA at all.
+  - We generate exactly 1 token greedily from Qwen 7B + DPO blade (argmax of
+    the logits).
+  - Append the fallback token, discard the remaining draft lookahead, and restart
+    drafting.
+
+5. THE SLOWDOWN BOTTLENECK & OPTIMIZATION STRATEGY
+--------------------------------------------------
+* The Bottleneck:
+  A knockout tournament of K = 8 has 7 matches. Scoring each match sequentially
+  by running the 7B LLM forward pass under different hook/functional states
+  takes up to 14 forward passes per draft position. With a long prefix (>1,000 tokens),
+  this runs at ~9 seconds per token.
+
+
+6. IMPORTANT THEORETICAL INSIGHTS
+---------------------------------
+* Swiss Knife Analysis (Why tournament over argmax?):
+  DPO reward models are often miscalibrated on absolute scale. Argmax-based decoders
+  are vulnerable to reward calibration drift. Pairwise tournament scoring uses
+  only differences (\Delta r = r(A) - r(B)), which are invariant under additive
+  constant shifts. This makes the tournament robust to reward miscalibration.
+* GSI Paper (Distributional Guarantees):
+  GSI approximates the optimal tilted distribution (KL-regularized reward policy)
+  using a draft model and a verifier. The tilted reward ensures the distribution of
+  accepted tokens converges to the target tilted distribution.
+================================================================================

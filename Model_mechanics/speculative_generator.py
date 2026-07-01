@@ -360,6 +360,11 @@ class SwissKnifeSpeculativeGenerator:
             else:
                 blade_scores = None
                 self.auditor.forward_passes = 0
+                # ── Precompute blade hidden states once per outer iteration ───
+                # For mc_dropout / random_proj: caches h_all [seq_len, D] so
+                # that every match in the bracket is a pure in-memory tensor op
+                # (ZERO extra model forward passes).  No-op for head_subsample.
+                self.auditor.precompute_hidden_states(context_ids, candidate_matrix)
 
             # ── Steps 6-12: per-position tournament + acceptance ─────────
             accepted_prefix: List[int] = []
@@ -460,6 +465,8 @@ class SwissKnifeSpeculativeGenerator:
 
             if self.cfg.use_stochastic_auditor:
                 stats.blade_forward_passes += self.auditor.forward_passes
+                # Release cached hidden states after all positions are processed.
+                self.auditor.clear_precomputed()
 
             # ── Commit accepted tokens ───────────────────────────────────
             # Filter to budget

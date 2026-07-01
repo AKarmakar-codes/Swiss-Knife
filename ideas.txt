@@ -1,0 +1,80 @@
+Ideas
+The problem with deterministic tournament scoring
+In the original Swiss Knife proposal, the alignment head (the "blade") produces a
+deterministic scalar reward for each candidate token — call it
+. The
+tournament was designed so that every candidate plays every round and the
+winner emerges through pairwise comparisons rather than a single argmax.
+The problem: if every match uses the same fixed scores, the pairwise
+comparisons add no information. A candidate that has the highest score beats
+every opponent it faces, in every round, regardless of the bracket structure. The
+tournament collapses to argmax selection. The elaborate Swiss pairing logic
+becomes irrelevant.
+Original architecture diagram:
+
+For the tournament to do something the argmax cannot, the scoring function
+must behave differently across matches. Two properties are needed:
+●​ Stochasticity — the score of a candidate is a random variable, not a fixed
+scalar. A lower-quality candidate can occasionally win a match.
+●​ Intransitivity — because each match draws an independent random
+functional, the win relation is not transitive. Candidate A can beat B, B can
+
+beat C, and C can beat A. This is only meaningful in a pairwise tournament
+where the bracket structure matters.
+Both properties vanish the moment the same score vector is used for every
+match.
+
+The fix:
+Instead of scoring candidates with a single fixed forward pass of the blade, we
+define a family of stochastic scalar functionals of the blade's internal state. Before
+each individual match in the tournament, a fresh member of this family is
+sampled and a new random perturbation is applied to the blade's computation.
+After the match, the perturbation is removed.
+
+1. MC Dropout
+Before the final linear projection, a fresh binary dropout mask is applied to the
+hidden state vector :
+Neurons zeroed by the mask contribute nothing to the logit distribution for this
+match. The specific neurons zeroed are resampled independently for every
+match.
+What this tests: whether a candidate's reward advantage is robust to noise in the
+final feature readout, or whether it is carried by a small set of co-firing hidden
+neurons that may not consistently dominate in every match.
+
+2. Random Projection
+A random matrix (normalized) is drawn per match and used to perturb the
+hidden state before projection:
+
+This rotates and scales the representation in a fresh random direction for every
+match, keeping the magnitude controlled via .
+What this tests: whether the reward signal is stable under local linear
+perturbations of the representation geometry.
+
+3. Attention Head Subsampling
+In each match, a random subset of attention heads in the final transformer
+layers are silenced (their outputs are zeroed). The specific subset is redrawn per
+match.
+Different attention heads specialise in different kinds of context (e.g., syntactic
+coherence, coreference, safety-relevant patterns).
+By randomly varying which heads contribute to the reward signal, each match is
+effectively judged by a different committee of "attentional criteria." A candidate
+that is preferred regardless of which subset of heads is active has a more broadly
+grounded alignment signal.
+
+How these integrate into the Swiss Knife proposal
+The Swiss-system tournament runs
+rounds. In each round,
+candidates are paired by their current cumulative win count (Swiss pairing rule).
+For each pair
+, the auditor:
+1.​ Draws a fresh functional from the chosen family.
+2.​ Scores all
+candidates under that perturbed forward pass.
+3.​ Determines the winner of the match using
+.
+Because the functional is redrawn independently for every match, the score
+for candidate is a different random variable in each match. This directly
+produces the intransitivity and stochasticity needed to justify the tournament
+structure.
+
+

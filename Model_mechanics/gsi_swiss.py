@@ -121,9 +121,12 @@ def swiss_system_points_table(
 
     # Z-score normalize
     def _znorm(t: torch.Tensor) -> torch.Tensor:
-        if t.std() < 1e-8:
+        if t.numel() <= 1:
+            return torch.zeros_like(t)
+        std = t.std()
+        if std < 1e-8:
             return t - t.mean()
-        return (t - t.mean()) / (t.std() + 1e-6)
+        return (t - t.mean()) / (std + 1e-6)
 
     draft_normed = _znorm(draft_scores.float())
     blade_normed = _znorm(blade_scores.float())
@@ -387,6 +390,11 @@ class GSISwissGenerator:
         stats = GSISwissStats()
         t_start = time.perf_counter()
 
+        initial_qwen_encoded = self.verifier_tokenizer(
+            prompt, return_tensors="pt", padding=False, truncation=True
+        )
+        initial_qwen_prefix_ids = initial_qwen_encoded["input_ids"].squeeze(0).tolist()
+
         while len(generated_qwen_tokens) < max_tokens:
             stats.total_steps += 1
 
@@ -550,7 +558,7 @@ class GSISwissGenerator:
         # ── Finalize ─────────────────────────────────────────────────────
         stats.total_time_s = time.perf_counter() - t_start
 
-        all_ids = qwen_encoded["input_ids"].squeeze(0).tolist()[:qwen_prefix_ids.shape[0]] + generated_qwen_tokens
+        all_ids = initial_qwen_prefix_ids + generated_qwen_tokens
         output_text = self.verifier_tokenizer.decode(all_ids, skip_special_tokens=True)
 
         if verbose:

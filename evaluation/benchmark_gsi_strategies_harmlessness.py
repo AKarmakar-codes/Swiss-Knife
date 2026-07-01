@@ -19,15 +19,13 @@ Harmlessness-focused GSI benchmark that:
       whatever downstream judge metric (GEval, AQI, etc.) you add later.
 
 Strategies tested:
-    1. baseline_base_model  — Greedy Qwen 2.5 7B without any adapter
-    2. baseline_adapter     — Greedy Qwen 2.5 7B with harmlessness adapter
-    3. gsi_softmax          — Standard GSI: softmax(β·r̃) selection
-    4. gsi_pairwise         — Bradley-Terry: P(A wins) = σ(MATCH(A,B)/τ)
-    5. gsi_swiss            — Swiss-system → points table → softmax
+    1. gsi_softmax          — Standard GSI: softmax(β·r̃) selection
+    2. gsi_pairwise         — Bradley-Terry: P(A wins) = σ(MATCH(A,B)/τ)
+    3. gsi_swiss            — Swiss-system → points table → softmax
 
 Run:
     python evaluation/benchmark_gsi_strategies_harmlessness.py \
-        --strategies baseline_base_model baseline_adapter gsi_softmax gsi_pairwise gsi_swiss \
+        --strategies gsi_softmax gsi_pairwise gsi_swiss \
         --num-prompts 100 \
         --gsi-n 8 \
         --beta 0.1 \
@@ -58,44 +56,6 @@ from Model_mechanics.gsi_softmax import GSISoftmaxGenerator
 from Model_mechanics.gsi_pairwise import GSIPairwiseGenerator
 from Model_mechanics.gsi_swiss import GSISwissGenerator
 
-
-class BaselineGreedyGenerator:
-    """Standard greedy generation from a given model."""
-    def __init__(self, tokenizer, target_model, strategy_name="baseline"):
-        self.tokenizer = tokenizer
-        self.target_model = target_model
-        self.strategy_name = strategy_name
-
-    def generate(self, prompt: str, max_new_tokens: int, verbose: bool = False, return_stats: bool = False):
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.target_model.device)
-        input_len = inputs["input_ids"].shape[1]
-        
-        with torch.no_grad():
-            outputs = self.target_model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=False,
-                pad_token_id=self.tokenizer.pad_token_id or self.tokenizer.eos_token_id,
-                eos_token_id=self.tokenizer.eos_token_id,
-            )
-            
-        # Slice the token tensor to extract only new tokens before decoding
-        new_tokens = outputs[0][input_len:]
-        generated_text = self.tokenizer.decode(new_tokens, skip_special_tokens=True)
-        
-        class MockStats:
-            def __init__(self, name, length):
-                self.name = name
-                self.length = length
-            def to_dict(self):
-                return {"strategy": self.name, "total_tokens": self.length}
-        
-        # Construct full string to preserve downstream script contract
-        full_output_string = prompt + generated_text
-        
-        if return_stats:
-            return full_output_string, MockStats(self.strategy_name, outputs.shape[1])
-        return full_output_string
 
 
 logging.basicConfig(
@@ -257,7 +217,7 @@ def parse_args():
     p = argparse.ArgumentParser(
         description="Benchmark GSI strategies head-to-head",
     )
-    p.add_argument("--num-prompts", type=int, default=100)
+    p.add_argument("--num-prompts", type=int, default=15)
     p.add_argument("--max-tokens", type=int, default=200)
     p.add_argument("--blade", type=str, default="harmlessness",
                     choices=["helpfulness", "harmlessness", "truthfulness"])
@@ -277,8 +237,8 @@ def parse_args():
                     help="If a strategy's *_results.json already exists, skip regenerating.")
     p.add_argument(
         "--strategies", type=str, nargs="+",
-        default=["baseline_base_model", "baseline_adapter", "gsi_softmax", "gsi_pairwise", "gsi_swiss"],
-        choices=["baseline_base_model", "baseline_adapter", "gsi_softmax", "gsi_pairwise", "gsi_swiss"],
+        default=["gsi_softmax", "gsi_pairwise", "gsi_swiss"],
+        choices=["gsi_softmax", "gsi_pairwise", "gsi_swiss"],
         help="Which strategies to benchmark.",
     )
     return p.parse_args()
@@ -378,8 +338,6 @@ def main():
 
     # ── Run each strategy ─────────────────────────────────────────────
     strategy_generators = {
-        "baseline_base_model": lambda cfg: BaselineGreedyGenerator(tokenizer, base_model, "baseline_base_model"),
-        "baseline_adapter": lambda cfg: BaselineGreedyGenerator(tokenizer, blade_model, "baseline_adapter"),
         "gsi_softmax": lambda cfg: GSISoftmaxGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
         "gsi_pairwise": lambda cfg: GSIPairwiseGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
         "gsi_swiss": lambda cfg: GSISwissGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
@@ -409,17 +367,13 @@ def main():
                 logger.warning("[%s] Existing file unreadable (%s) — regenerating.", strat_name, e)
 
         # Build strategy-specific config
-        actual_gen_mode = strat_name
-        if strat_name.startswith("baseline_"):
-            actual_gen_mode = "option_b"  # to pass config validation
-            
         cfg = SwissKnifeConfig(
             alpha=args.alpha,
             beta=args.beta,
             max_new_tokens=args.max_tokens,
             dtype=args.dtype,
             device=device,
-            generation_mode=actual_gen_mode,
+            generation_mode=strat_name,
             gsi_n=args.gsi_n,
             gsi_threshold=args.gsi_threshold,
             gsi_max_step_tokens=args.gsi_max_step_tokens,

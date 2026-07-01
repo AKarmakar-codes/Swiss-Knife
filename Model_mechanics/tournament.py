@@ -116,9 +116,27 @@ def stochastic_knockout_bracket(
 
     Draws a new stochastic functional of the blade's internal state independently
     for each match.
+
+    Optimisation
+    ------------
+    mc_dropout / random_proj:
+        The CALLER (speculative_generator.py) must call
+        auditor.precompute_hidden_states(context_ids, candidate_matrix) ONCE
+        per outer iteration before iterating over positions.  Each match then
+        applies the perturbation in-memory — ZERO model forward passes.
+    head_subsample:
+        1 forward pass per match (hooks are applied per-match as before).
     """
     K = draft_scores.shape[0]
+
     active: List[int] = list(range(K))
+
+    if normalize:
+        def _znorm(t: torch.Tensor) -> torch.Tensor:
+            return (t - t.mean()) / (t.std() + 1e-6)
+        ts_i_norm = _znorm(draft_scores)
+    else:
+        ts_i_norm = draft_scores
 
     round_num = 0
     while len(active) > 1:
@@ -128,25 +146,20 @@ def stochastic_knockout_bracket(
         for i in range(0, len(active) - 1, 2):
             a, b = active[i], active[i + 1]
 
-            # Draw a fresh functional per match
+            # Draw a fresh functional per match (registers hooks for head_subsample;
+            # randomness is injected inside score_candidates_for_match for mc_dropout/random_proj).
             auditor.draw_fresh_functional()
             stochastic_rewards = auditor.score_candidates_for_match(
                 context_ids, candidate_matrix, ref_logprobs
             )
             auditor.clear_functional()
 
-            # Extract the scores for the current position
+            # Extract and optionally normalise blade scores for this position.
             bs_i = stochastic_rewards[position_idx]
-
-            # Z-score normalize if requested
-            ts_i = draft_scores
             if normalize:
-                def _znorm(t: torch.Tensor) -> torch.Tensor:
-                    return (t - t.mean()) / (t.std() + 1e-6)
-                ts_i = _znorm(ts_i)
                 bs_i = _znorm(bs_i)
 
-            delta_draft = ts_i[a] - ts_i[b]
+            delta_draft = ts_i_norm[a] - ts_i_norm[b]
             delta_blade = bs_i[a] - bs_i[b]
             score = alpha * delta_draft + (1.0 - alpha) * delta_blade
 

@@ -45,12 +45,15 @@ def convert(input_dir: str, output_dir: str):
     """Convert per-strategy JSON files → one .jsonl per strategy for tribunal."""
     os.makedirs(output_dir, exist_ok=True)
 
-    for strategy_name, filename in STRATEGY_FILES.items():
-        src = os.path.join(input_dir, filename)
-        if not os.path.exists(src):
-            logger.warning("Missing: %s — skipping", src)
-            continue
+    import glob
+    json_paths = glob.glob(os.path.join(input_dir, "*_results.json"))
+    if not json_paths:
+        logger.warning("No *_results.json files found in %s", input_dir)
+        return
 
+    for src in json_paths:
+        filename = os.path.basename(src)
+        strategy_name = filename.replace("_results.json", "")
         with open(src, "r", encoding="utf-8") as f:
             data = json.load(f)
 
@@ -120,6 +123,9 @@ def plot(results_dir: str, plot_dir: str):
         "stochastic_knockout_dropout":  "Stochastic\nDropout",
         "stochastic_knockout_proj":     "Stochastic\nProj",
         "stochastic_knockout_subsample":"Stochastic\nSubsample",
+        "gsi_softmax":                  "GSI Softmax",
+        "gsi_pairwise":                 "GSI Pairwise",
+        "gsi_swiss":                    "GSI Swiss",
     }
 
     # ── Drop any extra models that were in tribunal's sample inputs ────────────
@@ -133,7 +139,7 @@ def plot(results_dir: str, plot_dir: str):
 
     summary["label"] = summary["strategy"].map(LABELS).fillna(summary["strategy"])
 
-    COLORS = ["#4C72B0", "#DD8452", "#55A868", "#C44E52"]
+    COLORS = ["#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B3", "#937860", "#DA8BC3"]
     palette = {s: COLORS[i] for i, s in enumerate(KNOWN_STRATEGIES)}
 
 

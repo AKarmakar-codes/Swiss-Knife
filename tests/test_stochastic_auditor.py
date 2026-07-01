@@ -59,18 +59,20 @@ class ToyCausalLM(nn.Module):
         self.config = MagicMock()
         self.config.num_attention_heads = 4
 
-    def forward(self, input_ids, attention_mask=None, **kwargs):
+    def forward(self, input_ids, attention_mask=None, output_hidden_states=False, **kwargs):
         # We simulate the embeddings by generating a random float tensor
         B, T = input_ids.shape
         x = torch.randn(B, T, self.lm_head.in_features, device=input_ids.device)
         x = self.model(x)
         logits = self.lm_head(x)
-        
-        # HuggingFace style output
+
+        # HuggingFace style output — supports output_hidden_states=True
         class Output:
-            def __init__(self, logits):
+            def __init__(self, logits, hidden_states=None):
                 self.logits = logits
-        return Output(logits)
+                self.hidden_states = hidden_states
+        hs = (x,) if output_hidden_states else None
+        return Output(logits, hs)
 
 
 class TestStochasticAuditor(unittest.TestCase):
