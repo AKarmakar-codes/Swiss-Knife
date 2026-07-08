@@ -87,10 +87,12 @@ _PRETTY_LABELS = {
     "stochastic_knockout_dropout":  "Stochastic\nDropout",
     "stochastic_knockout_proj":     "Stochastic\nProj",
     "stochastic_knockout_subsample":"Stochastic\nSubsample",
-    "gsi_softmax":                  "GSI Softmax",
+    "gsi_softmax":                  "GSI SBoN",
     "gsi_pairwise":                 "GSI Pairwise",
-    "gsi_swiss":                    "GSI Swiss",
+    "gsi_swiss":                    "Swiss",
+    "gsi_elo":                      "Swiss+Elo",
     "gsi_gumbel":                   "GSI Gumbel",
+   
 }
 
 _COLORS = [

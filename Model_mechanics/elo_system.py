@@ -3,14 +3,15 @@ Swiss Knife — Elo Rating System Tournament
 ===========================================
 
 Implements the Elo rating tournament strategy:
-  • Fixed to exactly 3 rounds.
-  • Decaying K-factors: Round 1: K-factor = 40, Round 2: K-factor = 20, Round 3: K-factor = 10.
+  • Configurable rounds (default 6) with decaying K-factors.
   • The candidate pool size stays constant across all rounds (no elimination).
   • Matches are decided using the blended match function:
       match(A, B) = α · (target_A − target_B) + (1−α) · (blade_A − blade_B)
   • Expected score calculation uses a numerically stable sigmoid to prevent overflow.
-  • Selection of the champion uses stable temperature-scaled relative strengths:
-      P(i) = 10^(R_i / (400 * T)) / sum(10^(R_j / (400 * T)))
+  • Champion selection uses zero-centered ratings scaled by beta:
+      logits_i = (R_i − 1500) · β
+    This matches gsi_swiss scale of softmax(β · points), making the two strategies
+    directly comparable under the same β.
 """
 
 import logging
@@ -38,48 +39,44 @@ def elo_bracket(
     alpha: float,
     normalize: bool = True,
     temperature: float = 1.0,
-    rounds: int = 3,
+    rounds: int = 6,
+    beta: float = 1.0,
 ) -> int:
     """Run an Elo rating system tournament over candidates to select a champion.
 
-    This implements a 3-round Elo-based tournament to rank N candidates and select
-    the overall winner:
+    Tournament mechanics (Swiss-system pairing + continuous Elo ratings):
       1. Initializes Elo ratings for all candidates to 1500.0.
-      2. In each of the 3 rounds:
-         - Candidates are sorted by current rating (and target_scores as tie-breaker).
-         - They are paired using a greedy Swiss-system-like algorithm: pairing adjacent
-           ranked candidates, avoiding rematches from previous rounds when possible.
-         - The outcome of each matchup (A vs B) is decided by a blended score function:
+      2. In each round:
+         - Candidates are sorted by current rating (continuous, unlike discrete Swiss points).
+         - Paired greedily in rating order, avoiding rematches when possible.
+         - Match outcome decided by blended score:
              score = alpha * (target_A - target_B) + (1 - alpha) * (blade_A - blade_B)
-           where target scores (fluency/base log-probability) and blade scores
-           (implicit DPO reward) are optionally z-score normalized first.
-         - Actual matchup outcome is:
-             s_a = 1.0, s_b = 0.0 (if score > 1e-6)
-             s_a = 0.0, s_b = 1.0 (if score < -1e-6)
-             s_a = 0.5, s_b = 0.5 (otherwise, a draw)
-         - Expected matchup outcome is computed using a numerically stable sigmoid:
-             e_a = 1 / (1 + 10^((R_b - R_a)/400)) = stable_sigmoid( (R_a - R_b) * ln(10)/400 )
-             e_b = 1.0 - e_a
-         - Ratings are updated using decaying K-factors (Round 1: 40, Round 2: 20, Round 3: 10):
-             R_a_new = R_a + K * (s_a - e_a)
-             R_b_new = R_b + K * (s_b - e_b)
-      3. At the end of the tournament, the champion is chosen:
-         - If temperature < 1e-5: greedily select candidate with the highest rating.
-         - Otherwise: sample probabilistically from the Boltzmann distribution:
-             P(i) = exp( R_i * ln(10) / (400 * temperature) ) / sum_j( exp( R_j * ln(10) / (400 * temperature) ) )
+         - Actual outcome: s_a=1/s_b=0 (win), s_a=0/s_b=1 (loss), 0.5/0.5 (draw).
+         - Expected outcome: e_a = stable_sigmoid((R_a - R_b) * ln10/400)
+         - Rating update: R_new = R + K * (actual - expected)
+      3. Champion selection (β-scaled, matches gsi_swiss scale):
+         - If temperature < 1e-5: greedy argmax of ratings.
+         - Otherwise: logits_i = (R_i − 1500) · β  →  softmax → multinomial.
+           Zero-centering means only tournament-earned deltas drive the probability,
+           making this directly comparable to gsi_swiss's softmax(β · points).
 
     Parameters
     ----------
     target_scores : torch.Tensor
-        Shape ``[N]``. The target model (fluency) scores for the N candidates.
+        Shape ``[N]``. Log-probability under the draft (or verifier) model.
     blade_scores : torch.Tensor
-        Shape ``[N]``. The alignment/blade rewards for the N candidates.
+        Shape ``[N]``. DPO blade rewards r_blade for each candidate.
     alpha : float
-        Mixing coefficient alpha in [0, 1] weighting target fluency vs blade reward.
+        Mixing coefficient α ∈ [0, 1].
     normalize : bool
-        If True, z-score normalize scores prior to tournament matching.
+        If True, z-score normalize scores prior to matching.
     temperature : float
-        Temperature parameter for relative strength selection of the champion.
+        If < 1e-5, use greedy selection; otherwise probabilistic.
+    rounds : int
+        Number of Elo rounds. Default 6 (K-factors: 40,32,24,16,12,10).
+    beta : float
+        Scales champion selection logits: logits = (ratings - 1500) * beta.
+        Should match the beta used elsewhere in the pipeline.
 
     Returns
     -------
@@ -194,16 +191,16 @@ def elo_bracket(
             "Elo champion (Greedy, T=0): c%d (rating=%.1f)", champion, ratings[champion]
         )
     else:
-        # Probabilistic selection based on Elo strengths
+        # Zero-center ratings then scale by beta.
+        # logits_i = (R_i - 1500) * beta  →  same scale as gsi_swiss softmax(beta * points).
         ratings_tensor = torch.tensor(ratings, dtype=torch.float, device=target_scores.device)
-        ln10 = math.log(10.0)
-        logits = (ratings_tensor * ln10) / (400.0 * temperature)
-        logits = logits - torch.max(logits)  # Prevent overflow
+        logits = (ratings_tensor - 1500.0) * beta
+        logits = logits - torch.max(logits)  # numerical stability
         probs = torch.softmax(logits, dim=0)
         champion = int(torch.multinomial(probs, num_samples=1).item())
         logger.debug(
-            "Elo champion (Probabilistic, T=%.2f): c%d (rating=%.1f, prob=%.3f)",
-            temperature, champion, ratings[champion], probs[champion].item()
+            "Elo champion (Probabilistic, β=%.2f): c%d (rating=%.1f, prob=%.3f)",
+            beta, champion, ratings[champion], probs[champion].item()
         )
 
     return champion
@@ -219,7 +216,8 @@ def stochastic_elo_bracket(
     alpha: float,
     normalize: bool = True,
     temperature: float = 1.0,
-    rounds: int = 3,
+    rounds: int = 6,
+    beta: float = 1.0,
 ) -> int:
     """Run an Elo tournament over candidates using a stochastic auditor.
 
@@ -319,8 +317,7 @@ def stochastic_elo_bracket(
         )
     else:
         ratings_tensor = torch.tensor(ratings, dtype=torch.float, device=target_scores.device)
-        ln10 = math.log(10.0)
-        logits = (ratings_tensor * ln10) / (400.0 * temperature)
+        logits = (ratings_tensor - 1500.0) * beta
         logits = logits - torch.max(logits)
         probs = torch.softmax(logits, dim=0)
         champion = int(torch.multinomial(probs, num_samples=1).item())

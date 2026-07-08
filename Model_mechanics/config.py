@@ -90,10 +90,10 @@ class SwissKnifeConfig:
     'swiss'     — Swiss-system schedule (swiss_rounds rounds, K/2·R matches).
     'elo'       — Elo rating system tournament (fixed to 3 rounds with decaying K-factors: 40, 20, 10)."""
 
-    swiss_rounds: int = 3
+    swiss_rounds: int = 6
     """Number of rounds in the Swiss-system tournament (used only when
-    tournament_mode='swiss'). Typical value: ceil(log2(K)).
-    With K=8, ceil(log2(8))=3 rounds, giving 12 total matches."""
+    tournament_mode='swiss'). Set to 6 to match gsi_elo's 6-round budget
+    for a fair head-to-head comparison. With K=8, 6 rounds gives 24 total matches."""
 
     elo_temperature: float = 1.0
     """Temperature parameter for relative strength selection in Elo mode. Higher values increase diversity."""

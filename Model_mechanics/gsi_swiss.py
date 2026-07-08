@@ -507,11 +507,17 @@ class GSISwissGenerator:
                 resample_blade = self.blade.score_reasoning_steps(
                     prefix_ids_verifier.unsqueeze(0), resample_ids_list_clean,
                 )
-                resample_draft = self.blade.compute_step_draft_logprobs(
-                    prefix_ids_verifier.unsqueeze(0), resample_ids_list_clean,
+                # Fallback steps are sampled from the verifier — use log π_verifier
+                # as the fluency signal (first arg to swiss_system_points_table).
+                resample_verifier_lps = [
+                    compute_logprob(self.verifier_model, prefix_ids_verifier, step_ids)
+                    for step_ids in resample_ids_list_clean
+                ]
+                resample_verifier_logprobs = torch.tensor(
+                    resample_verifier_lps, dtype=torch.float, device=self.verifier_device
                 )
                 resample_points, n_r2, n_m2 = swiss_system_points_table(
-                    resample_draft, resample_blade, alpha,
+                    resample_verifier_logprobs, resample_blade, alpha,
                     rounds=swiss_rounds if swiss_rounds > 0 else 0,
                 )
                 stats.total_swiss_rounds += n_r2
