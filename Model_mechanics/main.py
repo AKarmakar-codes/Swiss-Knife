@@ -51,7 +51,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--generation-mode", type=str, default="option_a",
-        choices=["option_a", "option_b", "gsi_softmax", "gsi_pairwise", "gsi_swiss"],
+        choices=["option_a", "option_b", "gsi_softmax", "gsi_pairwise", "gsi_swiss", "gsi_elo", "gsi_gumbel", "rrm_pool"],
         help="Generation strategy (default: option_a).",
     )
     p.add_argument(
@@ -107,6 +107,14 @@ def parse_args() -> argparse.Namespace:
         help="Optional JSONL path. When set, each tournament round appends "
              "one line with raw + post-normalisation score vectors and the "
              "winner index. Used for plotting.",
+    )
+    p.add_argument(
+        "--elo-temperature", type=float, default=1.0,
+        help="Temperature parameter for Elo relative strength selection (default: 1.0).",
+    )
+    p.add_argument(
+        "--elo-rounds", type=int, default=3,
+        help="Number of rounds in the Elo rating system tournament (default: 3).",
     )
 
     # ── GSI-specific arguments ──────────────────────────────────────────
@@ -173,6 +181,8 @@ def main():
         gsi_max_step_tokens=args.gsi_max_step_tokens,
         gsi_tau=args.gsi_tau,
         swiss_rounds=args.swiss_rounds,
+        elo_temperature=args.elo_temperature,
+        elo_rounds=args.elo_rounds,
     )
 
     # ── Reproducibility ────────────────────────────────────────────────
@@ -187,6 +197,8 @@ def main():
         "gsi_softmax": "GSI Strategy 1: Softmax Selection",
         "gsi_pairwise": "GSI Strategy 2: Pairwise Bradley-Terry",
         "gsi_swiss": "GSI Strategy 3: Swiss-System → Points → Softmax",
+        "gsi_elo": "GSI Strategy 4: Elo Tournament Selection",
+        "gsi_gumbel": "GSI Strategy 5: Speculative Gumbel-Top-k with Fallback",
     }
     print("=" * 72)
     print("  Swiss Knife — Decode-Time Alignment")
@@ -204,9 +216,16 @@ def main():
             print(f"  τ (B-T)    : {cfg.gsi_tau}")
         if cfg.generation_mode == "gsi_swiss":
             print(f"  swiss rnds : {cfg.swiss_rounds or 'auto'}")
+        if cfg.generation_mode == "gsi_elo":
+            print(f"  elo temp   : {cfg.elo_temperature}")
+            print(f"  elo rounds : {cfg.elo_rounds}")
     else:
         print(f"  K (cands)  : {cfg.K}")
         print(f"  L (span)   : {cfg.L}")
+        print(f"  Tourney    : {cfg.tournament_mode}")
+        if cfg.tournament_mode == "elo":
+            print(f"  Elo temp   : {cfg.elo_temperature}")
+            print(f"  Elo rounds : {cfg.elo_rounds}")
     print(f"  Max tokens : {cfg.max_new_tokens}")
     print(f"  Dtype      : {cfg.dtype}")
     print(f"  Device     : {'CUDA' if torch.cuda.is_available() else 'CPU'}")
@@ -218,7 +237,35 @@ def main():
     # ── Load models ────────────────────────────────────────────────────
     print("⏳ Loading models...")
     t0 = time.time()
-    tokenizer, base_model, blade_model = load_all(cfg, args.blade)
+    if cfg.generation_mode in ["gsi_softmax", "gsi_pairwise", "gsi_swiss", "gsi_elo", "gsi_gumbel", "rrm_pool"]:
+        from .models import (
+            load_drafter_model,
+            load_drafter_tokenizer,
+            load_verifier_model,
+            load_verifier_tokenizer,
+            load_blade_model,
+            load_rrm_model,
+            load_rrm_tokenizer,
+        )
+        drafter_model = load_drafter_model(cfg)
+        drafter_tokenizer = load_drafter_tokenizer(cfg)
+        verifier_model = load_verifier_model(cfg)
+        verifier_tokenizer = load_verifier_tokenizer(cfg)
+        blade_model = load_blade_model(cfg, args.blade)
+        if cfg.generation_mode == "rrm_pool":
+            rrm_model = load_rrm_model(cfg)
+            rrm_tokenizer = load_rrm_tokenizer(cfg)
+        else:
+            rrm_model = None
+            rrm_tokenizer = None
+        tokenizer = verifier_tokenizer
+        base_model = verifier_model
+    else:
+        tokenizer, base_model, blade_model = load_all(cfg, args.blade)
+        drafter_model = None
+        drafter_tokenizer = None
+        rrm_model = None
+        rrm_tokenizer = None
     t_load = time.time() - t0
     print(f"✓ Models loaded in {t_load:.1f}s\n")
 
@@ -245,7 +292,14 @@ def main():
 
     elif cfg.generation_mode == "gsi_softmax":
         from .gsi_softmax import GSISoftmaxGenerator
-        generator = GSISoftmaxGenerator(cfg, tokenizer, base_model, blade_model)
+        generator = GSISoftmaxGenerator(
+            cfg=cfg,
+            drafter_model=drafter_model,
+            drafter_tokenizer=drafter_tokenizer,
+            verifier_model=verifier_model,
+            verifier_tokenizer=verifier_tokenizer,
+            blade_model=blade_model,
+        )
         print("⏳ Generating with GSI Strategy 1 (Softmax)...\n")
         t0 = time.time()
         output, stats = generator.generate(
@@ -256,7 +310,14 @@ def main():
 
     elif cfg.generation_mode == "gsi_pairwise":
         from .gsi_pairwise import GSIPairwiseGenerator
-        generator = GSIPairwiseGenerator(cfg, tokenizer, base_model, blade_model)
+        generator = GSIPairwiseGenerator(
+            cfg=cfg,
+            drafter_model=drafter_model,
+            drafter_tokenizer=drafter_tokenizer,
+            verifier_model=verifier_model,
+            verifier_tokenizer=verifier_tokenizer,
+            blade_model=blade_model,
+        )
         print("⏳ Generating with GSI Strategy 2 (Pairwise Bradley-Terry)...\n")
         t0 = time.time()
         output, stats = generator.generate(
@@ -267,7 +328,14 @@ def main():
 
     elif cfg.generation_mode == "gsi_swiss":
         from .gsi_swiss import GSISwissGenerator
-        generator = GSISwissGenerator(cfg, tokenizer, base_model, blade_model)
+        generator = GSISwissGenerator(
+            cfg=cfg,
+            drafter_model=drafter_model,
+            drafter_tokenizer=drafter_tokenizer,
+            verifier_model=verifier_model,
+            verifier_tokenizer=verifier_tokenizer,
+            blade_model=blade_model,
+        )
         print("⏳ Generating with GSI Strategy 3 (Swiss → Points → Softmax)...\n")
         t0 = time.time()
         output, stats = generator.generate(
@@ -275,6 +343,66 @@ def main():
         )
         t_gen = time.time() - t0
         stats_dict = stats.to_dict()
+
+    elif cfg.generation_mode == "gsi_elo":
+        from .gsi_elo import GSIEloGenerator
+        generator = GSIEloGenerator(
+            cfg=cfg,
+            drafter_model=drafter_model,
+            drafter_tokenizer=drafter_tokenizer,
+            verifier_model=verifier_model,
+            verifier_tokenizer=verifier_tokenizer,
+            blade_model=blade_model,
+        )
+        print("⏳ Generating with GSI Strategy 4 (Elo Tournament Selection)...\n")
+        t0 = time.time()
+        output, stats = generator.generate(
+            prompt=args.prompt, verbose=args.verbose, return_stats=True,
+        )
+        t_gen = time.time() - t0
+        stats_dict = stats.to_dict()
+
+    elif cfg.generation_mode == "gsi_gumbel":
+        from .gsi_gumbel import GSIGumbelGenerator
+        generator = GSIGumbelGenerator(
+            cfg=cfg,
+            drafter_model=drafter_model,
+            drafter_tokenizer=drafter_tokenizer,
+            verifier_model=verifier_model,
+            verifier_tokenizer=verifier_tokenizer,
+            blade_model=blade_model,
+        )
+        print("⏳ Generating with GSI Strategy 5 (Gumbel Speculative)...\n")
+        t0 = time.time()
+        output, stats = generator.generate(
+            prompt=args.prompt, verbose=args.verbose, return_stats=True,
+        )
+        t_gen = time.time() - t0
+        stats_dict = stats.to_dict()
+
+    elif cfg.generation_mode == "rrm_pool":
+        from .rrm_candidate_pool import RRMCandidatePoolGenerator
+        generator = RRMCandidatePoolGenerator(
+            cfg=cfg,
+            drafter_model=drafter_model,
+            drafter_tokenizer=drafter_tokenizer,
+            verifier_model=verifier_model,
+            verifier_tokenizer=verifier_tokenizer,
+            rrm_model=rrm_model,
+            rrm_tokenizer=rrm_tokenizer,
+            blade_model=blade_model,
+        )
+        print(f"⏳ Generating {cfg.rrm_n_candidates} candidates and ranking via RRM tournament...\n")
+        t0 = time.time()
+        output, candidates = generator.generate(
+            prompt=args.prompt, verbose=args.verbose, blade=args.blade
+        )
+        t_gen = time.time() - t0
+        stats_dict = {
+            "strategy": "rrm_pool",
+            "num_candidates": len(candidates),
+            "generation_time_s": round(t_gen, 3),
+        }
 
     else:
         print(f"ERROR: Unknown generation_mode '{cfg.generation_mode}'")

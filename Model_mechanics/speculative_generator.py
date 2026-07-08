@@ -46,6 +46,7 @@ from .config import SwissKnifeConfig
 from .blades import DPOBlade
 from .tournament import knockout_bracket, stochastic_knockout_bracket
 from .swiss_system import swiss_system_bracket, stochastic_swiss_bracket
+from .elo_system import elo_bracket, stochastic_elo_bracket
 
 logger = logging.getLogger(__name__)
 
@@ -175,11 +176,12 @@ class SwissKnifeSpeculativeGenerator:
             self.auditor = None
 
         # Select tournament function based on config
-        self._run_tournament = (
-            self._knockout_at_position
-            if cfg.tournament_mode == "knockout"
-            else self._swiss_at_position
-        )
+        if cfg.tournament_mode == "knockout":
+            self._run_tournament = self._knockout_at_position
+        elif cfg.tournament_mode == "swiss":
+            self._run_tournament = self._swiss_at_position
+        else:
+            self._run_tournament = self._elo_at_position
 
         logger.info(
             "SwissKnifeSpeculativeGenerator initialized: "
@@ -270,6 +272,21 @@ class SwissKnifeSpeculativeGenerator:
             blade_scores_i,
             self.cfg.alpha,
             rounds=self.cfg.swiss_rounds,
+        )
+
+    def _elo_at_position(
+        self,
+        target_scores_i: torch.Tensor,
+        blade_scores_i: torch.Tensor,
+    ) -> int:
+        """Run Elo tournament at a single position."""
+        return elo_bracket(
+            target_scores_i,
+            blade_scores_i,
+            self.cfg.alpha,
+            normalize=self.cfg.normalize_scores,
+            temperature=self.cfg.elo_temperature,
+            rounds=self.cfg.elo_rounds,
         )
 
     # ── Normalize scores for a single position ───────────────────────────
@@ -390,7 +407,7 @@ class SwissKnifeSpeculativeGenerator:
                             alpha=self.cfg.alpha,
                             normalize=self.cfg.normalize_scores,
                         )
-                    else:
+                    elif self.cfg.tournament_mode == "swiss":
                         wi = stochastic_swiss_bracket(
                             target_scores=ts_i,
                             auditor=self.auditor,
@@ -401,6 +418,19 @@ class SwissKnifeSpeculativeGenerator:
                             alpha=self.cfg.alpha,
                             rounds=self.cfg.swiss_rounds,
                             normalize=self.cfg.normalize_scores,
+                        )
+                    else:
+                        wi = stochastic_elo_bracket(
+                            target_scores=ts_i,
+                            auditor=self.auditor,
+                            context_ids=context_ids,
+                            candidate_matrix=candidate_matrix,
+                            ref_logprobs=target_logprobs,
+                            position_idx=i,
+                            alpha=self.cfg.alpha,
+                            normalize=self.cfg.normalize_scores,
+                            temperature=self.cfg.elo_temperature,
+                            rounds=self.cfg.elo_rounds,
                         )
                 else:
                     bs_i = blade_scores[i]     # [K]

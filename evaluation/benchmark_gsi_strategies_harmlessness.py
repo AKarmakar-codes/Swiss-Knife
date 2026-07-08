@@ -8,8 +8,8 @@ Harmlessness-focused GSI benchmark that:
       (https://huggingface.co/datasets/Anthropic/hh-rlhf/tree/main/harmless-base)
       instead of the helpful-* subsets.
     - Does NOT score with a reward model. This script's only job is to
-      generate + save raw outputs for all 5 strategies on the same 100
-      prompts, so a SEPARATE script can run GEval (and any other judge)
+      generate + save raw outputs for all strategies on the same prompts,
+      so a SEPARATE script can run GEval (and any other judge)
       on identical generations afterward.
     - Adds steering-verification instrumentation: per-step blade
       reward stats, draft-vs-blade override rate, and a refusal-marker
@@ -22,14 +22,16 @@ Strategies tested:
     1. gsi_softmax          — Standard GSI: softmax(β·r̃) selection
     2. gsi_pairwise         — Bradley-Terry: P(A wins) = σ(MATCH(A,B)/τ)
     3. gsi_swiss            — Swiss-system → points table → softmax
+    4. gsi_elo              — Elo-system tournament selection
+    5. gsi_gumbel           — Speculative Gumbel-Top-k with GSI fallback
 
 Run:
-    python evaluation/benchmark_gsi_strategies_harmlessness.py \
-        --strategies gsi_softmax gsi_pairwise gsi_swiss \
-        --num-prompts 100 \
-        --gsi-n 8 \
-        --beta 0.1 \
-        --max-tokens 200 \
+    python evaluation/benchmark_gsi_strategies_harmlessness.py \\
+        --strategies gsi_softmax gsi_pairwise gsi_swiss gsi_elo gsi_gumbel \\
+        --num-prompts 100 \\
+        --gsi-n 8 \\
+        --beta 0.1 \\
+        --max-tokens 200 \\
         --blade harmlessness
 """
 
@@ -50,11 +52,13 @@ from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from Model_mechanics.config import SwissKnifeConfig
-from Model_mechanics.models import load_tokenizer, load_base_model, load_blade_model
+from Model_mechanics.models import load_tokenizer, load_base_model, load_blade_model, load_drafter_model, load_drafter_tokenizer
 from Model_mechanics.blades import DPOBlade
 from Model_mechanics.gsi_softmax import GSISoftmaxGenerator
 from Model_mechanics.gsi_pairwise import GSIPairwiseGenerator
 from Model_mechanics.gsi_swiss import GSISwissGenerator
+from Model_mechanics.gsi_elo import GSIEloGenerator
+from Model_mechanics.gsi_gumbel import GSIGumbelGenerator
 
 
 
@@ -182,14 +186,18 @@ def run_single_strategy(
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-        if (idx + 1) % 10 == 0 or idx == 0:
-            rewards_so_far = [r["blade_reward"] for r in all_responses]
-            avg_reward = sum(rewards_so_far) / len(rewards_so_far)
-            refusals_so_far = sum(1 for r in all_responses if r["refusal_heuristic"])
-            logger.info(
-                "[%s] %d/%d | avg_blade_reward=%.5f | last_blade_reward=%.5f | refusals_so_far=%d",
-                strategy_name, idx + 1, len(test_prompts), avg_reward, blade_reward, refusals_so_far,
-            )
+        # Log progress after every prompt
+        rewards_so_far = [r["blade_reward"] for r in all_responses]
+        avg_reward = sum(rewards_so_far) / len(rewards_so_far)
+        refusals_so_far = sum(1 for r in all_responses if r["refusal_heuristic"])
+        
+        override_rates_so_far = [r["override_rate"] for r in all_responses if r["override_rate"] is not None]
+        avg_override = sum(override_rates_so_far) / len(override_rates_so_far) if override_rates_so_far else 0.0
+        
+        logger.info(
+            "[%s] %d/%d | avg_blade_reward=%.5f | last_blade_reward=%.5f | refusals_so_far=%d | avg_override=%.4f",
+            strategy_name, idx + 1, len(test_prompts), avg_reward, blade_reward, refusals_so_far, avg_override,
+        )
 
     elapsed = time.perf_counter() - t_start
 
@@ -224,23 +232,30 @@ def parse_args():
     p.add_argument("--gsi-n", type=int, default=8)
     p.add_argument("--alpha", type=float, default=0.5)
     p.add_argument("--beta", type=float, default=0.1)
-    p.add_argument("--gsi-threshold", type=float, default=0.0)
+    p.add_argument("--gsi-threshold", type=float, default=-5.0)
     p.add_argument("--gsi-tau", type=float, default=1.0)
     p.add_argument("--swiss-rounds", type=int, default=0)
+    p.add_argument("--elo-rounds", type=int, default=6)
+    p.add_argument("--elo-temperature", type=float, default=1.0)
     p.add_argument("--gsi-max-step-tokens", type=int, default=512)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--dtype", type=str, default="bfloat16",
                     choices=["float16", "bfloat16", "float32"])
-    p.add_argument("--output-dir", type=str, default="runs/gsi_harmlessness_benchmark")
+    p.add_argument("--output-dir", type=str, default="runs/gsi_harmlessness_benchmark/qwen3B")
     p.add_argument("--verbose", action="store_true")
     p.add_argument("--skip-existing", action="store_true",
                     help="If a strategy's *_results.json already exists, skip regenerating.")
     p.add_argument(
         "--strategies", type=str, nargs="+",
-        default=["gsi_softmax", "gsi_pairwise", "gsi_swiss"],
-        choices=["gsi_softmax", "gsi_pairwise", "gsi_swiss"],
+        default=["gsi_softmax", "gsi_pairwise", "gsi_swiss", "gsi_elo", "gsi_gumbel"],
+        choices=["gsi_softmax", "gsi_pairwise", "gsi_swiss", "gsi_elo", "gsi_gumbel"],
         help="Which strategies to benchmark.",
     )
+    # gsi_gumbel-specific args
+    p.add_argument("--gamma", type=int, default=4,
+                    help="Speculative lookahead depth (gsi_gumbel only, default: 4).")
+    p.add_argument("--K", type=int, default=8,
+                    help="Candidates per position (gsi_gumbel only, default: 8).")
     return p.parse_args()
 
 
@@ -291,6 +306,8 @@ def main():
         gsi_max_step_tokens=args.gsi_max_step_tokens,
         gsi_tau=args.gsi_tau,
         swiss_rounds=args.swiss_rounds,
+        elo_rounds=args.elo_rounds,
+        elo_temperature=args.elo_temperature,
         seed=args.seed,
     )
 
@@ -299,36 +316,10 @@ def main():
     base_model = load_base_model(base_cfg)
     blade_model = load_blade_model(base_cfg, args.blade)
 
-    # ── Load drafter model (LLaMA 3.2 3B Instruct) ────────────────────
-    logger.info("Loading LLaMA 3.2 3B Instruct drafter...")
-    _DTYPE_MAP = {
-        "float16":  torch.float16,
-        "bfloat16": torch.bfloat16,
-        "float32":  torch.float32,
-    }
-    dtype = _DTYPE_MAP.get(args.dtype) or torch.float32
-    if dtype == torch.float16 and not torch.cuda.is_available():
-        dtype = torch.float32
-    device_map = {"": 0} if torch.cuda.is_available() else "cpu"
-
-    drafter_tokenizer = AutoTokenizer.from_pretrained(
-        "meta-llama/Llama-3.2-3B-Instruct",
-        trust_remote_code=True,
-    )
-    if drafter_tokenizer.pad_token is None:
-        drafter_tokenizer.pad_token = drafter_tokenizer.eos_token
-        drafter_tokenizer.pad_token_id = drafter_tokenizer.eos_token_id
-    drafter_tokenizer.padding_side = "left"
-
-    drafter_model = AutoModelForCausalLM.from_pretrained(
-        "meta-llama/Llama-3.2-3B-Instruct",
-        torch_dtype=dtype,
-        device_map=device_map,
-        trust_remote_code=True,
-    )
-    drafter_model.eval()
-    for param in drafter_model.parameters():
-        param.requires_grad = False
+    # ── Load drafter model ────────────────────
+    logger.info("Loading drafter...")
+    drafter_tokenizer = load_drafter_tokenizer(base_cfg)
+    drafter_model = load_drafter_model(base_cfg)
 
     # Standalone DPOBlade used ONLY for the post-hoc steering diagnostic
     diagnostic_blade = DPOBlade(base_cfg, base_model, blade_model, tokenizer)
@@ -341,6 +332,8 @@ def main():
         "gsi_softmax": lambda cfg: GSISoftmaxGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
         "gsi_pairwise": lambda cfg: GSIPairwiseGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
         "gsi_swiss": lambda cfg: GSISwissGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
+        "gsi_elo": lambda cfg: GSIEloGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
+        "gsi_gumbel": lambda cfg: GSIGumbelGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
     }
 
     for strat_name in args.strategies:
@@ -367,6 +360,12 @@ def main():
                 logger.warning("[%s] Existing file unreadable (%s) — regenerating.", strat_name, e)
 
         # Build strategy-specific config
+        # gsi_gumbel is token-level speculative (uses gamma + K); other GSI
+        # strategies are step-level (use gsi_n + gsi_max_step_tokens).
+        gumbel_kwargs = {}
+        if strat_name == "gsi_gumbel":
+            gumbel_kwargs = {"gamma": args.gamma, "K": args.K}
+
         cfg = SwissKnifeConfig(
             alpha=args.alpha,
             beta=args.beta,
@@ -379,7 +378,10 @@ def main():
             gsi_max_step_tokens=args.gsi_max_step_tokens,
             gsi_tau=args.gsi_tau,
             swiss_rounds=args.swiss_rounds,
+            elo_rounds=args.elo_rounds,
+            elo_temperature=args.elo_temperature,
             seed=args.seed,
+            **gumbel_kwargs,
         )
 
         generator = strategy_generators[strat_name](cfg)
@@ -416,6 +418,8 @@ def main():
                     "gsi_tau": args.gsi_tau,
                     "gsi_threshold": args.gsi_threshold,
                     "swiss_rounds": args.swiss_rounds,
+                    "elo_rounds": args.elo_rounds,
+                    "elo_temperature": args.elo_temperature,
                     "max_tokens": args.max_tokens,
                 },
                 "avg_blade_reward": result["avg_blade_reward"],

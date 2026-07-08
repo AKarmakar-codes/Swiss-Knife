@@ -16,7 +16,9 @@ GSI Strategies (Step-Level Guided Speculative Inference with Blades):
     Strategy 1 (gsi_softmax):  softmax(β·r̃) over blade rewards.
     Strategy 2 (gsi_pairwise): Bradley-Terry pairwise P(A wins) = σ(MATCH/τ).
     Strategy 3 (gsi_swiss):    Swiss-system matches → points table → softmax.
-    See: Model_mechanics/gsi_softmax.py, gsi_pairwise.py, gsi_swiss.py
+    Strategy 4 (gsi_elo):      Elo-system tournament selection.
+    Strategy 5 (gsi_gumbel):   Speculative Gumbel-Top-k with GSI fallback.
+    See: Model_mechanics/gsi_softmax.py, gsi_pairwise.py, gsi_swiss.py, gsi_elo.py, gsi_gumbel.py
 
 Architecture:
     Base/Draft Model   : Qwen2.5 SFT-merged (frozen)

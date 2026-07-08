@@ -15,8 +15,8 @@ where MATCH(A, B) uses the Swiss Knife match function:
 and τ is a temperature parameter controlling selection sharpness.
 
 At each reasoning step:
-    1. Sample n candidate reasoning steps from the LLaMA drafter model.
-    2. Score each step with blade reward (Qwen) AND draft log-probability (LLaMA).
+    1. Sample n candidate reasoning steps from the Qwen 2.5 3B drafter model.
+    2. Score each step with blade reward (Qwen 7B) AND draft log-probability (Qwen 3B).
     3. Run all n(n-1)/2 pairwise comparisons using Bradley-Terry.
     4. Accumulate win probabilities into a score vector.
     5. Select winner proportional to cumulative win probability.

@@ -1,0 +1,3098 @@
+                                         Published as a conference paper at ICLR 2026
+
+
+
+
+                                         G UIDED S PECULATIVE I NFERENCE FOR E FFICIENT
+                                         T EST-T IME A LIGNMENT OF LLM S
+                                          Jonathan Geuter                                   Youssef Mroueh               David Alvarez-Melis
+                                          Harvard SEAS                                      IBM Research                 Harvard SEAS
+                                          Kempner Institute                                                              Kempner Institute
+                                          jonathan.geuter@gmx.de
+
+
+
+                                                                                           A BSTRACT
+
+
+
+
+arXiv:2506.04118v3 [cs.LG] 27 Apr 2026
+                                                      We propose Guided Speculative Inference (GSI), a novel algorithm for efficient
+                                                      reward-guided decoding in large language models. GSI combines soft best-of-
+                                                      n test-time scaling with a reward model r(x, y) and speculative samples from a
+                                                      small auxiliary model πS (y | x). We provably approximate both the optimal tilted
+                                                      policy πβ,B (y | x) ∝ πB (y | x) exp(β r(x, y)) of soft best-of-n under the base
+                                                      model πB , as well as the expected reward under the optimal policy. In experiments
+                                                      on reasoning benchmarks (MATH500, OlympiadBench, Minerva Math, MMLU-
+                                                      STEM, GSM8K) and across different model families, our method achieves higher
+                                                      accuracy than standard soft best-of-n with πS and reward-guided speculative de-
+                                                      coding (Liao et al., 2025), and in certain settings even outperforms soft best-of-n
+                                                      with πB , while reducing end-to-end latency by up to 28%.
+
+
+
+                                         1       I NTRODUCTION
+
+                                         Large language models (LLMs) have demonstrated remarkable performance across diverse gener-
+                                         ation tasks, with scaling model and data size being the predominant way to reliably enhance their
+                                         capabilities (Kaplan et al., 2020; Gemini Team, 2024; OpenAI et al., 2024). However, such scaling
+                                         incurs ever-increasing computational and economic costs, and there is growing evidence that scal-
+                                         ing training compute yields diminishing returns (Hernandez et al., 2022; Muennighoff et al., 2023),
+                                         prompting the need for efficient alternatives.
+                                         Test-time scaling (Snell et al., 2025; Muennighoff et al., 2025; Zhang et al., 2025) has emerged as
+                                         a promising direction, which focuses on scaling inference-time rather than training time compute.
+                                         Various test-time scaling methods, such as best-of-n sampling (Gao et al., 2023; Mroueh & Nitsure,
+                                         2025; Beirami et al., 2025) and soft best-of-n sampling (Verdun et al., 2025), have been proposed,
+                                         all of which achieve improved downstream performance through increasing inference FLOPs. How-
+                                         ever, users can have constraints on inference compute and latency, and test-time scaling can quickly
+                                         become prohibitively expensive. This has led to the development of latency-efficient test-time scal-
+                                         ing methods such as speculative decoding (Leviathan et al., 2023; Sun et al., 2025), where a small
+                                         draft model πS accelerates inference from a larger target model πB .1
+                                         Moreover, the goal is oftentimes not only to achieve better downstream performance, but to do so
+                                         in a way that maximizes the rewards of a given reward function r(x, y) quantifying the quality of
+                                         a response y given a prompt x. Several frameworks for aligning model outputs to a reward model
+                                         have been proposed, both for training as well as at test-time (Yang & Klein, 2021; Ouyang et al.,
+                                         2022; Touvron et al., 2023; Mudgal et al., 2024; Huang et al., 2025). Recent work on reward-guided
+                                         speculative decoding (RSD) (Liao et al., 2025) combines model alignment with speculative decoding
+                                         from a draft model, though it lacks theoretical guarantees on distributional fidelity.
+                                         Contributions. In this paper, we introduce a novel test-time algorithm, Guided Speculative Infer-
+                                         ence (GSI), which leverages samples from a draft model πS to (approximately) sample from the
+
+                                             1
+                                                 We will interchangeably call πS the draft or small model, and πB the base or target model.
+
+
+                                                                                                  1
+Published as a conference paper at ICLR 2026
+
+
+
+
+                                                                              Accept
+                                         
+                         log πB (yiS ) i                                        if r̃i∗ ≥ u          yiS∗
+
+                                                                   
+                                               r̃i = r + β1 log ππBS (yiS )   i∗ = S-BoN(βr̃i )
+                                    
+      x       yiS ∼ πS       r(yiS ) i
+
+
+                                                                                if r̃i∗ < u         yiB ∼ πB
+                                       
+                          log πS (yiS ) i
+
+                                                                                                    (r(yiB ))i
+
+               Draft model πS            Target model πB                                      i∗ = S-BoN β r(yiB )
+                                                                                                                  
+
+
+              Reward model r             Soft best-of-n (S-BON)                                         yiB∗
+                                                                               Reject
+
+
+Figure 1: Guided Speculative Inference workflow for one reasoning step. A sample yiS∗ generated
+from the draft model πS is selected with soft best-of-n (S-BoN) with parameter β from the tilted
+rewards r̃i . If its reward lies above a threshold u it is accepted. Otherwise, it is rejected, which
+triggers resampling from the target model πB with soft best-of-n.
+
+
+base distribution πB aligned to a reward model r, namely the tilted distribution (Section 4):
+                                                       πB (y | x) exp(β r(x, y))
+                                πβ,B (y | x) =                                   .
+                                                               Zβ,B (x)
+
+Importantly, by tilting (i.e., adjusting) the rewards r according to the log-likelihoods under both πB
+and πS (Figure 1), GSI provably approximates this tilted distribution, making it the first speculative
+test-time scaling method with distributional guarantees to the optimal tilted distribution, to the best
+of our knowledge. We summarize our contributions as follows:
+
+       • We propose a novel test-time scaling algorithm, Guided Speculative Inference (GSI), which
+         uses a draft model πS to accelerate inference from a target model πB while aligning re-
+         sponses to a given reward model r (Section 4)
+       • We prove that GSI enjoys strong theoretical guarantees and provably approximates the
+         optimal tilted distribution (Theorem 1), as well as the expected reward (Theorem 2)
+       • In extensive experiments on reasoning benchmarks (MATH500, OlympiadBench, Minerva
+         Math, MMLU-STEM, GSM8K) and across model families (Qwen-2.5-Math, Qwen-3) and
+         sizes, we demonstrate that GSI outperforms both reward-guided speculative decoding (Liao
+         et al., 2025) and soft best-of-n sampling with the draft model, and sometimes even soft
+         best-of-n sampling with the target model (Section 5.1)
+
+2   R ELATED W ORK
+Test-Time Scaling. Inference time compute can be scaled along different axes. Broadly, such
+methods can be divided into parallel and sequential approaches. In sequential approaches, the
+model spends more time on a single response and aims to improve it, for example by appending
+think tokens (Muennighoff et al., 2025) or via self-correction (Qu et al., 2024). While sequential
+approaches can often generate high-quality responses, they don’t scale well. Parallel approaches
+instead scale test-time by parallelizing computations, which typically involves generating multiple
+responses or reasoning steps at a time. Common parallel approaches include majority voting (Wang
+et al., 2023) and best-of-n sampling (Mroueh & Nitsure, 2025; Beirami et al., 2025) (see Section 3).
+Speculative Decoding. Speculative decoding (SD) (Leviathan et al., 2023) accelerates sampling
+from πB by first drawing proposals from πS and then accepting or rejecting them based on a criterion
+derived from the ratio πB /πS . On rejection, one falls back to direct sampling from πB . SD provably
+samples from the distributions of πB . The core idea is that k tokens can be sampled from πS
+autoregressively, but verified by πB in parallel, thus generating up to k + 1 tokens from πB with
+
+
+                                                             2
+Published as a conference paper at ICLR 2026
+
+
+
+
+a single forward pass of πB . Variants of SD include block verification (Sun et al., 2025) where
+sequences of draft tokens are verified jointly instead of token-by-token, and SpecTr (Sun et al.,
+2023) which allows for verification of multiple draft sequences in parallel by framing SD as an
+optimal transport problem. SD has also been combined with early-exiting (Liu et al., 2024), and
+Bhendawade et al. (2024) propose using n-gram predictions of πB as drafts, which alleviates the
+need for an auxiliary model.
+Reward-Guided Speculation. A recent work proposes RSD (reward-guided speculative decoding)
+(Liao et al., 2025), where samples are generated from πS , and a threshold on the reward of the
+samples from πS determines whether one should accept the sample or resample from πB . While this
+approach shares similarities with GSI, it only provides a guarantee on the expected reward: under
+the assumption that EπB [r(y | x)] ≥ EπS [r(y | x)], RSD satisfies EπRSD [r(y | x)] ≥ EπS [r(y | x)],
+which in the worst case does not yield any improvement over the small model πS , and also does
+not guarantee anything about the policy πRSD itself. As we will see in Section 4, GSI provides
+guarantees on the induced policy directly. In concurrent work, Cemri et al. (2025) propose SPECS,
+an algorithm that pairs draft-generated samples with a cascading routine, which determines which
+model – draft or target – to use in subsequent iterations. Similar to our Theorem 1, they also derive
+a KL bound with respect to the target distribution. However, their bound requires assuming that the
+block size (i.e., the length of reasoning steps) tends to infinity, and that the number of samples n and
+the rejection threshold u are random variables, all of which are approximations that do not hold in
+practice. Our KL bound in Theorem 1 does not require any such assumptions. Moreover, GSI seems
+to significantly outperform SPECS on downstream tasks (e.g. up to 11.5% improved accuracy on
+MATH500). RSD, SPECS, and GSI all have in common that they operate on reasoning steps of
+reasoning models, where each iteration of the algorithm produces a subsequent reasoning step.
+
+3   BACKGROUND
+                                                     S     Qn
+Let V denote a (finite) vocabulary. Let X = n∈N i=1 V be the (countable) space of inputs,
+consisting of finite sequences over the   S vocabulary
+                                                Qn      (in practice these will be prompts and already
+generated reasoning steps), and Y = n∈N i=1 V the (countable) space of reasoning steps. Note
+that mathematically, these two spaces are identical, but we define both X and Y for notational
+convenience. By ∆(Y), we denote the set of probability measures over Y. For x ∈ X , let πB (y |
+x) ∈ ∆(Y) and πS (y | x) ∈ ∆(Y) be the base and small language model distributions over y ∈ Y
+given x. Note that we define the distributions over reasoning steps instead of single tokens. When we
+write πB (· | x, y), it denotes the distribution of πB over Y given a prompt x and a (partial) response
+y. When y consists of a sequence of reasoning steps y t , we will denote them with superscripts
+y = (y 1 , ..., y T ), y t ∈ Y. Note that by definition of Y, we can view y itself as an element of Y
+again. Subscripts yi denote different samples generated by the same model.
+Reward Models. Reward models for LLMs predict how good a generated response y is for a given
+prompt x. They can broadly be split into two classes: Outcome reward models (ORMs) assign a
+reward r(x, y) to a complete response y (i.e. generated until EOS) for a prompt x ∈ X . Process
+reward models (PRMs) (Lightman et al., 2024) instead assign a reward r(x, (y 1 , ..., y t )) to every
+partial sequence of reasoning steps (y 1 , ..., y t ), t = 1, ..., T . In the following, we assume we are
+given a PRM r : X × Y → [0, R] for some R < ∞. We assume that r approximates a golden
+reward (Gao et al., 2023) r∗ : X ×Y → R≥0 , which can be thought of as the “true” reward function.
+Divergences. Recall that the Kullback–Leibler divergence between two distributions P, Q ∈ ∆(Y)
+with P ≪ Q is defined as                                P (y) 
+                                 KL(P ∥Q) = Ey∼P log Q(y)       ,
+and the chi-square divergence as
+                                                  2
+                                                               dP 2
+                                     Z                    Z
+                          2              dP
+                         χ (P ||Q) =          − 1 dQ =              − 1.
+                                         dQ                     dQ
+
+KL Regularized Reward Alignment. A standard formulation for maximizing the reward r(x, y)
+given x ∈ X , while constraining how far the policy can move from the base policy πB (· | x), is to
+                                ∗
+add a KL regularizer, and find πB maximizing
+                        max Ey∼π [ r(x, y) ] − β1 KL π(· | x) ∥ πB (· | x) ,
+                                                                          
+                        π∈∆(Y)
+
+
+                                                   3
+Published as a conference paper at ICLR 2026
+
+
+
+
+where β > 0 trades off maximizing the reward versus fidelity to πB . It is well known (e.g. (Korbak
+et al., 2022)) that the optimal policy has the closed form
+                                                                       
+                                               πB (y | x) exp β r(x, y)
+                              πβ,B (y | x) =                             ,                       (1)
+                                                        Zβ,B (x)
+                                 h        ′
+                                            i
+where Zβ,B (x) = Ey′ ∼πB (·|x) eβ r(x,y ) . Note that sampling from this distribution becomes in-
+tractable when decoding more than one token in y at a time.
+Best-of-n Sampling. Best-of-n (BoN) (Beirami et al., 2025) is a common inference-time method
+for scaling LLMs. Best-of-n draws y1 , . . . , yn ∼ πB (· | x), and selects
+                                      y ∗ = arg      max        r(x, yi ).
+                                                  i∈{1,...,n}
+
+Since BoN greedily selects the response that maximizes the reward, it is also sometimes referred to
+as hard best-of-n. When the reward model is suboptimal, best-of-n is known to be prone to reward
+hacking (Skalse et al., 2022), which can be mitigated by sampling via soft best-of-n.
+Soft Best-of-n Sampling. Soft best-of-n (S-BoN) (Verdun      et al., 2025) weighs each drawn sample
+by a temperature-scaled softmax wi ∝ exp     P  β r(x, yi )  (where β is an inverse temperature), then
+samples a response yi with probability wi / j wj . We denote the soft best-of-n distribution over y
+     n
+by πβ,B  (· | x). Note that both soft and hard BoN can be applied to one-shot generation (where the
+complete response it generated in one step) or reasoning tasks, where the yi correspond to reasoning
+steps, and the BoN procedure is repeatedly applied. In this work, we focus on reasoning tasks. By
+                                                           n
+moving from hard to soft best-of-n, the distribution πβ,B     (· | x) enjoys a KL bound to the tilted
+distribution πβ,B (Verdun et al., 2025):
+
+                                                        Vary∼πB [eβr(x,y) ]
+                                                                            
+                                      n
+                         KL(πβ,B ∥πβ,B   ) ≤ log 1 +                           .                   (2)
+                                                       n(Ey∼πB [eβr(x,y) ])2
+In other words, the tilted distribution πβ,B can be approximated by soft best-of-n sampling by letting
+n → ∞. Aminian et al. (2025) provide a thorough theoretical analysis of soft best-of-n compared
+to regular best-of-n and show it can mitigate reward hacking.
+
+4   G UIDED S PECULATIVE I NFERENCE
+Our goal is to (approximately) sample from the distribution πβ,B . As we have seen, while one
+cannot sample from the distribution directly, it can be approximated arbitrarily well by soft best-of-
+n sampling with the target model πB , cmp. equation 2, which is linked to the closed-form solution
+of πβ,B as a reward-tilted version of πB (1). However, this requires autoregressively generating n
+responses from the target model, which can get prohibitively expensive. We would like to utilize a
+small draft model πS to accelerate inference, resemblant of speculative decoding. However, the tilted
+distribution (1) is a distributions over πB , not over πS . The trick is to note that we can write it as
+                                                                                 
+                                      πS (y | x) exp βr(x, y) + log ππBS (y|x)
+                                                                             (y|x)
+
+                      πβ,B (y | x) =                                                  ,
+                                                        Zβ,B (x)
+i.e. we can rewrite it as a distribution over πS (exponentially) tilted by the tilted rewards
+                                                                       
+                                                    1       πB (y | x)
+                               r̃(x, y) = r(x, y) + log                   ,
+                                                    β       πS (y | x)
+with the convention log(0) = −∞. This allows us to do soft best-of-n sampling over samples from
+πS with the tilted rewards r̃ instead of r to approximately sample from πβ,B :
+Reward-Likelihood Tilted S-BoN. For x ∈ X , the (one-step) reward-tilted S-BoN is defined as:
+      1. sample y1 , ..., yn ∼ πS (· | x)              
+                                               (yi |x)
+      2. compute r̃i = r(x, yi ) + β1 log ππBS (y i |x)
+      3. sample yi ∝ exp(βr̃i )
+
+
+                                                      4
+Published as a conference paper at ICLR 2026
+
+
+
+
+Algorithm 1 Guided Speculative Inference
+Require: base model πB , small model πS , PRM r, β > 0, threshold u ∈ R, n ∈ N, prompt x ∈ X
+ 1: y ← ()                                                                        #empty response
+ 2: for t = 0, 1, ..., until EOS do
+ 3:   Sample {yit }ni=1 ∼ πS (· | x, y) #reasoning steps, generated up to ’\n\n’
+ 4:   r̃i ← r(x, (y, yit )) + β1 (log πB (yit | x, y) − log πS (yit | x, y)), i = 1, ..., n
+ 5:   Sample index i∗ ∼ softmax(βr̃1 , ..., βr̃n )
+ 6:   if r̃i∗ ≥ u then
+ 7:       y ← (y, yit∗ )                                                  #append step yˆt_(iˆ*)
+ 8:   else
+ 9:       Sample {yjt }nj=1 ∼ πB (· | x, y)
+10:       rj ← r(x, (y, yjt )), j = 1, ..., n
+11:       Sample index j ∗ ∼ softmax(βr1 , ..., βrn )
+12:       y ← (y, yjt ∗ )
+13:   end if
+14: end for
+
+
+We will denote the distribution generated by this sampling algorithm by π̃GSI (· | x). Crucially,
+log πB (yi | x) can be efficiently computed in parallel by summing over logprobabilities obtained
+from a single forward pass, as opposed to autoregressive generation in soft best-of-n with πB . Of
+course, we can only hope that π̃GSI (· | x) is close to πβ,B (· | x) if the support of πB is sufficiently
+covered by πS , which we make precise with the following uniform coverage assumption, following
+prior work (Huang et al., 2025). This assumption is reasonable in practice, as any response has non-
+zero probability when sampling with positive temperature, hence the supremum in Assumption 1 is
+finite if restricting Y to responses of some maximal length.
+
+Assumption 1 (Coverage Assumption). Throughout, we will assume that
+                                                        πB (y | x)
+                             C∞ (x) :=         sup                 < ∞.
+                                         y∈Y:πB (y|x)>0 πS (y | x)
+
+
+Under Assumption 1, reward-likelihood tilted S-BoN with πS indeed approximates the tilted distri-
+bution πβ,B in the sense of the following theorem.
+Theorem 1. Let x ∈ X . Assume that the coverage assumption (Assumption 1) holds. Let u ∈ R be
+an acceptance threshold (cmp. Algorithm 1), and ϵ > 0 be an arbitrary accuracy. Assume that
+                                                               
+                               χ2 πB (· | x) ∥ πS (· | x) + 1 e2β∥r∥∞ − 1
+                        n≥                                                .
+                                                  eϵ − 1
+Then,                                                           
+                                 KL πβ,B (· | x) ∥ π̃GSI (· | x) ≤ ϵ.
+For a discussion of Theorem 1 and its practical implications, please see Appendix C.5. In addition to
+sampling from the reward-likelihood tilted S-BoN, we also add a rejection sampling-like threshold
+on the tilted reward, which triggers resampling from the base model πB in case the tilted reward
+falls below it. While this is not required for the distributional guarantee from Theorem 1, it improves
+performance empirically, cmp. Section 5. The complete GSI method can be seen in Algorithm 1.
+We denote the distribution induced by Algorithm 1 (including the rejection step) as πGSI (i.e. πGSI
+                                                                                                    n
+is equal to π̃GSI when the sample is accepted, and equal to the soft best-of-n distribution πβ,B
+otherwise).
+Note that in principle, it is possible to choose different n for the draft and target models. We leave
+exploring this for future research. While GSI is, in theory, applicable to one-shot generation tasks,
+we consider y t in Algorithm 1 to be a reasoning step, i.e. in each iteration t of the algorithm, drafts
+are generated until the end of the reasoning step, which is attained when a double line break \n\n is
+generated. The algorithm generates reasoning steps until an end-of-sequence (EOS) token is created.
+In addition to the distributional guarantee from Theorem 1, we can also guarantee that the expected
+difference in (golden) reward goes to 0 as n increases.
+
+
+                                                     5
+Published as a conference paper at ICLR 2026
+
+
+
+
+Theorem 2 (informal). Let x ∈ X .              Assume that Ey∼πGSI (·|x) [r∗ (x, y)] < ∞ and
+Ey∼πβ,B (·|x) [r∗ (x, y)] < ∞. Furthermore, assume the coverage assumption (Assumption 1) holds.
+                               n
+Under mild assumptions on πβ,B    (Assumption 2 in Appendix A), we have
+                                                                          n→∞
+                      Ey∼πβ,B (·|x) [r∗ (x, y)] − Ey∼πGSI (·|x) [r∗ (x, y)] −−−−→ 0
+            √
+at rate O(1/ n).
+
+Both proofs can be found in Appendix A, where we also provide a formal version of Theorem 2 and
+an explicit bound in terms of √1n .
+
+5   E XPERIMENTS
+Models. We evaluate GSI on two model families with draft and target models of different sizes, to
+emphasize that GSI leads to consistent latency gains across families and sizes. For the Qwen2.5-
+Math family (Qwen Team, 2024), we choose Qwen2.5-Math-1.5B-Instruct as the draft model πS ,
+and Qwen2.5-Math-7B-Instruct as target model πB . On Qwen3 (Qwen Team, 2025), we choose
+Qwen3-1.7B as the draft and Qwen3-14B as the target model, and disable thinking mode. We select
+Qwen2.5-Math-PRM-7B as the PRM r throughout. The rewards lie in [0, 1].
+Implementation. We implement all models with vLLM (Kwon et al., 2023). The log-likelihoods
+for πS are computed without any additional computational overhead within the forward pass of πS .
+The log-likelihoods for πB can be computed with minimal computational overhead, as they only
+require a single forward pass through πB . We note that for improved latency gains, verification of
+draft steps with the PRM and the computation of log-likelihoods of draft steps under πB could be
+parallelized; however, for simplicity we have not implemented this in our current implementation.
+Each model is hosted on its own GPU; we evaluated on NVIDIA A100, H100, and H200 GPUs.
+Our implementation is available at https://github.com/j-geuter/GSI.
+Datasets. We evaluate on the following reasoning benchmarks: MATH500 (Lightman et al., 2024),
+OlympiadBench (He et al., 2024) (the OE TO maths en COMP split which is text-only math prob-
+lems in English), Minerva Math (Lewkowycz et al., 2022), GSM8K (Cobbe et al., 2021), and
+MMLU-STEM (Hendrycks et al., 2021) (which spans topics such as physics, chemistry, biology,
+math, astronomy, computer science, and electrical engineering). We decode stepwise with chain-
+of-thought, where ”\n\n” tokens denote the end of a reasoning step; rewards are computed on
+each reasoning step. Following common practice (Zhang et al., 2024; Cemri et al., 2025; Qiu et al.,
+2025), we evaluate on randomly selected subsets of the datasets to make evaluation feasible. We
+select 500 samples per dataset (note that MATH500 contains 500 and Minerva Math 272 samples,
+hence we use the full datasets). We report 95% confidence intervals on all datasets, computed from
+evaluations over three different random seeds with N = 500 samples each.
+Methods. We compare GSI against our implementation of RSD (Liao et al., 2025) using the same
+hyperparameters as in the paper, S-BoN with πS , and S-BoN with πB . As SPECS (Cemri et al.,
+2025) does not have a publicly available implementation, we do not compare to it in our experiments.
+However, we compare to the results reported in their paper in Section 5.1.
+Note that we do not compare to vanilla speculative decoding with the draft and target model and step-
+wise s-BoN sampling (i.e., where n reasoning steps are generated in parallel with vanilla speculative
+decoding, and then verified with the PRM), since speculative decoding is known to scale very poorly
+with batch size. Even modern frameworks like EAGLE-2 (Li et al., 2024) have been shown to
+have a token throughput of up to 50% less than that of the target model at larger batch sizes (Yan
+et al., 2025). In particular, even sophisticated frameworks like EAGLE-3, that require targeted
+finetuning of the draft model, have not been evaluated beyond n = 64 and do not achieve strictly
+better throughput than the target model alone (Li et al., 2025). GSI circumvents this issue altogether,
+as generation both from the draft, as well as the target model remains fully parallelizable.
+Hyperparameters. We use β = 20 (see Appendix C.3 for an ablation), u = 0.5 (selected empir-
+ically amongst a range of values based on accuracy vs. latency trade-off; see Appendix C.4 for an
+ablation), temperature = 0.7, and top_p = 1.0. We set the threshold in RSD to 0.7, which is the
+same as in the RSD paper (Liao et al., 2025). Further hyperparameter and implementation details
+can be found in Appendix B.
+
+
+                                                   6
+Published as a conference paper at ICLR 2026
+
+
+
+
+                              MATH500                          Minerva Math                60
+                                                                                                    MMLU-STEM
+               85
+                                                      35
+
+
+
+
+Accuracy (%)
+               80
+                                                      30                                   50
+               75
+                                                      25
+               70                                                                          40
+                    1         4   16      64    256        1    4       16   64      256        1    4     16      64   256
+
+                         OlympiadBench                              GSM8K                                Average
+
+
+
+Accuracy (%)
+                                                      95
+               40                                                                          60
+
+                                                      90                                   55
+               35
+
+                                                      85                                   50
+                    1         4   16      64    256        1    4       16   64      256        1    4     16      64   256
+                                  n                                     n                                   n
+
+                        GSI            GSI w/o rej.             RSD               S-BoN (small)             S-BoN (base)
+
+                              MATH500                          Minerva Math                         MMLU-STEM
+                                                      40                                   80
+
+
+
+
+Accuracy (%)
+               80
+                                                                                           70
+                                                      30
+
+               70                                                                          60
+
+                    1         4   16      64    256        1    4       16   64      256        1    4     16      64   256
+
+                         OlympiadBench                              GSM8K                                Average
+               50                                     95                                   70
+
+
+
+
+Accuracy (%)
+                                                      90
+               40                                                                          60
+                                                      85
+
+                                                      80
+               30                                                                          50
+                    1         4   16      64    256        1    4       16   64      256        1    4     16      64   256
+                                  n                                     n                                   n
+
+                        GSI            GSI w/o rej.             RSD               S-BoN (small)             S-BoN (base)
+
+
+
+Figure 2: Qwen2.5-Math (top) / Qwen3 (bottom): GSI outperforms RSD (Liao et al., 2025),
+soft best-of-n with the draft model, and approaches the performance of soft best-of-n with the
+base model. We also compare against GSI without rejection step. The plots contain 95% confidence
+intervals over three random seeds.
+
+
+
+
+                                                                    7
+Published as a conference paper at ICLR 2026
+
+
+
+
+5.1     P ERFORMANCE ON R EASONING B ENCHMARKS
+
+Figure 2 compares GSI without the rejection sampling step (i.e., without lines 6 to 11 in Algorithm 1)
+to regular GSI, S-BoN with πB and πS , and RSD. GSI significantly outperforms both soft best-of-n
+with the draft model, as well as RSD. We see that GSI also clearly outperforms GSI without rejection
+step; however, this difference becomes less significant as n increases, hinting at the fact that with
+larger n, the samples from the small model reach better coverage of the support of πB . Furthermore,
+on some datasets the accuracy of GSI with and without rejection step approaches or even surpasses
+                   n
+the accuracy of πβ,B  , which empirically verifies Theorem 1. We leave investigating this behaviour
+beyond n = 256 for future research. An interesting observation is that amongst all methods, GSI
+without rejection step seems to benefit most from increasing n and is the only method that does
+not plateau around n = 256. Comparing GSI to SPECS (Cemri et al., 2025) with the accuracies
+reported in their paper (as there does not exist a public code repository) for the same Qwen2.5-Math
+models, we see that while SPECS slightly outperforms GSI on OlympiadBench (n = 4: +1.6%,
+n = 16: +3.2%), GSI is significantly stronger on MATH500 (n = 4: +11.5%, n = 16: +2.9%).
+Note that we evaluate on subsets of N = 500 samples, while SPECS reports accuracies on random
+subsets of N = 100 samples, hence accuracies might not be directly comparable.
+In Table 1, we report the inference time per sample (in seconds) across methods (averaged over
+datasets), as well as the average percentage of samples accepted by GSI and RSD. RSD generally
+tends to accept almost all samples, which explains why its performance is comparable to S-BoN
+with the small model (compare Figure 2) while being slightly worse in terms of inference speed. GSI
+accepts less samples, thus is slower than RSD, while still outperforming S-BoN on the base model
+in terms of inference speed. For example, on Qwen3 with n = 16, GSI achieves a 51% increased
+throughput in terms of steps per second, with only 3% in relative performance degradation (cmp.
+Table 3). While GSI tends to generate slightly more steps per problem, this still translates to up to
+28% reduced end-to-end latency compared to the target model. An extended version of Table 1 can
+be found in Appendix C.6. Note that inference times rely on many factors and can be unreliable. For
+instance, we found that sometimes, vLLM is faster if large batches are artificially fed in sequential
+chunks instead of one batch. All times reported in Table 1 are for full batches of size n. Figure 4
+shows how much each of the methods spends on each of the three models, averaged across datasets.
+We note that our PRM consumes a significant amount of end-to-end runtime, and a more efficient
+(i.e., smaller) PRM would likely lead to more pronounced latency gains achieved by GSI.
+
+Table 1: Latency of Qwen2.5 on H100, Qwen3 on A100: Inference time (in seconds) per reasoning
+step, number of reasoning steps per sample, acceptance rate, and steps per second (averaged across
+all datasets, with 95% confidence intervals over three random seeds). GSI is significantly faster than
+S-BoN on the base model, with up to 51% more steps generated per second.
+
+      Model Family       n    Method          s / step (↓)    # steps     % accept     steps / s (↑)
+                              GSI (ours)      0.43 ± 0.03    10.6 ± 0.3   76.7 ± 0.1   2.33 ± 0.15
+                              RSD             0.34 ± 0.01     9.7 ± 0.1   94.9 ± 0.0   2.94 ± 0.08
+                         4
+                              S-BoN (small)   0.32 ± 0.01     9.6 ± 0.0        –       3.12 ± 0.09
+      Qwen2.5-Math            S-BoN (base)    0.57 ± 0.01    10.2 ± 0.3        –       1.75 ± 0.03
+      (H100, 1B/7B)
+                              GSI (ours)      0.72 ± 0.05    11.4 ± 0.2   82.0 ± 0.1   1.39 ± 0.09
+                              RSD             0.61 ± 0.01    10.3 ± 0.3   97.3 ± 0.0   1.64 ± 0.03
+                         16
+                              S-BoN (small)   0.52 ± 0.03    10.3 ± 0.1        –       1.92 ± 0.10
+                              S-BoN (base)    0.94 ± 0.03    10.5 ± 0.2        –       1.06 ± 0.03
+                              GSI (ours)      0.56 ± 0.04    26.7 ± 0.3   88.0 ± 0.1   1.79 ± 0.12
+                              RSD             0.40 ± 0.01    28.1 ± 0.1   97.2 ± 0.1   2.50 ± 0.06
+                         4
+                              S-BoN (s)       0.38 ± 0.01    24.8 ± 0.2        –       2.63 ± 0.07
+          Qwen3               S-BoN (b)       0.83 ± 0.02    24.9 ± 0.1        –       1.20 ± 0.03
+      (A100, 1.7B/14B)
+                              GSI (ours)      1.21 ± 0.05    27.5 ± 0.4   91.5 ± 0.1   0.83 ± 0.03
+                              RSD             0.96 ± 0.01    29.0 ± 0.2   98.2 ± 0.1   1.04 ± 0.01
+                         16
+                              S-BoN (s)       1.01 ± 0.00    26.1 ± 0.2        –       0.99 ± 0.00
+                              S-BoN (b)       1.82 ± 0.06    24.8 ± 0.3        –       0.55 ± 0.02
+
+
+
+                                                  8
+Published as a conference paper at ICLR 2026
+
+
+
+
+   GSI: MATH500, Example 1 (Qwen2.5-Math)
+
+       Prompt: In the sequence 0, 1, 1, 3, 6, 9, 27, ..., the first term is 0. Subsequent terms are produced by alternately adding and
+       multiplying by each successive integer beginning with 1. For instance, the second term is produced by adding 1 to the first term;
+       the third term is produced by multiplying the second term by 1; the fourth term is produced by adding 2 to the third term; and so
+       on. What is the value of the first term that is greater than 125?
+
+
+   Step       Generated Reasoning Steps ( Draft πS , Target πB )                                                                               r̃(yiS∗ )/r(yjB∗ )
+
+               To determine the value of the first term in the sequence that is greater than 125, we need to follow the rule of alternately
+   1           adding and multiplying by each successive integer starting from 1. Let’s generate the sequence step by step:                         0.719
+
+
+              1. The first term is a1 = 0. 2. The second term is a2 = a1 + 1 = 0 + 1 = 1. 3. The third term is
+              a3 = a2 × 1 = 1 × 1 = 1. 4. The fourth term is a4 = a3 + 2 = 1 + 2 = 3. 5. The fifth term is
+   2          a5 = a4 × 3 = 3 × 3 = 9. 6. The sixth term is a6 = a5 + 4 = 9 + 4 = 13. 7. The seventh term is                                        0.067
+              a7 = a6 × 5 = 13 × 5 = 65. 8. The eighth term is a8 = a7 + 6 = 65 + 6 = 71. 9. The ninth term is
+              a9 = a8 × 7 = 71 × 7 = 497.
+
+
+               1. The first term is given as a1 = 0. 2. The second term is obtained by adding 1 to the first term: a2 = a1 + 1 =
+               0 + 1 = 1. 3. The third term is obtained by multiplying the second term by 1: a3 = a2 × 1 = 1 × 1 = 1.
+               4. The fourth term is obtained by adding 2 to the third term: a4 = a3 + 2 = 1 + 2 = 3. 5. The fifth
+               term is obtained by multiplying the fourth term by 2: a5 = a4 × 2 = 3 × 2 = 6. 6. The sixth term is
+               obtained by adding 3 to the fifth term: a6 = a5 + 3 = 6 + 3 = 9. 7. The seventh term is obtained by                                  0.979
+               multiplying the sixth term by 3: a7 = a6 × 3 = 9 × 3 = 27. 8. The eighth term is obtained by adding 4
+               to the seventh term: a8 = a7 + 4 = 27 + 4 = 31. 9. The ninth term is obtained by multiplying the eighth
+               term by 4: a9 = a8 × 4 = 31 × 4 = 124. 10. The tenth term is obtained by adding 5 to the ninth term:
+               a10 = a9 + 5 = 124 + 5 = 129.
+
+
+               We see that the tenth term, a10 = 129, is the first term in the sequence that is greater than 125. Therefore, the value
+   3                                                                                                                                                1.037
+               of the first term that is greater than 125 is 129 .
+
+
+   Correct Answer found: True
+
+
+
+   GSI: MATH500, Example 2 (Qwen2.5-Math)
+
+       Prompt: A regular pentagon is rotated counterclockwise about its center. What is the minimum number of degrees it must be
+       rotated until it coincides with its original position?
+
+
+   Step       Generated Reasoning Steps ( Draft πS , Target πB )                                                                               r̃(yiS∗ )/r(yjB∗ )
+
+               To determine the minimum number of degrees a regular pentagon must be rotated counterclockwise about its center
+   1           until it coincides with its original position, we need to understand the symmetry of the pentagon. A regular pentagon                0.918
+               has rotational symmetry, meaning it looks the same after being rotated by certain angles around its center.
+
+
+              The sum of the angles around a point is 360◦ . Since a regular pentagon has five equal sides and angles, it can be rotated
+   2                                                                                                                                                0.126
+              to five different positions that look the same. Therefore, the angle of rotation for each symmetry is 360◦ divided by 5.
+
+
+               A regular pentagon has five equal sides and five equal angles. When we rotate a regular pentagon, it will coincide with
+               its original position at angles that are multiples of the angle subtended by one of its vertices at the center. This angle is        0.999
+               calculated by dividing the full circle (360 degrees) by the number of sides of the pentagon, which is 5.
+
+
+               So, the angle of rotation is:
+                                                                     360◦           ◦
+   3                                                                         = 72                                                                   0.968
+                                                                       5
+
+
+
+               Therefore, the minimum number of degrees the pentagon must be rotated counterclockwise until it coincides with its
+   4                                                                                                                                                0.961
+               original position is 72 .
+
+
+   Correct Answer found: True
+
+
+
+
+Figure 3: Reasoning traces generated by GSI on two MATH500 samples. Top: GSI correctly
+identifies that the second step generated by the draft model is wrong (crossed out means rejected)
+and resamples from the base model. Bottom: Sometimes, GSI rejects steps that are correct if the
+base model tends to word them very differently from the draft model.
+
+
+
+                                                                                   9
+Published as a conference paper at ICLR 2026
+
+
+
+
+                 S-BoN (base)
+
+
+
+                         GSI
+
+
+
+                        RSD
+
+
+
+                S-BoN (small)
+
+
+                                0       10             20           30           40
+                                            Seconds per sample (total runtime)
+                                       πS              πB            PRM
+
+
+ Figure 4: Qwen3 on A100 runtime breakdown across πS (1.7B), πB (14B), and the PRM (7B).
+
+
+5.2   GSI R EASONING T RACES
+
+Figure 3 shows two sample reasoning traces generated by GSI with the Qwen2.5-Math models for
+n = 4 on MATH500. The last column contains the tilted rewards r̃ for samples from πS , and
+regular rewards r for samples from πB , aligning with the GSI algorithm. In the first example, GSI
+correctly identifies an incorrect step generated by πS in the second step by its small tilted reward, and
+resamples a correct step from πB , whereas the second example shows that tilted rewards r̃ can also
+sometimes be misleading. We provide additional samples in Appendix C.7, including comparisons
+to the reasoning traces generated by RSD, and examples that highlight the advantage of using tilted
+rewards instead of raw rewards.
+
+5.3   A BLATIONS
+
+Appendix C contains additional experiments, including more detailed accuracy results, a more de-
+tailed comparison of the acceptance rates of GSI and RSD, a discussion of Theorem 1 and its prac-
+tical implications, and ablations with Qwen2.5-Math on MATH500 over β and over u, which show
+that our choice of β = 20 strikes a balance between weighing r and the log ratio log(πB /πS ),
+and that the threshold u = 0.5 is optimal for smaller values of n. Note that while the ablations
+show that β = 20 and u = 0.5 are sensible choices for MATH500 with Qwen2.5-Math, our ex-
+periments confirm that these can be used out-of-the-box across datasets and model families without
+further hyperparameter search. However, the performance of GSI can likely be improved with a
+more fine-grained threshold schedule {un }n depending on n, which we leave for future research.
+
+
+6     D ISCUSSION
+
+Developing compute-efficient algorithms remains a critical challenge in test-time scaling of lan-
+guage models. In this work, we introduce Guided Speculative Inference (GSI), a novel inference-
+time algorithm for efficient reward-guided decoding from a target language model. GSI leverages
+speculative samples from a small draft model to approximate the optimal tilted policy of the target
+model with respect to a given reward function. We show that unlike previous approaches, GSI prov-
+ably approaches the optimal policy as the number of samples n generated at each step increases, and
+can provably achieve expected rewards arbitrarily close to the optimum. Empirical results on vari-
+ous reasoning benchmarks (MATH500, OlympiadBench, Minerva Math, MMLU-STEM, GSM8K),
+model families (Qwen2.5-Math and Qwen3) and sizes ranging from 1B to 14B parameters show that
+GSI consistently and significantly outperforms existing approaches, such as reward-guided specula-
+tive decoding (Liao et al., 2025), SPECS (Cemri et al., 2025), soft best-of-n with the draft model,
+and, perhaps surprisingly, even surpasses soft best-of-n with the target model in some cases. Re-
+sults on inference time show that GSI can efficiently trade off inference time compute for significant
+performance gains, making it a practical framework for efficient LLM deployment.
+
+
+                                                     10
+Published as a conference paper at ICLR 2026
+
+
+
+
+R EPRODUCIBILITY
+The complete code needed to reproduce our results is available at https://github.com/
+j-geuter/GSI.
+
+ACKNOWLEDGMENTS
+We would like to thank Nick Hill and Guangxuan (GX) Xu from Red Hat for their help with vLLM.
+JG and DAM acknowledge support from the Aramont Fellowship Fund and the FAS Dean’s Com-
+petitive Fund for Promising Scholarship. JG is supported by a graduate fellowship at the Kempner
+Institute for the Study of Natural and Artificial Intelligence at Harvard University.
+
+R EFERENCES
+Gholamali Aminian, Idan Shenfeld, Amir R. Asadi, Ahmad Beirami, and Youssef Mroueh. Best-
+  of-n through the smoothing lens: KL divergence and regret analysis. In ES-FoMo III: 3rd Work-
+  shop on Efficient Systems for Foundation Models, 2025. URL https://openreview.net/
+  forum?id=wTKeVOMXjn.
+
+Ahmad Beirami, Alekh Agarwal, Jonathan Berant, Alexander Nicholas D’Amour, Jacob Eisenstein,
+  Chirag Nagpal, and Ananda Theertha Suresh. Theoretical guarantees on the best-of-n alignment
+  policy. In Forty-second International Conference on Machine Learning, 2025. URL https:
+  //openreview.net/forum?id=u3U8qzFV7w.
+
+Nikhil Bhendawade, Irina Belousova, Qichen Fu, Henry Mason, Mohammad Rastegari, and Mahyar
+  Najibi. Speculative Streaming: Fast LLM Inference without Auxiliary Models, 2024. URL
+  https://arxiv.org/abs/2402.11131.
+
+Mert Cemri, Nived Rajaraman, Rishabh Tiwari, Xiaoxuan Liu, Kurt Keutzer, Ion Stoica, Kannan
+ Ramchandran, Ahmad Beirami, and Ziteng Sun. SPECS: Faster test-time scaling through spec-
+ ulative drafts. In ES-FoMo III: 3rd Workshop on Efficient Systems for Foundation Models, 2025.
+ URL https://openreview.net/forum?id=wRRtifTM5b.
+
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser,
+  Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, Christopher Hesse, and John
+  Schulman. Training Verifiers to Solve Math Word Problems, 2021. URL https://arxiv.
+  org/abs/2110.14168.
+
+Leo Gao, John Schulman, and Jacob Hilton. Scaling Laws for Reward Model Overoptimization.
+  In Andreas Krause, Emma Brunskill, Kyunghyun Cho, Barbara Engelhardt, Sivan Sabato, and
+  Jonathan Scarlett (eds.), Proceedings of the 40th International Conference on Machine Learning,
+  volume 202 of Proceedings of Machine Learning Research, pp. 10835–10866. PMLR, 23–29 Jul
+  2023. URL https://proceedings.mlr.press/v202/gao23h.html.
+
+Gemini Team. Gemini 1.5: Unlocking multimodal understanding across millions of tokens of con-
+  text, 2024. URL https://arxiv.org/abs/2403.05530.
+
+Chaoqun He, Renjie Luo, Yuzhuo Bai, Shengding Hu, Zhen Thai, Junhao Shen, Jinyi Hu, Xu Han,
+  Yujie Huang, Yuxiang Zhang, Jie Liu, Lei Qi, Zhiyuan Liu, and Maosong Sun. OlympiadBench:
+  A challenging benchmark for promoting AGI with olympiad-level bilingual multimodal scien-
+  tific problems. In Lun-Wei Ku, Andre Martins, and Vivek Srikumar (eds.), Proceedings of the
+  62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Pa-
+  pers), pp. 3828–3850, Bangkok, Thailand, August 2024. Association for Computational Linguis-
+  tics. doi: 10.18653/v1/2024.acl-long.211. URL https://aclanthology.org/2024.
+  acl-long.211/.
+
+Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob
+  Steinhardt. Measuring Massive Multitask Language Understanding. In International Confer-
+  ence on Learning Representations, 2021. URL https://openreview.net/forum?id=
+  d7KBjmI3GmQ.
+
+
+                                               11
+Published as a conference paper at ICLR 2026
+
+
+
+
+Danny Hernandez, Tom Brown, Tom Conerly, Nova DasSarma, Dawn Drain, Sheer El-Showk, Nel-
+  son Elhage, Zac Hatfield-Dodds, Tom Henighan, Tristan Hume, Scott Johnston, Ben Mann,
+  Chris Olah, Catherine Olsson, Dario Amodei, Nicholas Joseph, Jared Kaplan, and Sam Mc-
+  Candlish. Scaling Laws and Interpretability of Learning from Repeated Data, 2022. URL
+  https://arxiv.org/abs/2205.10487.
+
+Audrey Huang, Adam Block, Qinghua Liu, Nan Jiang, Akshay Krishnamurthy, and Dylan J Fos-
+  ter. Is Best-of-N the Best of Them? Coverage, Scaling, and Optimality in Inference-Time
+  Alignment. In Forty-second International Conference on Machine Learning, 2025. URL
+  https://openreview.net/forum?id=QnjfkhrbYK.
+
+Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B. Brown, Benjamin Chess, Rewon Child,
+   Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling Laws for Neural Language
+   Models, 2020. URL https://arxiv.org/abs/2001.08361.
+
+Tomasz Korbak, Ethan Perez, and Christopher Buckley. RL with KL penalties is better viewed
+  as Bayesian inference. In Yoav Goldberg, Zornitsa Kozareva, and Yue Zhang (eds.), Find-
+  ings of the Association for Computational Linguistics: EMNLP 2022, pp. 1083–1091, Abu
+  Dhabi, United Arab Emirates, December 2022. Association for Computational Linguistics.
+  doi: 10.18653/v1/2022.findings-emnlp.77. URL https://aclanthology.org/2022.
+  findings-emnlp.77/.
+
+Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E.
+ Gonzalez, Hao Zhang, and Ion Stoica. Efficient Memory Management for Large Language Model
+ Serving with PagedAttention, 2023. URL https://arxiv.org/abs/2309.06180.
+
+Yaniv Leviathan, Matan Kalman, and Yossi Matias. Fast inference from transformers via speculative
+  decoding. In Proceedings of the 40th International Conference on Machine Learning, ICML’23.
+  JMLR.org, 2023.
+
+Aitor Lewkowycz, Anders Johan Andreassen, David Dohan, Ethan Dyer, Henryk Michalewski,
+  Vinay Venkatesh Ramasesh, Ambrose Slone, Cem Anil, Imanol Schlag, Theo Gutman-Solo,
+  Yuhuai Wu, Behnam Neyshabur, Guy Gur-Ari, and Vedant Misra. Solving Quantitative Rea-
+  soning Problems with Language Models. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave,
+  and Kyunghyun Cho (eds.), Advances in Neural Information Processing Systems, 2022. URL
+  https://openreview.net/forum?id=IFXTZERXdM7.
+
+Yuhui Li, Fangyun Wei, Chao Zhang, and Hongyang Zhang. EAGLE-2: Faster inference of lan-
+  guage models with dynamic draft trees. In Empirical Methods in Natural Language Processing,
+  2024.
+
+Yuhui Li, Fangyun Wei, Chao Zhang, and Hongyang Zhang. Eagle-3: Scaling up inference accel-
+  eration of large language models via training-time test, 2025. URL https://arxiv.org/
+  abs/2503.01840.
+
+Baohao Liao, Yuhui Xu, Hanze Dong, Junnan Li, Christof Monz, Silvio Savarese, Doyen Sahoo,
+  and Caiming Xiong. Reward-guided speculative decoding for efficient LLM reasoning. In Forty-
+  second International Conference on Machine Learning, 2025. URL https://openreview.
+  net/forum?id=AVeskAAETB.
+
+Hunter Lightman, Vineet Kosaraju, Yuri Burda, Harrison Edwards, Bowen Baker, Teddy Lee, Jan
+  Leike, John Schulman, Ilya Sutskever, and Karl Cobbe. Let’s verify step by step. In The Twelfth
+  International Conference on Learning Representations, 2024. URL https://openreview.
+  net/forum?id=v8L0pN6EOi.
+
+Jiahao Liu, Qifan Wang, Jingang Wang, and Xunliang Cai. Speculative decoding via early-exiting
+   for faster LLM inference with Thompson sampling control mechanism. In Lun-Wei Ku, Andre
+   Martins, and Vivek Srikumar (eds.), Findings of the Association for Computational Linguistics:
+   ACL 2024, pp. 3027–3043, Bangkok, Thailand, August 2024. Association for Computational
+   Linguistics. doi: 10.18653/v1/2024.findings-acl.179. URL https://aclanthology.org/
+   2024.findings-acl.179/.
+
+
+                                               12
+Published as a conference paper at ICLR 2026
+
+
+
+
+Youssef Mroueh and Apoorva Nitsure. Information Theoretic Guarantees For Policy Alignment In
+  Large Language Models. Transactions on Machine Learning Research, 2025. ISSN 2835-8856.
+  URL https://openreview.net/forum?id=Uz9J77Riul.
+Sidharth Mudgal, Jong Lee, Harish Ganapathy, YaGuang Li, Tao Wang, Yanping Huang, Zhifeng
+  Chen, Heng-Tze Cheng, Michael Collins, Trevor Strohman, Jilin Chen, Alex Beutel, and Ah-
+  mad Beirami. Controlled Decoding from Language Models. In ICML, 2024. URL https:
+  //openreview.net/forum?id=bVIcZb7Qa0.
+Niklas Muennighoff, Alexander M Rush, Boaz Barak, Teven Le Scao, Nouamane Tazi, Aleksandra
+  Piktus, Sampo Pyysalo, Thomas Wolf, and Colin Raffel. Scaling Data-Constrained Language
+  Models. In Thirty-seventh Conference on Neural Information Processing Systems, 2023. URL
+  https://openreview.net/forum?id=j5BuTrEj35.
+Niklas Muennighoff, Zitong Yang, Weijia Shi, Xiang Lisa Li, Li Fei-Fei, Hannaneh Hajishirzi, Luke
+  Zettlemoyer, Percy Liang, Emmanuel Candès, and Tatsunori Hashimoto. s1: Simple test-time
+  scaling, 2025. URL https://arxiv.org/abs/2501.19393.
+OpenAI, Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Floren-
+  cia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, Red
+  Avila, Igor Babuschkin, Suchir Balaji, Valerie Balcom, Paul Baltescu, Haiming Bao, Moham-
+  mad Bavarian, Jeff Belgum, Irwan Bello, Jake Berdine, Gabriel Bernadett-Shapiro, Christopher
+  Berner, Lenny Bogdonoff, Oleg Boiko, Madelaine Boyd, Anna-Luisa Brakman, Greg Brock-
+  man, Tim Brooks, Miles Brundage, Kevin Button, Trevor Cai, Rosie Campbell, Andrew Cann,
+  Brittany Carey, Chelsea Carlson, Rory Carmichael, Brooke Chan, Che Chang, Fotis Chantzis,
+  Derek Chen, Sully Chen, Ruby Chen, Jason Chen, Mark Chen, Ben Chess, Chester Cho, Casey
+  Chu, Hyung Won Chung, Dave Cummings, Jeremiah Currier, Yunxing Dai, Cory Decareaux,
+  Thomas Degry, Noah Deutsch, Damien Deville, Arka Dhar, David Dohan, Steve Dowling, Sheila
+  Dunning, Adrien Ecoffet, Atty Eleti, Tyna Eloundou, David Farhi, Liam Fedus, Niko Felix,
+  Simón Posada Fishman, Juston Forte, Isabella Fulford, Leo Gao, Elie Georges, Christian Gib-
+  son, Vik Goel, Tarun Gogineni, Gabriel Goh, Rapha Gontijo-Lopes, Jonathan Gordon, Morgan
+  Grafstein, Scott Gray, Ryan Greene, Joshua Gross, Shixiang Shane Gu, Yufei Guo, Chris Hal-
+  lacy, Jesse Han, Jeff Harris, Yuchen He, Mike Heaton, Johannes Heidecke, Chris Hesse, Alan
+  Hickey, Wade Hickey, Peter Hoeschele, Brandon Houghton, Kenny Hsu, Shengli Hu, Xin Hu,
+  Joost Huizinga, Shantanu Jain, Shawn Jain, Joanne Jang, Angela Jiang, Roger Jiang, Haozhun
+  Jin, Denny Jin, Shino Jomoto, Billie Jonn, Heewoo Jun, Tomer Kaftan, Łukasz Kaiser, Ali Ka-
+  mali, Ingmar Kanitscheider, Nitish Shirish Keskar, Tabarak Khan, Logan Kilpatrick, Jong Wook
+  Kim, Christina Kim, Yongjik Kim, Jan Hendrik Kirchner, Jamie Kiros, Matt Knight, Daniel
+  Kokotajlo, Łukasz Kondraciuk, Andrew Kondrich, Aris Konstantinidis, Kyle Kosic, Gretchen
+  Krueger, Vishal Kuo, Michael Lampe, Ikai Lan, Teddy Lee, Jan Leike, Jade Leung, Daniel
+  Levy, Chak Ming Li, Rachel Lim, Molly Lin, Stephanie Lin, Mateusz Litwin, Theresa Lopez,
+  Ryan Lowe, Patricia Lue, Anna Makanju, Kim Malfacini, Sam Manning, Todor Markov, Yaniv
+  Markovski, Bianca Martin, Katie Mayer, Andrew Mayne, Bob McGrew, Scott Mayer McKinney,
+  Christine McLeavey, Paul McMillan, Jake McNeil, David Medina, Aalok Mehta, Jacob Menick,
+  Luke Metz, Andrey Mishchenko, Pamela Mishkin, Vinnie Monaco, Evan Morikawa, Daniel
+  Mossing, Tong Mu, Mira Murati, Oleg Murk, David Mély, Ashvin Nair, Reiichiro Nakano, Ra-
+  jeev Nayak, Arvind Neelakantan, Richard Ngo, Hyeonwoo Noh, Long Ouyang, Cullen O’Keefe,
+  Jakub Pachocki, Alex Paino, Joe Palermo, Ashley Pantuliano, Giambattista Parascandolo, Joel
+  Parish, Emy Parparita, Alex Passos, Mikhail Pavlov, Andrew Peng, Adam Perelman, Filipe
+  de Avila Belbute Peres, Michael Petrov, Henrique Ponde de Oliveira Pinto, Michael, Pokorny,
+  Michelle Pokrass, Vitchyr H. Pong, Tolly Powell, Alethea Power, Boris Power, Elizabeth Proehl,
+  Raul Puri, Alec Radford, Jack Rae, Aditya Ramesh, Cameron Raymond, Francis Real, Kendra
+  Rimbach, Carl Ross, Bob Rotsted, Henri Roussez, Nick Ryder, Mario Saltarelli, Ted Sanders,
+  Shibani Santurkar, Girish Sastry, Heather Schmidt, David Schnurr, John Schulman, Daniel Sel-
+  sam, Kyla Sheppard, Toki Sherbakov, Jessica Shieh, Sarah Shoker, Pranav Shyam, Szymon Sidor,
+  Eric Sigler, Maddie Simens, Jordan Sitkin, Katarina Slama, Ian Sohl, Benjamin Sokolowsky,
+  Yang Song, Natalie Staudacher, Felipe Petroski Such, Natalie Summers, Ilya Sutskever, Jie Tang,
+  Nikolas Tezak, Madeleine B. Thompson, Phil Tillet, Amin Tootoonchian, Elizabeth Tseng, Pre-
+  ston Tuggle, Nick Turley, Jerry Tworek, Juan Felipe Cerón Uribe, Andrea Vallone, Arun Vi-
+  jayvergiya, Chelsea Voss, Carroll Wainwright, Justin Jay Wang, Alvin Wang, Ben Wang, Jonathan
+
+                                               13
+Published as a conference paper at ICLR 2026
+
+
+
+
+  Ward, Jason Wei, CJ Weinmann, Akila Welihinda, Peter Welinder, Jiayi Weng, Lilian Weng,
+  Matt Wiethoff, Dave Willner, Clemens Winter, Samuel Wolrich, Hannah Wong, Lauren Work-
+  man, Sherwin Wu, Jeff Wu, Michael Wu, Kai Xiao, Tao Xu, Sarah Yoo, Kevin Yu, Qiming
+  Yuan, Wojciech Zaremba, Rowan Zellers, Chong Zhang, Marvin Zhang, Shengjia Zhao, Tianhao
+  Zheng, Juntang Zhuang, William Zhuk, and Barret Zoph. GPT-4 Technical Report, 2024. URL
+  https://arxiv.org/abs/2303.08774.
+Long Ouyang, Jeff Wu, Xu Jiang, Diogo Almeida, Carroll L. Wainwright, Pamela Mishkin, Chong
+  Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, John Schulman, Jacob Hilton, Fraser Kel-
+  ton, Luke Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul Christiano, Jan Leike,
+  and Ryan Lowe. Training language models to follow instructions with human feedback. In Ad-
+  vances in Neural Information Processing Systems, 2022. URL https://arxiv.org/abs/
+  2203.02155.
+Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor
+  Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas Köpf, Ed-
+  ward Yang, Zach DeVito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy, Benoit Steiner,
+  Lu Fang, Junjie Bai, and Soumith Chintala. PyTorch: An Imperative Style, High-Performance
+  Deep Learning Library, 2019. URL https://arxiv.org/abs/1912.01703.
+Jiahao Qiu, Yifu Lu, Yifan Zeng, Jiacheng Guo, Jiayi Geng, Chenhao Zhu, Xinzhe Juan, Ling
+   Yang, Huazheng Wang, Kaixuan Huang, Yue Wu, and Mengdi Wang. TreeBoN: Enhancing
+   Inference-Time Alignment with Speculative Tree-Search and Best-of-N Sampling, 2025. URL
+   https://arxiv.org/abs/2410.16033.
+Yuxiao Qu, Tianjun Zhang, Naman Garg, and Aviral Kumar. Recursive Introspection: Teaching
+  Language Model Agents How to Self-Improve. In The Thirty-eighth Annual Conference on Neu-
+  ral Information Processing Systems, 2024. URL https://openreview.net/forum?id=
+  DRC9pZwBwR.
+Qwen Team. Qwen2.5: A Party of Foundation Models, September 2024. URL https://
+ qwenlm.github.io/blog/qwen2.5/.
+Qwen Team. Qwen3 Technical Report, 2025. URL https://arxiv.org/abs/2505.09388.
+Joar Max Viktor Skalse, Nikolaus H. R. Howe, Dmitrii Krasheninnikov, and David Krueger. Defin-
+  ing and Characterizing Reward Gaming. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave,
+  and Kyunghyun Cho (eds.), Advances in Neural Information Processing Systems, 2022. URL
+  https://openreview.net/forum?id=yb3HOXO3lX2.
+Charlie Victor Snell, Jaehoon Lee, Kelvin Xu, and Aviral Kumar. Scaling LLM test-time compute
+  optimally can be more effective than scaling parameters for reasoning. In The Thirteenth Interna-
+  tional Conference on Learning Representations, 2025. URL https://openreview.net/
+  forum?id=4FWAwZtd2n.
+Ziteng Sun, Ananda Theertha Suresh, Jae Hun Ro, Ahmad Beirami, Himanshu Jain, and Felix
+  Yu. SpecTr: Fast Speculative Decoding via Optimal Transport. In Thirty-seventh Conference on
+  Neural Information Processing Systems, 2023. URL https://openreview.net/forum?
+  id=SdYHLTCC5J.
+Ziteng Sun, Uri Mendlovic, Yaniv Leviathan, Asaf Aharoni, Jae Hun Ro, Ahmad Beirami, and
+  Ananda Theertha Suresh. Block Verification Accelerates Speculative Decoding. In The Thirteenth
+  International Conference on Learning Representations, 2025. URL https://openreview.
+  net/forum?id=frsg32u0rO.
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Niko-
+  lay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, Dan Bikel, Lukas Blecher,
+  Cristian Canton Ferrer, Moya Chen, Guillem Cucurull, David Esiobu, Jude Fernandes, Jeremy
+  Fu, Wenyin Fu, Brian Fuller, Cynthia Gao, Vedanuj Goswami, Naman Goyal, Anthony Hartshorn,
+  Saghar Hosseini, Rui Hou, Hakan Inan, Marcin Kardas, Viktor Kerkez, Madian Khabsa, Isabel
+  Kloumann, Artem Korenev, Punit Singh Koura, Marie-Anne Lachaux, Thibaut Lavril, Jenya Lee,
+  Diana Liskovich, Yinghai Lu, Yuning Mao, Xavier Martinet, Todor Mihaylov, Pushkar Mishra,
+
+
+                                                14
+Published as a conference paper at ICLR 2026
+
+
+
+
+  Igor Molybog, Yixin Nie, Andrew Poulton, Jeremy Reizenstein, Rashi Rungta, Kalyan Saladi,
+  Alan Schelten, Ruan Silva, Eric Michael Smith, Ranjan Subramanian, Xiaoqing Ellen Tan, Binh
+  Tang, Ross Taylor, Adina Williams, Jian Xiang Kuan, Puxin Xu, Zheng Yan, Iliyan Zarov, Yuchen
+  Zhang, Angela Fan, Melanie Kambadur, Sharan Narang, Aurelien Rodriguez, Robert Stojnic,
+  Sergey Edunov, and Thomas Scialom. Llama 2: Open foundation and fine-tuned chat models,
+  2023. URL https://arxiv.org/abs/2307.09288.
+Claudio Mayrink Verdun, Alex Oesterling, Himabindu Lakkaraju, and Flavio P. Calmon. Soft
+  Best-of-n Sampling for Model Alignment, 2025. URL https://arxiv.org/abs/2505.
+  03156.
+Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc V Le, Ed H. Chi, Sharan Narang, Aakanksha
+  Chowdhery, and Denny Zhou. Self-Consistency Improves Chain of Thought Reasoning in Lan-
+  guage Models. In The Eleventh International Conference on Learning Representations, 2023.
+  URL https://openreview.net/forum?id=1PL1NIMMrw.
+Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Clement Delangue, Anthony Moi,
+  Pierric Cistac, Tim Rault, Remi Louf, Morgan Funtowicz, Joe Davison, Sam Shleifer, Patrick
+  von Platen, Clara Ma, Yacine Jernite, Julien Plu, Canwen Xu, Teven Le Scao, Sylvain Gugger,
+  Mariama Drame, Quentin Lhoest, and Alexander Rush. Transformers: State-of-the-art natural
+  language processing. In Qun Liu and David Schlangen (eds.), Proceedings of the 2020 Confer-
+  ence on Empirical Methods in Natural Language Processing: System Demonstrations, pp. 38–
+  45, Online, October 2020. Association for Computational Linguistics. doi: 10.18653/v1/2020.
+  emnlp-demos.6. URL https://aclanthology.org/2020.emnlp-demos.6/.
+Siyuan Yan, Mo Zhu, Guo qing Jiang, Jianfei Wang, Jiaxing Chen, Wentai Zhang, Xiang Liao, Xiao
+  Cui, Chen Zhang, Zhuoran Song, and Ran Zhu. Scaling laws for speculative decoding, 2025.
+  URL https://arxiv.org/abs/2505.07858.
+Kevin Yang and Dan Klein. FUDGE: Controlled Text Generation With Future Discriminators.
+  In Proceedings of the 2021 Conference of the North American Chapter of the Association for
+  Computational Linguistics: Human Language Technologies. Association for Computational Lin-
+  guistics, 2021. doi: 10.18653/v1/2021.naacl-main.276. URL http://dx.doi.org/10.
+  18653/v1/2021.naacl-main.276.
+Qiyuan Zhang, Fuyuan Lyu, Zexu Sun, Lei Wang, Weixu Zhang, Wenyue Hua, Haolun Wu, Zhihan
+  Guo, Yufei Wang, Niklas Muennighoff, Irwin King, Xue Liu, and Chen Ma. A Survey on Test-
+  Time Scaling in Large Language Models: What, How, Where, and How Well?, 2025. URL
+  https://arxiv.org/abs/2503.24235.
+Ruiqi Zhang, Momin Haider, Ming Yin, Jiahao Qiu, Mengdi Wang, Peter Bartlett, and An-
+  drea Zanette. Accelerating Best-of-N via Speculative Rejection. In 2nd Workshop on Ad-
+  vancing Neural Network Training: Computational Efficiency, Scalability, and Resource Op-
+  timization (WANT@ICML 2024), 2024. URL https://openreview.net/forum?id=
+  dRp8tAIPhj.
+
+
+
+
+                                               15
+Published as a conference paper at ICLR 2026
+
+
+
+
+C ONTENTS
+
+1   Introduction                                                                                     1
+
+2   Related Work                                                                                     2
+
+3   Background                                                                                       3
+
+4   Guided Speculative Inference                                                                     4
+
+5   Experiments                                                                                      6
+    5.1   Performance on Reasoning Benchmarks . . . . . . . . . . . . . . . . . . . . . . .          8
+    5.2   GSI Reasoning Traces . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .      10
+    5.3   Ablations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .   10
+
+6   Discussion                                                                                      10
+
+A Proofs                                                                                            17
+    A.1 Proof of Theorem 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .      17
+    A.2 Proof of Theorem 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .      18
+
+B Implementation Details                                                                            21
+    B.1 System Prompts . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .      21
+    B.2 Generation Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .      21
+
+C Additional Experiments                                                                            21
+    C.1 Extended Accuracy Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .       21
+    C.2 Acceptance Ratios . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .       21
+    C.3 Ablation over β . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .     21
+    C.4 Ablation over u . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .     22
+    C.5 Discussion of Theorem 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .       22
+    C.6 Runtime Comparison . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .        25
+    C.7 Reasoning Traces . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .      25
+
+D Assets                                                                                            27
+    D.1 Hardware . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .      27
+    D.2 Libraries . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .   27
+    D.3 Code Repository . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .       28
+
+E Use of Large Language Models                                                                      28
+
+
+
+
+                                                  16
+Published as a conference paper at ICLR 2026
+
+
+
+
+A       P ROOFS
+A.1     P ROOF OF T HEOREM 1
+
+Theorem 1. Let x ∈ X . Assume that the coverage assumption (Assumption 1) holds. Let u ∈ R be
+an acceptance threshold (cmp. Algorithm 1), and ϵ > 0 be an arbitrary accuracy. Assume that
+                                                            
+                             χ2 πB (· | x) ∥ πS (· | x) + 1 e2β∥r∥∞ − 1
+                       n≥                                               .
+                                                eϵ − 1
+Then,                                                        
+                              KL πβ,B (· | x) ∥ π̃GSI (· | x) ≤ ϵ.
+
+Proof. By Lemma 1 in (Verdun et al., 2025) (which equally holds for countable spaces Y), we have
+                                                  h              πB (y | x) i
+                                  πS (y | x) exp β r(x, y) + log
+                                                                 πS (y | x)
+     π̃GSI (y | x) ≥      h                          i                   (y′ |x)
+                                            πB (y|x)
+                     1
+                                                       + n Ey′ ∼πS (·|x) ππBS (y
+                                                         n−1                             β r(x,y ′ )
+                                                                                                     
+                     n exp β r(x, y) + log πS (y|x)                              ′ |x) e
+
+
+                                                       πB (y | x) eβ r(x,y)
+                         =                                                                                      .
+                              1 πB (y | x) β r(x,y)                 n−1               β r(x,y ′ )
+                                                                                                           
+                              n π (y | x) e                   +      n Ey ∼πB (·|x) e
+                                                                         ′
+                                 S
+Hence
+                 X                           πβ,B (y | x)
+KL πβ,B ∥π̃GSI =            πβ,B (y | x) log
+                       y
+                                              π̃GSI (y | x)
+                                                                                                                                  
+                                                          βr(x,y) 1 πB (y | x) βr(x,y)
+                                          
+                                                                                                  n−1                  βr(x,y ′ )
+    X πB (y | x)eβr(x,y)                    π
+                                           B   (y | x) e            n π (y | x)  e            +   n  E   ′
+                                                                                                         y ∼πB (·|x) [e           ]
+                                                                        S                                                           
+  ≤                              ′
+                           βr(x,y ) ]
+                                      log 
+                                                                                                        βr(x,y)
+                                                                                                                                    
+     y
+        E y ′ ∼πB (·|x) [e                                   E y ′ ∼π (·|x) [e
+                                                                      B
+                                                                               βr(x,y ′ ) ]πB (y | x) e                             
+
+
+                  πB (y | x)eβr(x,y)                                                eβ r(x,y)
+                                                                                                                         
+                                                       1 πB (y | x)
+        X
+    =                                        log                                                           + n−1
+         y
+                 Ey′ ∼πB (·|x) [eβr(x,y′ ) ]           n π (y | x)
+                                                          S                   Ey′ ∼πB (·|x) [eβ r(x,y′ ) ]    n
+
+                                                                                  !           !
+             1
+                    X πB (y | x)2                      e2β r(x,y)                             n−1
+≤ log        n                                                2 +                             n                                (Jensen’s inequality)
+              y
+                          πS (y | x)
+                                  Ey′ ∼πB (·|x) [eβ r(x,y′ ) ]
+                                                                 !
+                      2
+           2β ∥r∥   χ   π B (· | x) ∥ π S (· | x)    + 1      n−1
+≤ log n1 e        ∞
+                                                     2 + n
+                        Ey′ ∼πB (·|x) [eβ r(x,y′ ) ]
+                                                    !
+             χ2 πB (·|x) ∥ πS (·|x) +1 e2β∥r∥∞
+≤ log                            n                        + n−1
+                                                             n            ,
+
+using the fact that
+                                                                                  ′
+                                      Ey′ ∼πB (·|x) [eβ r(x,y ) ] ≥ 1
+since r(x, y ′ ) ≥ 0. Now for ϵ > 0, we have
+                                                                                                         !
+                                              χ2 πB (·|x) ∥ πS (·|x) +1 e2β∥r∥∞
+                                       log                            n                             + n−1
+                                                                                                       n            ≤ ϵ
+                                                                    
+                                              χ2 πB (·|x) ∥ πS (·|x) +1 e2β∥r∥∞
+                    ⇔                                                 n                    + 1 − n1                 ≤ eϵ ,
+                                                                                        
+                                                             χ2   πB (·|x) ∥ πS (·|x) +1 e2β∥r∥∞ −1
+                    ⇔                              1+                                 n                             ≤ eϵ ,
+                                                                                        
+                                                             χ2   πB (·|x) ∥ πS (·|x) +1 e2β∥r∥∞ −1
+                    ⇔                                                                 n                             ≤ eϵ − 1,
+                                                                      
+                                         χ2 πB (· | x) ∥ πS (· | x) + 1 e2β∥r∥∞ − 1
+                    ⇔                                                               ≤ n.
+                                                            eϵ − 1
+
+
+
+                                                                     17
+Published as a conference paper at ICLR 2026
+
+
+
+
+A.2    P ROOF OF T HEOREM 2
+
+Assumption 2. Let Y≥ = {y : r̃(y) ≥ u}. Assume that
+                        1
+                               Z                       Z
+                                      ∗
+                     n (Y )         r   (y)dπ n
+                                             β,B (y) ≥    r∗ (y)dπβ,B
+                                                                  n
+                                                                      (y),
+                    πβ,B   ≥     Y≥                     Y
+
+           n
+in words: πβ,B has higher average golden rewards r∗ on the set Y≥ than on the entire set Y .
+Furthermore, assume that
+                                          n
+                                         πβ,B (Y≥ ) ≥ π̃GSI (Y≥ ),
+           n
+in words: πβ,B is more likely to generate samples with high tilted rewards than π̃GSI .
+Theorem 2. Let x ∈ X . Assume that EπGSI [r∗ ] < ∞ and Eπβ,B [r∗ ] < ∞ (here we implicitly
+assume that distributions and rewards are conditioned on x, which we omit for ease of notation).
+Furthermore, assume that Assumptions 1 and 2 hold. Denote by p(u) the acceptance probability of
+GSI. Then
+                           ∥r∗ ∥∞ h           1                              1              1               1 i
+Eπβ,B [r∗ ]−EπGSI [r∗ ] ≤ √             p(u) 2 eβ∥r∥∞ χ2 (πB ∥πS ) + 1 2 + (1 − p(u)) 4 CV(eβr )2 + 1 2 ,
+                                n
+                    r
+                         Vary′ ∼π (·|x) [eβr(x,y′ ) ]                                   ∗          ∗ n→∞
+where CV(eβr ) :=                B
+                                                     2 . In particular, we have EπGSI [r ]−Eπβ,B [r ] −
+                                                                                                      −−−→ 0
+                        (Ey′ ∼πB (·|x) [eβr(x,y′ ) ])
+             √
+at rate O(1/ n).
+
+Proof. Denote by Y≥ ⊂ Y the set where r̃(y) ≥ u, and Y< = Y \ Y≥ . Let x ∈ X . We note that for
+y ∈ Y≥ , we have
+                                                             n
+                          πGSI (y) = π̃GSI (y) + π̃GSI (Y< )πβ,B (y),
+since any y ∈ Y≥ can be generated either from π̃GSI directly (in which case the sample is accepted
+by the algorithm), or the sample from π̃GSI is rejected (which happens with probability π̃GSI (Y< )),
+                                        n
+in which case y can be generated with πβ,B  . Similarly, for y ∈ Y< ,
+                                                             n
+                                      πGSI (y) = π̃GSI (Y< )πβ,B (y),                                      (3)
+as y ∈ Y< can only be generated by πGSI if a sample from π̃GSI is first rejected and then y is
+              n
+generated by πβ,B . Thus,
+
+
+Eπβ,B [r∗ ] − EπGSI [r∗ ] =
+Eπβ,B [1Y≥ r∗ ] − Eπ̃GSI [1Y≥ r∗ ] − π̃GSI (Y< )Eπβ,B
+                                                  n   [1Y≥ r∗ ] + Eπβ,B [1Y< r∗ ] − π̃GSI (Y< )Eπβ,B
+                                                                                                 n   [1Y< r∗ ] =
+Eπβ,B [1Y≥ r∗ ] − Eπ̃GSI [1Y≥ r∗ ] + Eπβ,B [1Y< r∗ ] − Eπβ,B
+                                                         n   [1Y< r∗ ]+
+                                                           π̃GSI (Y≥ )Eπβ,B
+                                                                        n   [1Y< r∗ ] − π̃GSI (Y< )Eπβ,B
+                                                                                                     n   [1Y≥ r∗ ] =
+Eπβ,B [1Y≥ r∗ ] − Eπ̃GSI [1Y≥ r∗ ] + Eπβ,B [1Y< r∗ ] − Eπβ,B
+                                                         n   [1Y< r∗ ]+
+π̃GSI (Y≥ )Eπβ,B
+             n   [1Y< r∗ ] + π̃GSI (Y≥ )Eπβ,B
+                                          n   [1Y≥ r∗ ] − π̃GSI (Y< )Eπβ,B
+                                                                       n   [1Y≥ r∗ ] − π̃GSI (Y≥ )Eπβ,B
+                                                                                                    n   [1Y≥ r∗ ] =
+Eπβ,B [1Y≥ r∗ ] − Eπ̃GSI [1Y≥ r∗ ] + Eπβ,B [1Y< r∗ ] − Eπβ,B
+                                                         n   [1Y< r∗ ] + π̃GSI (Y≥ )Eπβ,B
+                                                                                      n   [r∗ ] − Eπβ,B
+                                                                                                    n   [1Y≥ r∗ ].
+|               {z              } |                  {z             } |                    {z                  }
+                (a)                                  (b)                                       (c)
+
+
+Step 1: Bounding (a). We have by Cauchy-Schwarz:
+ (a) = Ey∼πβ,B (·|x) 1Y≥ (y) r∗ (x, y) − Ey∼π̃GSI (·|x) 1Y≥ (y) r∗ (x, y)
+                                                                          
+
+              Z                            21 Z                                     2                ! 21
+                                                      π     (y  | x)  − π̃     (y | x)
+     ≤ ∥r∗ ∥∞       1Y≥ (y) dπ̃GSI (y | x)              β,B                GSI
+                                                                                          π̃GSI (dy | x)
+                                                               π̃GSI (y | x)
+                               1
+                                                                  1/2
+     = ∥r∗ ∥∞ (π̃GSI (Y≥ | x)) 2 χ2 πβ,B (· | x) π̃GSI (· | x)            .                                (4)
+
+
+                                                     18
+Published as a conference paper at ICLR 2026
+
+
+
+
+By Lemma 1 from (Verdun et al., 2025) we have
+
+
+          χ2 πβ,B (· | x) π̃GSI (· | x)
+                                             
+                                                                                                              (5)
+                           2
+             πβ,B (y | x)
+           Z
+       =                     dy − 1
+              π̃GSI (y | x)
+                                                 2
+                        πB (y | x) eβ r(x,y)
+           Z
+       =                                   2                  dy − 1
+              Ey′ ∼πB (·|x) [eβr(x,y′ ) ] π̃GSI (y | x)
+                                        2 1 πB (y|x) βr(x,y) n−1                                 ′
+   Lemma 1
+           Z
+                πB (y | x) eβr(x,y)              n πS (y|x) e           + n Ey′ ∼πB (·|x) [eβr(x,y ) ]
+     ≤                                     2                                                          dy − 1
+              Ey′ ∼πB (·|x) [eβr(x,y′ ) ]                         πB (y | x) eβr(x,y)
+                         1                         πB (y | x)2 2βr             n−1
+                                              Z
+       =                                    2                    e dy +              − 1
+                                     ′)             π   (y  | x)                 n
+                                          
+           n Ey′ ∼πB (·|x) [e βr(x,y    ]             S
+
+                     e2β∥r∥∞                  
+                                                  2
+                                                                                     1
+       ≤                                    2   χ   π B  (· | x)∥π S (· | x)   + 1   −
+                                     ′)                                                n
+                                          
+           n Ey′ ∼πB (·|x) [e βr(x,y    ]
+           1 2β∥r∥∞  2                                       
+       ≤ e              χ πB (· | x)∥πS (· | x) + 1 .                                                         (6)
+           n
+
+
+Plugging equation 6 into equation 4 yields
+
+
+
+                                                                                          12
+                               ∗                 1 2β∥r∥∞ 2
+                                                    1                        
+                  (a) ≤ ∥r ∥∞ (π̃GSI (Y≥ | x))     e2
+                                                             χ (πB ∥πS ) + 1
+                                                 n
+                        ∥r∗ ∥∞      1                        1
+                      = √      p(u) 2 eβ∥r∥∞ χ2 (πB ∥πS ) + 1 2 .                                            (7)
+                            n
+
+
+Step 2: Bounding (b). Similar to the bound for (a), we get
+
+                                         n
+                       πβ,B (y | x) − πβ,B   (y | x) n
+        Z
+(b) =       1Y< (y)r∗ (x, y)     n                  πβ,B (dy | x)
+                               πβ,B (y | x)
+                                                                                !2               12
+                                          12 Z                       n
+                                                    π     (y | x) − π    (y | x)
+     Z
+        1Y < (y)r∗ (x, y)2 πβ,B
+                            n                         β,B            β,B             n
+   ≤                            (dy | x)     
+                                                               n (y | x)            πβ,B (dy | x)
+                                                             πβ,B
+                                                                      !2                21
+                                                        n
+                                        πβ,B (y | x) − πβ,B (y | x)
+                                    Z
+          (1Y < ) 2 ∥r∗ ∥∞
+                     1
+      n                                                                      n
+   ≤ πβ,B                          
+                                                 n                          πβ,B (dy | x)
+                                               πβ,B (y | x)
+                1                         1
+   < (1 − p(u)) 4 ∥r∗ ∥∞ χ2 (πβ,B ||πβ,B
+                                     n
+                                         ) 2                                                                 (8)
+
+
+by Cauchy-Schwarz. In the last step, we used the second part of Assumption 2, which implies
+ n
+πβ,B (Y< ) < π̃GSI (Y< ), hence
+
+                                        1               1          1                1
+                           n                            n
+                          πβ,B (Y< ) 2 < π̃GSI (Y< ) 4 πβ,B (Y< ) 4 = πGSI (Y< ) 4
+
+
+by equation 3.
+
+
+                                                        19
+Published as a conference paper at ICLR 2026
+
+
+
+
+Again, using Lemma 1 from (Verdun et al., 2025) we get
+                       πβ,B (y | x)2
+                     Z
+  2         n
+ χ (πβ,B ||πβ,B ) =      n (y | x) dy − 1
+                       πβ,B
+                                              2 1 βr(x,y) n−1                      ′
+                          πB (y | x) eβr(x,y)        n e  + n Ey′ ∼πB (·|x) [eβr(x,y ) ]
+                     Z
+             Lemma 1
+               ≤                                  2                                     dy − 1
+                        Ey′ ∼π (·|x) [eβr(x,y′ ) ]        πB (y | x) eβr(x,y)
+                                     B
+                                                    ′
+                      1 E   y ′ ∼π
+                              B (·|x)
+                                      [e2βr(x,y ) ]   n−1
+                  =                                +     −1
+                      n Ey′ ∼π (·|x) [eβr(x,y′ ) ] 2   n
+                                 B
+                                                    ′
+                    1 Ey′ ∼πB (·|x) [e2βr(x,y ) ]
+                  ≤
+                    n Ey′ ∼π (·|x) [eβr(x,y′ ) ] 2
+                                                
+                                 B
+                                                     ′
+                                                             !
+                    1       Vary′ ∼πB (·|x) [eβr(x,y ) ]
+                  =                                    2 + 1 .                                      (9)
+                    n       Ey′ ∼πB (·|x) [eβr(x,y′ ) ]
+
+Plugging equation 9 into equation 8 yields
+
+                                                                                 ′
+                                                                                             ! 12
+                        ∥r∗ ∥           1                Vary′ ∼πB (·|x) [eβr(x,y ) ]
+                   (b) ≤ √ ∞ (1 − p(u)) 4                                           2 + 1          (10)
+                            n                            Ey′ ∼πB (·|x) [eβr(x,y′ ) ]
+
+Step 3: Bounding (c). We have by Assumption 2:
+                            (c) = π̃GSI (Y≥ )Eπβ,B
+                                               n   [r∗ ] − Eπβ,B
+                                                             n   [1Y≥ r∗ ]
+                                         π̃GSI (Y≥ )
+                                           n (Y ) Eπβ,B [1Y≥ r ] − Eπβ,B [1Y≥ r ]
+                                                              ∗                ∗
+                                 ≤                   n               n
+                                         πβ,B    ≥
+
+                                 ≤ 0,                                                               (11)
+where we use the first part of Assumption 2 in the first inequality, and the second part in the second
+inequality.
+Combining equations (7), (10), and (11) gives
+
+
+                            ∥r∗ ∥∞ h      1                        1              1              1 i
+Eπβ,B [r∗ ]−EπGSI [r∗ ] ≤    √       p(u) 2 eβ∥r∥∞ χ2 (πB ∥πS ) + 1 2 + (1 − p(u)) 4 CV(eβr )2 + 1 2
+                                n
+as desired.
+
+
+Remark 3. Asymptotically, we also get
+                                                                   n→∞
+                                          EπGSI [r∗ ] − Eπβ,B [r∗ ] −−−−→ 0
+without assuming the second part in Assumption 2, since by Theorem 1 combined with Lemma 1
+from Verdun et al. (2025), we get
+                                             n→∞                         n           n→∞
+                   KL(πβ,B ||π̃GSI ) −−−−→ 0            and   KL(πβ,B ||πβ,B ) −−−−→ 0,
+which implies
+                                                π̃GSI (Y≥ ) n→∞
+                                                  n (Y ) −
+                                                πβ,B
+                                                            −−−→ 1,
+                                                        ≥
+
+assuming that πβ,B (Y≥ ) > 0. This means that term (c) in the proof of Theorem 2 converges
+                                                                                          (1Y < ) 2
+                                                                                                  1
+                                                                                       n
+to 0 (not necessarily from below). Furthermore, one could simply bound the term πβ,B
+appearing in our derivation of the bound on term (b) by 1, which avoids relying on the second part
+of Assumption 2 for term (b) and guarantees the asymptotic behaviour above.
+
+
+                                                         20
+Published as a conference paper at ICLR 2026
+
+
+
+
+B     I MPLEMENTATION D ETAILS
+This section contains additional implementation details.
+
+B.1   S YSTEM P ROMPTS
+
+We slightly adapt system prompts based on the dataset. Our base system prompt is:
+ "Please reason step by step, and put your final answer within
+\\boxed{}."
+On Minerva, we append it by
+Do not include units in your final answer.                          For example, if the
+answer is ‘5 m/s‘, write ‘\\boxed{5}‘."
+On MMLU, we instead use
+"Please reason step by step, and select the answer from the
+given choices 1, 2, 3, or 4. Respond only with the number of the
+correct answer, from 1 to 4, not with the answer itself. Put the
+index of the correct answer within \\boxed{}."
+
+B.2   G ENERATION D ETAILS
+
+We set max new tokens in vLLM to 512 (this is the maximum number of tokens per reasoning
+step). If the rewards of all draft steps lie below 0.1, we stop generation for that sample and count it
+as ”solved incorrectly”, as we have observed that such generations lead to incorrect solutions. On
+Qwen2.5-Math models, we had used a maximum number of reasoning steps of 45 (after 45 steps
+without finding a solution, the sample counts as ”solved incorrectly”). However, as Qwen3 models
+tend to generate significantly larger numbers of reasoning steps, we increased this limit to 100 on
+Qwen3. We use a maximum context window of 8192 for all three models (if a response exceeds this
+context size, it counts as ”solved incorrectly”).
+
+C     A DDITIONAL E XPERIMENTS
+C.1   E XTENDED ACCURACY R ESULTS
+
+In Tables 2 and 3, we report the average accuracies of GSI, RSD, S-BoN with πS , and S-BoN
+with πB , for both model families. While GSI outperforms RSD and S-BoN with πS on both model
+families, this difference is more significant with the Qwen3 models, since the Qwen3 draft and target
+model exhibit a larger performance difference than our Qwen2.5-Math models.
+
+C.2   ACCEPTANCE R ATIOS
+
+In Figure 5, we plot the average acceptance ratio of GSI and RSD for both Qwen2.5-Math and
+Qwen3. The acceptance ratio of GSI increases from an average 70% (Qwen2.5-Math) and 80%
+(Qwen3) to around 90% at n = 256. That of RSD is significantly higher, increasing from 90%
+(Qwen2.5-Math) resp. 95% (Qwen3) to almost 100% (n = 256), suggesting that as n increases,
+RSD collapses to soft best-of-n with πS , at least without more careful hyperparameter tuning. We
+note that more intricate acceptance threshold schedules could stabilize acceptance rates across n,
+compare Section C.4. We leave exploring such approaches for future research.
+
+C.3   A BLATION OVER β
+
+GSI relies on temperature-scaled soft best-of-n sampling with parameter β (corresponding to an
+inverse temperature) both for samples from πS , as well as for samples from πB in case the draft
+sample gets rejected. Increasing β leads to convergence to greedy best-of-n, while reducing it con-
+verges to random choice. To better understand the behaviour of GSI in terms of β, we evaluate GSI
+with Qwen2.5-Math on MATH500 for different values of β, ranging from β = 0 (i.e. ignoring r,
+
+
+                                                  21
+Published as a conference paper at ICLR 2026
+
+
+
+
+Table 2: Qwen2.5-Math: Accuracy on reasoning benchmarks (95% confidence intervals over three
+random seeds). GSI consistently outperforms RSD (Liao et al., 2025) and soft best-of-n (S-BoN)
+with the small model. S-BoN with the base model represents the target distribution. On average,
+GSI surpasses all baselines and closely approaches the performance of the base-model S-BoN. As n
+grows, performance saturates.
+
+ n      Method       MATH500      OlympiadBench       Minerva       MMLU        GSM8K        Average
+        GSI (ours)   75.3 ± 0.5     35.6 ± 1.2        27.8 ± 2.1   42.8 ± 1.6   90.3 ± 0.3   54.4 ± 1.1
+        RSD          74.0 ± 1.2     34.5 ± 0.6        24.3 ± 1.9   46.1 ± 1.7   89.0 ± 1.2   53.6 ± 1.3
+ 1
+        S-BoN (s)    71.1 ± 1.9     34.1 ± 1.5        22.1 ± 0.1   39.2 ± 0.0   85.5 ± 1.4   50.4 ± 1.0
+        S-BoN (b)    80.0 ± 3.1     32.9 ± 1.7        31.0 ± 1.6   51.7 ± 1.3   95.1 ± 0.9   58.2 ± 1.7
+        GSI (ours)   81.2 ± 0.9     39.7 ± 1.1        27.5 ± 0.3   54.1 ± 0.6   94.9 ± 0.6   59.5 ± 0.7
+        RSD          79.5 ± 1.0     40.1 ± 1.0        24.5 ± 0.8   52.4 ± 1.5   92.3 ± 0.3   57.8 ± 0.9
+ 4
+        S-BoN (s)    77.4 ± 1.5     39.6 ± 2.1        23.6 ± 0.3   47.7 ± 1.9   89.4 ± 0.4   55.5 ± 1.2
+        S-BoN (b)    83.1 ± 1.6     38.1 ± 0.6        32.5 ± 0.5   57.1 ± 0.9   95.9 ± 0.5   61.3 ± 0.8
+        GSI (ours)   82.2 ± 0.6     40.8 ± 1.3        28.2 ± 1.8   52.3 ± 1.5   96.3 ± 0.1   60.0 ± 1.1
+        RSD          80.0 ± 0.9     41.5 ± 1.6        26.4 ± 2.1   52.3 ± 1.5   93.3 ± 0.7   58.7 ± 1.4
+ 16
+        S-BoN (s)    79.7 ± 1.3     41.3 ± 0.2        25.2 ± 0.5   50.9 ± 1.2   92.0 ± 0.7   57.8 ± 0.8
+        S-BoN (b)    83.6 ± 1.3     41.1 ± 1.8        33.6 ± 2.1   56.1 ± 0.9   96.3 ± 0.6   62.1 ± 1.3
+        GSI (ours)   83.4 ± 0.5     42.0 ± 1.6        29.6 ± 0.6   52.5 ± 0.6   96.0 ± 0.6   60.7 ± 0.8
+        RSD          80.0 ± 1.8     41.7 ± 0.9        24.6 ± 0.9   52.9 ± 1.3   93.7 ± 0.7   58.6 ± 1.1
+ 64
+        S-BoN (s)    80.9 ± 1.3     42.0 ± 0.7        24.3 ± 0.8   50.8 ± 2.4   92.7 ± 0.5   58.1 ± 1.1
+        S-BoN (b)    83.4 ± 1.0     41.9 ± 0.9        33.0 ± 1.4   57.6 ± 1.6   95.9 ± 0.7   62.4 ± 1.1
+        GSI (ours)   84.1 ± 0.4     41.5 ± 0.2        30.8 ± 1.6   50.7 ± 1.4   96.2 ± 0.2   60.7 ± 0.8
+        RSD          80.4 ± 1.0     41.7 ± 0.8        24.3 ± 1.8   51.8 ± 2.0   94.5 ± 0.6   58.5 ± 1.2
+ 256
+        S-BoN (s)    80.8 ± 0.2     42.5 ± 0.3        25.9 ± 0.6   51.9 ± 1.9   92.7 ± 1.1   58.7 ± 0.9
+        S-BoN (b)    84.1 ± 0.3     41.2 ± 1.7        33.6 ± 0.9   57.3 ± 1.5   96.5 ± 0.9   62.5 ± 1.1
+
+
+
+and sampling from softmax(βr̃i ) = softmax(log(πB (yi )/πS (yi )))) to β = 1000. Figure 6 depicts
+the average acceptance ratio of GSI on MATH500 for different values of β. A sharp phase transition
+between β = 8 and β = 20 can be observed. In Figure 7 we plot the average accuracy for different
+values of β on MATH500, in terms of both n and seconds per reasoning step. While β = 20 is not
+uniformly better than other values, it achieves best accuracy overall. These figures demonstrate that
+β = 20 strikes a balance in weighing the raw reward r and the log ratio log(πB /πS ), leading to
+acceptance ratios that are neither too low nor too high and good accuracies overall.
+
+C.4    A BLATION OVER u
+
+A crucial hyperparameter in GSI is the acceptance threshold u, compare Algorithm 1. To better
+understand the behaviour of GSI with respect to u, we plot the average acceptance ratios of GSI
+with Qwen2.5-Math on MATH500 for different values of u in Figure 9, and the average accuracy
+(over n and over seconds per reasoning step) in Figure 10. As is to be expected, higher thresholds u
+tend to have lower acceptance rates and higher accuracies, as they sample from the target model πB
+more frequently. Hence, it is important to choose u in such a way that it strikes a balance between
+accuracy and latency. In Figure 11 we show an empirical Pareto frontier of u as a function of n. This
+suggests that the optimal u depends on n, and an adaptive threshold schedule {un }n could improve
+GSI in terms of accuracy-vs-latency trade-off. For simplicity, we pick a constant value u = 0.5 and
+leave exploring more intricate choices for future research.
+
+C.5    D ISCUSSION OF T HEOREM 1
+
+We provide a short discussion of Theorem 1 and its practical implications. Note that while Assump-
+tion 1 is necessary in order for all objects in the proof of Theorem 1 to be well-defined, it does not
+directly impact the bound appearing in Theorem 1. The important quantity here is the chi-squared
+
+
+                                                 22
+Published as a conference paper at ICLR 2026
+
+
+
+
+Table 3: Qwen3: Accuracies on reasoning benchmarks with 95% confidence intervals. GSI outper-
+forms RSD (Liao et al., 2025) and S-BoN with the small model much more significantly than on
+Qwen-2.5-Math. As n grows, performance saturates.
+
+ n      Method       MATH500        OlympiadBench          Minerva       MMLU         GSM8K         Average
+        GSI (ours)    77.7 ± 2.3        37.6 ± 0.4         32.6 ± 1.7   71.4 ± 2.0   88.3 ± 2.5    61.5 ± 1.8
+        RSD           74.3 ± 1.5        34.5 ± 0.3         26.8 ± 0.9   67.7 ± 2.3   83.5 ± 1.7    57.4 ± 1.3
+ 1
+        S-BoN (s)     66.9 ± 0.8        31.0 ± 0.8         22.0 ± 0.2   58.6 ± 4.3   79.3 ± 0.5    51.5 ± 1.3
+        S-BoN (b)     82.4 ± 0.8        46.4 ± 0.8         38.8 ± 0.9   76.8 ± 2.3   93.3 ± 0.6    67.5 ± 1.1
+        GSI (ours)    80.5 ± 0.6        42.0 ± 0.4         34.0 ± 0.2   76.9 ± 0.5   92.4 ± 0.5    65.2 ± 0.4
+        RSD           77.4 ± 0.8        38.2 ± 0.5         29.8 ± 1.4   69.1 ± 3.6   89.5 ± 1.1    60.8 ± 1.5
+ 4
+        S-BoN (s)     73.9 ± 0.6        35.9 ± 1.1         25.4 ± 0.7   62.8 ± 3.7   84.9 ± 0.6    56.6 ± 1.3
+        S-BoN (b)     83.3 ± 0.9        48.0 ± 1.2         39.5 ± 1.3   78.8 ± 0.6   94.7 ± 0.3    68.9 ± 0.9
+        GSI (ours)    84.3 ± 0.6        42.7 ± 0.6         36.5 ± 0.8   78.3 ± 0.3   92.8 ± 0.8    66.9 ± 0.6
+        RSD           78.5 ± 1.6        37.3 ± 2.6         28.5 ± 1.0   69.1 ± 4.0   91.0 ± 0.6    60.9 ± 2.0
+ 16
+        S-BoN (s)     77.1 ± 0.5        37.5 ± 0.7         26.3 ± 1.3   63.3 ± 3.9   88.1 ± 1.2    58.5 ± 1.5
+        S-BoN (b)     85.3 ± 0.8        46.2 ± 0.7         40.0 ± 0.8   81.0 ± 0.2   94.5 ± 0.6    69.4 ± 0.6
+        GSI (ours)    84.0 ± 1.2        42.6 ± 1.6         36.9 ± 1.1   78.0 ± 1.6   93.5 ± 0.6    67.0 ± 1.2
+        RSD           78.4 ± 0.4        38.3 ± 0.2         30.3 ± 3.3   69.6 ± 0.4   90.9 ± 0.6    61.5 ± 1.0
+ 64
+        S-BoN (s)     77.7 ± 1.9        38.5 ± 0.4         26.2 ± 0.8   66.7 ± 0.6   89.6 ± 0.8    59.7 ± 0.9
+        S-BoN (b)     85.1 ± 0.6        46.5 ± 0.7         39.3 ± 0.3   81.4 ± 0.6   95.5 ± 0.5    69.6 ± 0.5
+        GSI (ours)    84.8 ± 0.2        42.9 ± 0.7         36.0 ± 0.0   78.1 ± 2.2   94.3 ± 1.0    67.2 ± 0.8
+        RSD           79.9 ± 0.6        38.7 ± 0.2         28.5 ± 1.0   66.8 ± 1.2   91.6 ± 2.4    61.1 ± 1.1
+ 256
+        S-BoN (s)     78.6 ± 0.8        39.5 ± 2.7         28.7 ± 0.0   66.3 ± 1.8   89.9 ± 0.2    60.6 ± 1.1
+        S-BoN (b)     85.6 ± 0.4        47.7 ± 2.5         39.5 ± 0.3   81.7 ± 1.0   95.6 ± 0.4    70.0 ± 0.9
+
+
+
+divergence χ2 (πB (· | x)||πS (· | x)) between πB (· | x) and πS (· | x), where x corresponds to either
+the prompt, or the prompt concatenated with all reasoning steps generated up to a certain point. In
+Table 4, we show that the chi-squared divergence is generally well-behaved in practice, with mean
+values of between 1.48 and 3.91, depending on the model family. These values are Monte Carlo
+estimates over 50 samples from MATH500, where we average both over samples, as well as over
+reasoning steps in the generation. In each step t, we generate N = 64 subsequent reasoning steps
+y1t , ..., y64
+            t
+               ∼ πS (· | (x, y 1 , ..., y t−1 )), and estimate the χ2 for that step as
+                  N                                          2
+               1 X πB (yit | (x, y 1 , ..., y t−1 ))
+                                                          − 1    =
+               N i=1 πS (yit | (x, y 1 , ..., y t−1 ))
+              N
+           1 X                                                                                     2
+                 exp log πB (yit | (x, y 1 , ..., y t−1 )) − πS (yit | (x, y 1 , ..., y t−1 )) − 1
+                                                                                              
+           N i=1
+
+from the logprobabilities computed under both models.
+
+Table 4: Empirical estimates of χ2 (πB (· | x)||πS (· | x)). Averaged over 50 samples from
+MATH500 and reasoning steps. Monte Carlo estimates with n = 64 samples in each step.
+
+                       Model Family                            mean χ2        max χ2
+                       Qwen-2.5-Math (1.5B / 7B)              1.48 ± 2.20      109.20
+                       Qwen-3 (1.7B / 14B                    3.91 ± 12.76      155.21
+
+While we do not recommend using the bound in Theorem 1 as a practical guidance for choosing
+hyperparameters, as the theorem is not necessarily tight, it can yield practical values in practice. If,
+for example, the χ2 is equal to 2, and we set β = 1, the bound would guarantee that, if choosing
+n ≥ (3e2 − 1)/(e0.1 − 1) ≈ 201, the KL between πβ,B and π̃GSI is bounded by ϵ = 0.1.
+
+
+                                                      23
+Published as a conference paper at ICLR 2026
+
+
+
+
+                        100
+                                  GSI: Qwen2.5-Math (1.5B / 7B)                       100
+                                                                                                         RSD: Qwen2.5-Math (1.5B / 7B)
+
+
+
+
+Acceptance ratio (%)
+                         90                                                                    90
+
+                         80                                                                    80
+
+                         70                                                                    70
+
+                         60                                                                    60
+
+                         50                                                                    50
+
+                         40                                                                    40
+                              1         4       16        64          256                            1         4       16        64          256
+
+                        100
+                                     GSI: Qwen3 (1.7B / 14B)                          100
+                                                                                                           RSD: Qwen3 (1.7B / 14B)
+
+
+
+
+Acceptance ratio (%)
+                         90                                                                    90
+
+                         80                                                                    80
+
+                         70                                                                    70
+
+                         60                                                                    60
+
+                         50                                                                    50
+
+                         40                                                                    40
+                              1         4       16        64          256                            1         4       16        64          256
+                                                n                                                                      n
+                                            MATH500                         Minerva Math                              MMLU
+                                            OlympiadBench                   GSM8K                                     Average
+
+Figure 5: Acceptance ratios for GSI and RSD across datasets and models, with 95% confidence
+intervals. As n increases, the acceptance ratio of GSI approaches 90%. The acceptance ratio of
+RSD is much higher and converges to almost 100% as n increases, which means RSD effectively
+collapses to soft best-of-n with πS .
+
+
+
+                                     β acceptance ratio vs n                                                 β acceptance ratio vs n
+                        1.0                                                                    1.0
+
+
+                        0.8                                                                    0.8
+
+
+
+
+     Acceptance ratio                                                       Acceptance ratio
+                                                               β=0                                                                     β=0
+                                                               β=1                                                                     β=1
+                        0.6                                    β=5                             0.6                                     β=5
+                                                               β=8                                                                     β=8
+                        0.4                                    β = 20                          0.4                                     β = 20
+                                                               β = 100                                                                 β = 100
+                        0.2                                    β = 1000                        0.2                                     β = 1000
+
+
+                        0.0                                                                    0.0
+                              1        4       16       64          256                              1         4       16       64          256
+                                               n                                                                       n
+
+Figure 6: Acceptance ratio of GSI for different values of β on MATH500. Left: Qwen2.5-Math;
+right: Qwen3. A sharp phase transition between β = 8 and β = 20 can be observed.
+
+
+
+
+                                                                          24
+   Published as a conference paper at ICLR 2026
+
+
+
+
+                               β accuracy vs n                                                   β accuracy vs sec/step
+               84                                                                    84
+
+               82                                                                    82
+
+
+
+
+Accuracy (%)                                                          Accuracy (%)
+               80                                                                    80
+                                                      β=0                                                                 β=0
+                                                      β=1                                                                 β=1
+               78                                                                    78
+                                                      β=5                                                                 β=5
+               76                                     β=8                            76                                   β=8
+                                                      β = 20                                                              β = 20
+               74                                     β = 100                        74                                   β = 100
+                                                      β = 1000                                                            β = 1000
+               72                                                                    72
+                    1      4         16          64        256                                         100                     101
+                                     n                                                                  sec/step
+
+   Figure 7: Qwen2.5-Math: Accuracy of GSI over n (left) and over seconds per step (right) for dif-
+   ferent values of β, on MATH500. In the right plot, each curve corresponds to n = 1, 4, 16, 64, 256
+   for a fixed value of β (where each dot on the curve corresponds to one value n). Our value β = 20
+   performs best overall, but as n varies, different β can have an edge. Runtimes reported on H200
+   GPUs.
+
+                               β accuracy vs n                                                   β accuracy vs sec/step
+               85                                                                    85
+
+
+
+
+Accuracy (%)                                                          Accuracy (%)
+               80                                                                    80
+                                                      β=0                                                                 β=0
+                                                      β=1                                                                 β=1
+               75                                     β=5                            75                                   β=5
+                                                      β=8                                                                 β=8
+                                                      β = 20                                                              β = 20
+               70                                     β = 100                        70                                   β = 100
+                                                      β = 1000                                                            β = 1000
+
+                    1      4         16          64        256                            10−1               100              101
+                                     n                                                                  sec/step
+
+   Figure 8: Qwen3: Accuracy of GSI over n (left) and over seconds per step (right) for different
+   values of β, on MATH500. In the right plot, each curve corresponds to n = 1, 4, 16, 64, 256 for
+   a fixed value of β (where each dot on the curve corresponds to one value n). Our value β = 20
+   performs best overall, but as n varies, different β can have an edge. Runtimes reported on H200
+   GPUs.
+
+
+   C.6              RUNTIME C OMPARISON
+
+   In Tables 5 and 6, we provide extended versions of Table 1 with runtime values across n on H100
+   GPUs for Qwen2.5-Math, and A100 GPUs for Qwen3.2
+
+   C.7              R EASONING T RACES
+
+   We provide several examples from MATH500 and MMLU-STEM and the reasoning traces
+   generated by GSI and RSD with our Qwen2.5-Math models, in addition to the two examples in
+   the main text. The following boxes contain samples, alongside the reasoning steps selected by
+   the two algorithms (including rejected steps, which are marked by being crossed out) for n = 4.
+   For GSI, the last column contains the tilted reward (for samples from πS ) resp. the normal reward
+   (for samples from πB ). For RSD it always contains the normal reward. We picked samples where
+   reasoning traces were not too long in order to fit them on one page; note that on average, reasoning
+   traces are much longer (cmp. Table 5).
+      2
+        For computational reasons, for the Qwen3 experiements we ran n = 256 on H100 and H200 GPUs, hence
+   we do not report them in the table for consistency.
+
+
+                                                                 25
+   Published as a conference paper at ICLR 2026
+
+
+
+
+                                                              Threshold u acceptance ratio vs n
+                                                  1.0
+
+
+                                                  0.8
+
+
+
+
+                               Acceptance ratio
+                                                  0.6
+
+
+                                                  0.4
+
+
+                                                  0.2
+
+
+                                                  0.0
+                                                          1              4                 16                          64       256
+                                                                                           n
+                                                         u = 0.05               u = 0.25                            u = 0.5       u=1
+                                                         u = 0.15               u = 0.3                             u = 0.75      u = 1.5
+
+
+   Figure 9: Larger thresholds u lead to lower acceptance rates in GSI. We show acceptance ratios
+   of GSI for different acceptance thresholds u on MATH500 for the Qwen2.5-Math models.
+
+
+                        Threshold u accuracy vs n                                                                       Threshold u accuracy vs sec/step
+               84                                                                                              84
+
+
+               82                                                                                              82
+
+
+
+
+Accuracy (%)                                                                                    Accuracy (%)
+                                                                             u = 0.05                                                               u = 0.05
+                                                                             u = 0.15                          80                                   u = 0.15
+               80
+                                                                             u = 0.25                                                               u = 0.25
+                                                                             u = 0.3                                                                u = 0.3
+               78                                                                                              78
+                                                                             u = 0.5                                                                u = 0.5
+                                                                             u = 0.75                                                               u = 0.75
+               76                                                                                              76
+                                                                             u=1                                                                    u=1
+                                                                             u = 1.5                                                                u = 1.5
+               74                                                                                              74
+                    1      4                        16              64            256                                             100                      101
+                                                    n                                                                                 sec/step
+
+   Figure 10: Left: Larger acceptance thresholds u lead to higher accuracy in GSI. This is to be
+   expected, as larger thresholds mean higher probability of sampling with πB . Right: When plotting
+   accuracy as a function of seconds per step, no single threshold u performs best. Each line in
+   this plot corresponds to the values n = 1, 4, 16, 64, 256, for a fixed threshold u. All plots averaged
+   over MATH500 using the Qwen2.5-Math models.
+
+
+
+   MATH500, Example 3. For this difficult question, GSI repeatedly resamples from the base model
+   to find the right answer. RSD accepts all draft samples and arrives at a wrong answer.
+   MATH500, Example 4. In the fourth example, we see that GSI can sometimes also reject correct
+   steps generated by the small model, if the tilted reward is too small. GSI still arrives at the correct
+   answer in the end. In this example, RSD does not produce any final answer.
+   MATH500, Example 5. This example highlights an interesting phenomenon: without any interven-
+   tion, GSI and RSD generate almost the exact same reasoning trace. At a crucial step, πS incorrectly
+   rounds 233/43 to 5.5, which GSI corrects by resampling from πB and correctly rounding to four
+   decimals, 5.4186, while RSD accepts the sample from πS and arrives at a wrong answer. This exam-
+   ple also highlights why including the log ratio in the reward can be crucial: The incorrect step under
+   πS receives an (almost) perfect reward of r = 0.999 in RSD. The almost identical step in GSI has an
+   (almost) perfect reward of r = 0.998 (not depicted in the box), while its tilted reward is only 0.148.
+   MATH500, Example 6. We show that it can happen that GSI does not solve a problem that RSD
+   manages to solve. However, this only occurred three times in the entire dataset of 500 samples.
+
+
+                                                                                        26
+Published as a conference paper at ICLR 2026
+
+
+
+
+                                                Threshold u accuracy vs sec/step
+                86
+
+                                               u=0.75                                 u=1.00u=1.50     u=0.75
+                                                                           u=0.75   u=1.50            u=0.50
+                84                                          u=1.00
+                                                                         u=0.50
+                                                                                                                u=1.00
+                                            u=0.30                                                   u=0.30
+                                                                                                                     u=1.50
+                                                                        u=0.30
+                                                                       u=1.50
+                                            u=0.50
+
+
+
+
+ Accuracy (%)
+                82
+                                u=0.75
+                            u=0.50             u=1.00
+
+                          u=0.30
+                80
+
+
+                                                                                                                n=1
+                78
+                                                                                                                n=4
+                                                        u=1.50
+                                                                                                                n = 16
+                          u=0.75
+                                                                                                                n = 64
+                76
+                 u=0.30            u=1.00
+                     u=0.50                                                                                     n = 256
+                                                                                                                Best u per n
+
+                                                                 100                                                     101
+                                                                          sec/step
+Figure 11: Empirical Pareto frontier of optimal thresholds u for different values of n. The
+optimal u is a concave function of n. For each value of n = 1, 4, 16, 64, 256, we show the
+average accuracy as a function of seconds per reasoning step for u = 0.3, 0.5, 0.75, 1.0, 1.5 with
+95% confidence intervals over three random seeds. For the Pareto frontier, we select one value u for
+each n. Averaged over MATH500 using the Qwen2.5-Math models.
+
+
+
+MMLU-STEM, Example 1. The draft model seems to be generally quite weak on MMLU-STEM
+and often produces nonsense, including random artifacts such as Chinese and Korean characters.
+This example shows that GSI can help in mitigating the weaknesses of the small model to some
+degree. However, several nonsensical steps from the draft model still slip through. Nonetheless,
+GSI manages to find the correct response, whereas RSD does not.
+MMLU-STEM, Example 2. As in the previous example, the draft model struggles to produce co-
+herent responses. GSI catches some of its errors, but both GSI and RSD answer this question wrong.
+
+
+D               A SSETS
+
+D.1              H ARDWARE
+
+Most of the experiments were run on NVIDIA H100 GPUs. Each model was hosted on its own GPU
+and implemented with vLLM (Kwon et al., 2023). Some experiments were also run on NVIDIA
+A100 GPUs and NVIDIA H200 GPUs with the same setup.
+
+
+D.2              L IBRARIES
+
+We heavily relied on the following open-source python libraries: PyTorch (Paszke et al., 2019)
+(license: BSD), transformers by HuggingFace (Wolf et al., 2020) (license: Apache-2.0), and
+vLLM (Kwon et al., 2023) (license: Apache-2.0).
+
+
+                                                                           27
+Published as a conference paper at ICLR 2026
+
+
+
+
+Table 5: Qwen2.5 on H100: Inference time (in seconds) per reasoning step, number of reasoning
+steps per sample, and percentage of steps accepted (averaged across all datasets, with 95% confi-
+dence intervals over three random seeds), for n = 1, 4, 16, 64, 256 (extension of Table 1).
+
+         n      Method            s / step (↓)        # steps   % accept     steps / s (↑)
+                GSI (ours)       0.33 ± 0.02      8.9 ± 0.1     65.4 ± 0.1   3.03 ± 0.17
+                RSD              0.24 ± 0.01      8.8 ± 0.2     90.1 ± 0.0   4.17 ± 0.17
+         1
+                S-BoN (small)    0.20 ± 0.00      8.7 ± 0.1          –       5.00 ± 0.00
+                S-BoN (base)     0.39 ± 0.03      9.3 ± 0.2          –       2.56 ± 0.18
+                GSI (ours)       0.43 ± 0.03     10.6 ± 0.3     76.7 ± 0.1   2.33 ± 0.15
+                RSD              0.34 ± 0.01      9.7 ± 0.1     94.9 ± 0.0   2.94 ± 0.08
+         4
+                S-BoN (small)    0.32 ± 0.01      9.6 ± 0.0          –       3.12 ± 0.09
+                S-BoN (base)     0.57 ± 0.01     10.2 ± 0.3          –       1.75 ± 0.03
+                GSI (ours)       0.72 ± 0.05     11.4 ± 0.2     82.0 ± 0.1   1.39 ± 0.09
+                RSD              0.61 ± 0.01     10.3 ± 0.3     97.3 ± 0.0   1.64 ± 0.03
+         16
+                S-BoN (small)    0.52 ± 0.03     10.3 ± 0.1          –       1.92 ± 0.10
+                S-BoN (base)     0.94 ± 0.03     10.5 ± 0.2          –       1.06 ± 0.03
+                GSI (ours)       1.78 ± 0.12     12.0 ± 0.4     84.3 ± 0.1   0.56 ± 0.04
+                RSD              1.60 ± 0.03     10.9 ± 0.3     98.2 ± 0.1   0.62 ± 0.01
+         64
+                S-BoN (small)    1.50 ± 0.04     10.7 ± 0.1          –       0.67 ± 0.01
+                S-BoN (base)     1.99 ± 0.07     10.8 ± 0.2          –       0.50 ± 0.02
+                GSI (ours)       5.80 ± 0.23     13.0 ± 0.3     93.6 ± 0.0   0.17 ± 0.01
+                RSD              5.52 ± 0.42     11.3 ± 1.0     99.1 ± 0.0   0.18 ± 0.01
+         256
+                S-BoN (small)    5.46 ± 0.10     11.3 ± 0.1          –       0.18 ± 0.00
+                S-BoN (base)     5.88 ± 0.11     11.1 ± 0.3          –       0.17 ± 0.00
+
+
+D.3    C ODE R EPOSITORY
+
+We used the RewardHub library by Red Hat AI Innovation Team, and grading functions from Ope-
+nAI’s prm800k repository to extract and grade answers from LLM-generated responses.
+
+E     U SE OF L ARGE L ANGUAGE M ODELS
+We utilized generative AI tools for code generation and debugging. The authors carried out all of
+the substantive research contributions, experiments, and proofs.
+
+
+
+
+                                                 28
+Published as a conference paper at ICLR 2026
+
+
+
+
+Table 6: Qwen3 on A100: Inference time (in seconds) per reasoning step, number of reasoning steps
+per sample, and percentage of steps accepted (averaged across all datasets, with 95% confidence
+intervals over three random seeds), for n = 1, 4, 16, 64 (extension of Table 1).
+
+            n    Method        s / step (↓)     # steps     % accept     steps / s (↑)
+                 GSI (ours)    0.35 ± 0.02     24.1 ± 0.0   80.9 ± 0.1   2.85 ± 0.15
+                 RSD           0.24 ± 0.01     25.2 ± 0.1   95.3 ± 0.1   4.17 ± 0.17
+            1
+                 S-BoN (s)      0.2 ± 0.00        23.3          –        5.00 ± 0.04
+                 S-BoN (b)     0.59 ± 0.01        23.3          –        1.69 ± 0.03
+                 GSI (ours)    0.56 ± 0.04     26.7 ± 0.3   88.0 ± 0.1   1.79 ± 0.12
+                 RSD           0.4 ± 0.01      28.1 ± 0.1   97.2 ± 0.1   2.50 ± 0.06
+            4
+                 S-BoN (s)     0.38 ± 0.01     24.8 ± 0.2        –       2.63 ± 0.07
+                 S-BoN (b)     0.83 ± 0.02     24.9 ± 0.1        –       1.20 ± 0.03
+                 GSI (ours)    1.21 ± 0.05     27.5 ± 0.4   91.5 ± 0.1   0.83 ± 0.03
+                 RSD           0.96 ± 0.01     29.0 ± 0.2   98.2 ± 0.1   1.04 ± 0.01
+            16
+                 S-BoN (s)     1.01 ± 0.00     26.1 ± 0.2        –       0.99 ± 0.00
+                 S-BoN (b)     1.82 ± 0.06     24.8 ± 0.3        –       0.55 ± 0.02
+                 GSI (ours)    3.26 ± 0.11     28.8 ± 0.8   93.1 ± 0.0   0.31 ± 0.01
+                 RSD           2.93 ± 0.05     29.2 ± 0.7   98.7 ± 0.2   0.34 ± 0.01
+            64
+                 S-BoN (s)     3.01 ± 0.05     26.4 ± 1.1        –       0.33 ± 0.01
+                 S-BoN (b)     4.75 ± 0.06     25.2 ± 0.3        –       0.21 ± 0.00
+
+
+
+
+                                                29
+Published as a conference paper at ICLR 2026
+
+
+
+
+   GSI: MATH500, Example 3 (Qwen2.5-Math)
+
+       Prompt: The wheel shown is spun twice, so that the numbers indicated by the pointer are randomly determined (with each
+       number on the wheel being equally likely). The two numbers determined in this way are recorded. The first number is divided
+       by 4, determining one of the remainders 1,2,3 marking the columns of the checkerboard shown. The second number is divided
+       by 5, determining one of the remainders 1,2,3,4 marking the rows of the checkerboard. Finally, a checker is placed on the square
+       where this column and row meet. What is the probability that the checker is placed on a shaded square of the checkerboard?
+       [asy] unitsize(1cm);          draw(Circle((0,0),2),linewidth(0.7));        draw((1.7,1)–(-1.7,-1),linewidth(0.7));     draw((1.7,-1)–(-
+       1.7,1),linewidth(0.7));     draw((0,2)–(0,-2));     label(”1”,(0.8,0.5),NW); label(”2”,(0.8,-0.5),SW); label(”6”,(-0.8,0.5),NE);
+       label(”9”,(-0.8,-0.5),SE); label(”3”,(-0.7,0),W); label(”7”,(0.7,0),E); draw((-2.8,0)–(-2.1,0),Arrow);                label(”Pointer”,(-
+       2.8,0),W); fill((3,0)–(3,1)–(4,1)–(4,0)–cycle,gray(0.7));        fill((3,-2)–(3,-1)–(4,-1)–(4,-2)–cycle,gray(0.7));     fill((4,1)–(4,2)–
+       (5,2)–(5,1)–cycle,gray(0.7));      fill((4,-1)–(4,0)–(5,0)–(5,-1)–cycle,gray(0.7));       fill((5,0)–(5,1)–(6,1)–(6,0)–cycle,gray(0.7));
+       fill((5,-2)–(5,-1)–(6,-1)–(6,-2)–cycle,gray(0.7));       draw((3,-2)–(3,2)–(6,2)–(6,-2)–cycle,linewidth(0.7));         draw((3,-1)–(6,-
+       1),linewidth(0.7)); draw((3,0)–(6,0),linewidth(0.7)); draw((3,1)–(6,1),linewidth(0.7)); draw((4,-2)–(4,2),linewidth(0.7));
+       draw((5,-2)–(5,2),linewidth(0.7)); label(”1”,(3.5,-2),S); label(”2”,(4.5,-2),S); label(”3”,(5.5,-2),S); label(”1”,(3,-1.5),W);
+       label(”2”,(3,-0.5),W); label(”3”,(3,0.5),W); label(”4”,(3,1.5),W); [/asy]
+
+
+   Step       Generated Reasoning Steps ( Draft πS , Target πB )                                                                                  r̃(yiS∗ )/r(yjB∗ )
+
+               To determine the probability that the checker is placed on a shaded square of the checkerboard, we need to analyze the
+   1           outcomes of the two spins and the resulting positions on the checkerboard.                                                              0.940
+
+
+               First, let’s identify the possible outcomes for each spin: - The first spin can result in the numbers 1, 2, 3, 4, 5, or 6. - The
+   2                                                                                                                                                   0.047
+               second spin can result in the numbers 1, 2, 3, 4, 5.
+
+
+               First, let’s identify the possible remainders when the numbers on the wheel are divided by 4 and 5:                                     0.990
+
+
+               - For division by 4, the possible remainders are 1, 2, 3, and 4. - For division by 5, the possible remainders are 1, 2, 3,
+   3                                                                                                                                                   0.542
+               4, and 5.
+
+
+               However, the problem only asks about the remainders 1, 2, and 3 for the first spin (divided by 4) and 1, 2, 3, and 4 for
+   4           the second spin (divided by 5). This means we are only considering the first three remainders for the first spin and all                -0.706
+               four remainders for the second spin.
+
+
+               The checkerboard has a total of 4 × 5 = 20 squares, arranged in 4 columns and 5 rows. We need to count how many
+               of these squares are shaded.                                                                                                            0.980
+
+
+   5           From the diagram, we observe that the shaded squares are: - (1,1), (1,3), (1,4), - (2,2), (2,4), - (3,1), (3,3), - (4,2), (4,4).        -0.128
+
+
+               From the checkerboard, we observe that the shaded squares follow a pattern where the squares in the first and third
+               columns are shaded in the first and third rows, and the squares in the second and fourth columns are shaded in the                      0.803
+               second and fourth rows. This gives us the following shaded squares:
+
+
+                                           Shaded         Unshaded        Shaded        Unshaded        Shaded
+                                          Unshaded         Shaded        Unshaded        Shaded        Unshaded
+   6                                       Shaded         Unshaded        Shaded        Unshaded        Shaded                                         0.543
+                                          Unshaded         Shaded        Unshaded        Shaded        Unshaded
+
+
+
+   7           Counting the shaded squares, we find there are 10 shaded squares out of the 20 squares on the checkerboard.                             1.132
+
+
+               Since each number on the wheel is equally likely, each remainder when divided by 4 and 5 is equally likely. Therefore,
+   8                                                                                                                                                   0.402
+               each of the 20 possible outcomes is equally likely.
+
+
+               The probability that the checker is placed on a shaded square is the ratio of the number of shaded squares to the total
+               number of squares:                                                                                                                      0.975
+
+
+
+                                                                Number of shaded squares          10       1
+   9                                           Probability =                                  =        =                                               1.000
+                                                                 Total number of squares          20       2
+
+
+
+                                                                                                                  1
+   10          Thus, the probability that the checker is placed on a shaded square of the checkerboard is             .                                1.053
+                                                                                                                  2
+
+
+   Correct Answer found: True
+
+
+
+
+                                                                                   30
+Published as a conference paper at ICLR 2026
+
+
+
+
+   RSD: MATH500, Example 3 (Qwen2.5-Math)
+
+       Prompt: The wheel shown is spun twice, so that the numbers indicated by the pointer are randomly determined (with each
+       number on the wheel being equally likely). The two numbers determined in this way are recorded. The first number is divided
+       by 4, determining one of the remainders 1,2,3 marking the columns of the checkerboard shown. The second number is divided
+       by 5, determining one of the remainders 1,2,3,4 marking the rows of the checkerboard. Finally, a checker is placed on the square
+       where this column and row meet. What is the probability that the checker is placed on a shaded square of the checkerboard?
+       [asy] unitsize(1cm);          draw(Circle((0,0),2),linewidth(0.7));        draw((1.7,1)–(-1.7,-1),linewidth(0.7));     draw((1.7,-1)–(-
+       1.7,1),linewidth(0.7));     draw((0,2)–(0,-2));     label(”1”,(0.8,0.5),NW); label(”2”,(0.8,-0.5),SW); label(”6”,(-0.8,0.5),NE);
+       label(”9”,(-0.8,-0.5),SE); label(”3”,(-0.7,0),W); label(”7”,(0.7,0),E); draw((-2.8,0)–(-2.1,0),Arrow);                label(”Pointer”,(-
+       2.8,0),W); fill((3,0)–(3,1)–(4,1)–(4,0)–cycle,gray(0.7));        fill((3,-2)–(3,-1)–(4,-1)–(4,-2)–cycle,gray(0.7));     fill((4,1)–(4,2)–
+       (5,2)–(5,1)–cycle,gray(0.7));      fill((4,-1)–(4,0)–(5,0)–(5,-1)–cycle,gray(0.7));       fill((5,0)–(5,1)–(6,1)–(6,0)–cycle,gray(0.7));
+       fill((5,-2)–(5,-1)–(6,-1)–(6,-2)–cycle,gray(0.7));       draw((3,-2)–(3,2)–(6,2)–(6,-2)–cycle,linewidth(0.7));         draw((3,-1)–(6,-
+       1),linewidth(0.7)); draw((3,0)–(6,0),linewidth(0.7)); draw((3,1)–(6,1),linewidth(0.7)); draw((4,-2)–(4,2),linewidth(0.7));
+       draw((5,-2)–(5,2),linewidth(0.7)); label(”1”,(3.5,-2),S); label(”2”,(4.5,-2),S); label(”3”,(5.5,-2),S); label(”1”,(3,-1.5),W);
+       label(”2”,(3,-0.5),W); label(”3”,(3,0.5),W); label(”4”,(3,1.5),W); [/asy]
+
+
+   Step       Generated Reasoning Steps ( Draft πS , Target πB )                                                                          r(yiS∗ )/r(yjB∗ )
+
+               To determine the probability that the checker is placed on a shaded square of the checkerboard, we need to analyze the
+   1           structure of the checkerboard and the possible outcomes of the spin.                                                            0.996
+
+
+
+               First, let’s identify the shaded squares on the checkerboard. The checkerboard is a 3x4 grid, with the following shaded
+   2           squares: - (1,1) - (1,3) - (2,2) - (2,4)                                                                                        0.784
+
+
+
+   3           This means there are 4 shaded squares out of a total of 12 squares.                                                             0.967
+
+
+               Next, we need to determine the probability of landing on a shaded square. The wheel is spun twice, so there are 6
+               possible outcomes for each spin (1, 2, 3, 4, 5, 6). When the first number is divided by 4, the possible remainders are
+   4           1, 2, 3. Similarly, when the second number is divided by 5, the possible remainders are 1, 2, 3, 4. Therefore, there are        0.895
+               3 × 4 = 12 possible outcomes in total.
+
+
+               Now, we need to count the number of outcomes that result in a shaded square. From the checkerboard, we can see
+               that: - The first spin landing on 1 (remainder 1) and the second spin landing on 1 (remainder 1) results in the shaded
+               square (1,1). - The first spin landing on 1 (remainder 1) and the second spin landing on 3 (remainder 3) results in the
+   5           shaded square (1,3). - The first spin landing on 2 (remainder 2) and the second spin landing on 2 (remainder 2) results         0.947
+               in the shaded square (2,2). - The first spin landing on 2 (remainder 2) and the second spin landing on 4 (remainder 4)
+               results in the shaded square (2,4).
+
+
+               So, there are 4 outcomes that result in a shaded square. The probability is the number of favorable outcomes divided
+   6           by the total number of outcomes, which is 12 4 = 1.                                                                             0.967
+                                                                  3
+
+
+
+                                                                                             1
+   7           Therefore, the probability that the checker is placed on a shaded square is       .                                             1.000
+                                                                                             3
+
+
+   Correct Answer found: False
+
+
+
+
+                                                                               31
+Published as a conference paper at ICLR 2026
+
+
+
+
+   GSI: MATH500, Example 4 (Qwen2.5-Math)
+
+       Prompt: Let z be a complex number such that                                              √
+                                                                                         1   1+ 5
+                                                                                   z+      =      .
+                                                                                         z     2
+       Find
+                                                                                            85            1
+                                                                                        z        +            .
+                                                                                                         z 85
+
+
+   Step       Generated Reasoning Steps ( Draft πS , Target πB )                                                               r̃(yiS∗ )/r(yjB∗ )
+
+                                                          √
+                                     1 = 1+ 5 , we recognize that z is a complex number on the unit circle, meaning |z| = 1.
+              Given the equation z + z
+   1                                       2                                                                                        0.530
+              Therefore, we can write z = eiθ for some real number θ.
+
+
+                                    1 in terms of θ:
+              First, we express z + z
+
+                                                                          1        iθ        −iθ
+                                                               z+             =e        +e               = 2 cos θ.
+                                                                        z
+                                   √
+                             1 = 1+ 5 , we have:
+              Given that z + z
+   2                               2                                                                 √                              0.412
+                                                                                             1+       5
+                                                                              2 cos θ =                          .
+                                                                                                     2
+              Solving for cos θ, we get:                                                             √
+                                                                                            1+        5
+                                                                               cos θ =                       .
+                                                                                                 4
+
+
+              The given equation can be rewritten as:
+
+                                                                        1        iθ          −iθ
+                                                               z+             =e        +e               = 2 cos θ.
+                                                                        z
+                                                    √
+              We know that 2 cos θ = 1+2 5 , so:                                                                                    0.972
+                                                                                                 √
+                                                                                         1+              5
+                                                                              cos θ =                        .
+                                                                                                 4
+              The angle θ that satisfies this equation is θ = ± π
+                                                                5
+                                                                  . Therefore, z can be either eiπ/5 or e−iπ/5 .
+
+
+
+   3          We need to find z 85 +             1 . Let’s consider the two cases separately.
+                                                                                                                                    0.830
+                                               z 85
+
+
+
+              1. If z = eiπ/5 , then:
+
+                                                  iπ/5 85
+                                                     
+                                      85                    i85π/5   i17π   i(16π+π)   iπ
+                                  z        =    e         =e       =e     =e         =e   = −1.
+   4                                                                                                                                0.942
+              So,
+                                                          85        1                       1
+                                                      z        +              = −1 +             = −1 − 1 = −2.
+                                                                   z 85                  −1
+
+
+
+              2. If z = e−iπ/5 , then:
+
+                                          −iπ/5 85
+                                              
+                             85                      −i85π/5   −i17π   −i(16π+π)   −iπ
+                         z        =     e          =e        =e      =e          =e    = −1.
+   5                                                                                                                                0.998
+              So,
+                                                          85        1                       1
+                                                      z        +              = −1 +             = −1 − 1 = −2.
+                                                                   z 85                  −1
+
+
+
+              In both cases, we get the same result. Therefore, the value of z 85 +                                1 is:
+                                                                                                                 z 85
+
+   6                                                                                                                                0.998
+                                                                                        −2 .
+
+
+
+   Correct Answer found: True
+
+
+
+
+                                                                                                 32
+Published as a conference paper at ICLR 2026
+
+
+
+
+   RSD: MATH500, Example 4 (Qwen2.5-Math)
+
+       Prompt: Let z be a complex number such that                                              √
+                                                                                         1   1+ 5
+                                                                              z+           =      .
+                                                                                         z     2
+       Find
+                                                                                         85        1
+                                                                                     z        +        .
+                                                                                                  z 85
+
+
+   Step       Generated Reasoning Steps ( Draft πS , Target πB )                                                                                              r(yiS∗ )/r(yjB∗ )
+
+                                                                                     √
+              To find z 85 +    1 given the equation z + 1               = 1+2 5 , we start by recognizing that z + z
+                                                                                                                    1 is the form of the
+   1                          z 85 √                     z
+                                                                                                                                                                   0.979
+              golden ratio ϕ = 1+2 5 .
+
+
+
+              First, let’s solve for z. Let z = eiθ , where θ is a real number. Then,
+
+                                                                   1          iθ         −iθ
+                                                            z+         =e          +e             = 2 cos θ.
+                                                                   z
+                                           √
+                             1 = 1+ 5 , we have:
+              Given that z + z
+   2                               2                                                              √                                                                0.970
+                                                                                         1+           5
+                                                                       2 cos θ =                          .
+                                                                                              2
+              Thus,                                                                           √
+                                                                                         1+       5
+                                                                       cos θ =                        .
+                                                                                              4
+
+
+
+              Next, we need to find z 85 +       1 . Using the exponential form, we have:
+                                               z 85
+
+                                                            85         i85θ                   1               −i85θ
+                                                        z        =e                and             =e                 .
+   3                                                                                      z 85                                                                     0.993
+              Therefore,
+                                                   85        1           i85θ             −i85θ
+                                               z        +          =e               +e                    = 2 cos(85θ).
+                                                            z 85
+
+
+
+              To find cos(85θ), we use the angle addition formula for cosine:
+   4                             cos(85θ) = cos(84θ + θ) = cos(84θ) cos(θ) − sin(84θ) sin(θ).                                                                      0.977
+
+
+
+
+              We need to determine cos(84θ) and sin(84θ). Notice that:
+
+                                                                                              2
+                                                                 cos(2θ) = 2 cos (θ) − 1.
+                                     √
+              Substituting cos θ = 1+4 5 , we get:
+                                               √ !2                      √ 2                 √                               √             √
+                           2           1+       5                (1 +     5)              1+2 5+5                         6+2 5       3+    5
+   5                  cos (θ) =                             =                        =                            =               =               .                0.959
+                                           4                            16                            16                    16            8
+
+              Thus,
+                                        √                       √                            √                                  √                 √
+                                   3+    5                   6+2 5                        6+2 5−8                         −2 + 2 5        −1 +        5
+                cos(2θ) = 2 ·                  −1=                            −1=                                 =                   =                   .
+                                       8                           8                                      8                  8                4
+
+
+
+              Using similar steps, we can find cos(4θ), cos(8θ), and so on, but this becomes increasingly complex. Instead, we
+   6          recognize a pattern in the powers of cos and sin that simplifies our work. We use the fact that cos(2θ) is related to                                0.821
+              cos(θ) and sin(θ), and we can use the properties of the golden ratio.
+
+
+   Correct Answer found: False
+
+
+
+
+                                                                                              33
+Published as a conference paper at ICLR 2026
+
+
+
+
+   GSI: MATH500, Example 5 (Qwen2.5-Math)
+
+       Prompt: Juan’s Old Stamping Grounds
+       Juan organizes the stamps in his collection by country and by the decade in which they were issued. The prices he paid for them
+       at a stamp shop were: Brazil and France, 6 cents each, Peru 4 cents each, and Spain 5 cents each. (Brazil and Peru are South
+       American countries and France and Spain are in Europe.) [asy] /* AMC8 2002 #8, 9, 10 Problem */ size(3inch, 1.5inch); for ( int
+       y = 0; y ¡= 5; ++y )
+       draw((0,y)–(18,y));       draw((0,0)–(0,5)); draw((6,0)–(6,5)); draw((9,0)–(9,5)); draw((12,0)–(12,5)); draw((15,0)–(15,5));
+       draw((18,0)–(18,5));
+       label(scale(0.8)*”50s”, (7.5,4.5)); label(scale(0.8)*”4”, (7.5,3.5)); label(scale(0.8)*”8”, (7.5,2.5)); label(scale(0.8)*”6”,
+       (7.5,1.5)); label(scale(0.8)*”3”, (7.5,0.5));
+       label(scale(0.8)*”60s”, (10.5,4.5)); label(scale(0.8)*”7”, (10.5,3.5)); label(scale(0.8)*”4”, (10.5,2.5)); label(scale(0.8)*”4”,
+       (10.5,1.5)); label(scale(0.8)*”9”, (10.5,0.5));
+       label(scale(0.8)*”70s”, (13.5,4.5)); label(scale(0.8)*”12”, (13.5,3.5)); label(scale(0.8)*”12”, (13.5,2.5)); label(scale(0.8)*”6”,
+       (13.5,1.5)); label(scale(0.8)*”13”, (13.5,0.5));
+       label(scale(0.8)*”80s”, (16.5,4.5)); label(scale(0.8)*”8”, (16.5,3.5)); label(scale(0.8)*”15”, (16.5,2.5)); label(scale(0.8)*”10”,
+       (16.5,1.5)); label(scale(0.8)*”9”, (16.5,0.5));
+       label(scale(0.8)*”Country”, (3,4.5));         label(scale(0.8)*”Brazil”, (3,3.5));    label(scale(0.8)*”France”, (3,2.5));     la-
+       bel(scale(0.8)*”Peru”, (3,1.5)); label(scale(0.8)*”Spain”, (3,0.5));
+       label(scale(0.9)*”Juan’s Stamp Collection”, (9,0), S); label(scale(0.9)*”Number of Stamps by Decade”, (9,5), N); [/asy] What
+       was the average price, in cents, of his 70’s stamps? Round your answer to the nearest tenth of a cent.
+
+
+   Step       Generated Reasoning Steps ( Draft πS , Target πB )                                                                     r̃(yiS∗ )/r(yjB∗ )
+
+
+   1           To find the average price of Juan’s 70’s stamps, we need to follow these steps:                                            0.899
+
+
+               1. **Identify the number of stamps from each country in the 70’s:** - Brazil: 12 stamps - France: 12 stamps - Peru:
+   2           6 stamps - Spain: 13 stamps                                                                                                0.892
+
+
+
+               2. **Calculate the total number of stamps in the 70’s:**
+   3                                                    12 + 12 + 6 + 13 = 43 stamps                                                      0.636
+
+
+
+
+               3. **Determine the total cost of the stamps from each country:** - Brazil: 12 stamps×6 cents per stamp = 72 cents
+   4           - France: 12 stamps × 6 cents per stamp = 72 cents - Peru: 6 stamps × 4 cents per stamp = 24 cents - Spain:                0.859
+               13 stamps × 5 cents per stamp = 65 cents
+
+
+               4. **Calculate the total cost of all the 70’s stamps:**
+   5                                                                                                                                      1.032
+                                                       72 + 72 + 24 + 65 = 233 cents
+
+
+
+               5. **Find the average price per stamp:**
+
+   6                                                                     Total cost          233 cents                                    1.039
+                                              Average price =                            =
+                                                                Total number of stamps       43 stamps
+
+
+
+               6. **Perform the division and round to the nearest tenth of a cent:**
+                                                                    233
+   7                                                                       ≈ 5.488                                                        0.148
+                                                                    43
+
+               Rounding 5.488 to the nearest tenth gives us 5.5.
+
+
+               6. **Perform the division:**
+                                                                   233
+                                                                          ≈ 5.4186                                                        0.996
+                                                                   43
+
+
+
+               7. **Round the result to the nearest tenth of a cent:**
+   8                                                                                                                                      1.027
+                                                                   5.4186 ≈ 5.4
+
+
+
+
+   9           Therefore, the average price of Juan’s 70’s stamps is 5.4 cents.                                                           1.013
+
+
+   Correct Answer found: True
+
+
+
+
+                                                                                 34
+Published as a conference paper at ICLR 2026
+
+
+
+
+   RSD: MATH500, Example 5 (Qwen2.5-Math)
+
+       Prompt: Juan’s Old Stamping Grounds
+       Juan organizes the stamps in his collection by country and by the decade in which they were issued. The prices he paid for them
+       at a stamp shop were: Brazil and France, 6 cents each, Peru 4 cents each, and Spain 5 cents each. (Brazil and Peru are South
+       American countries and France and Spain are in Europe.) [asy] /* AMC8 2002 #8, 9, 10 Problem */ size(3inch, 1.5inch); for ( int
+       y = 0; y ¡= 5; ++y )
+       draw((0,y)–(18,y));       draw((0,0)–(0,5)); draw((6,0)–(6,5)); draw((9,0)–(9,5)); draw((12,0)–(12,5)); draw((15,0)–(15,5));
+       draw((18,0)–(18,5));
+       label(scale(0.8)*”50s”, (7.5,4.5)); label(scale(0.8)*”4”, (7.5,3.5)); label(scale(0.8)*”8”, (7.5,2.5)); label(scale(0.8)*”6”,
+       (7.5,1.5)); label(scale(0.8)*”3”, (7.5,0.5));
+       label(scale(0.8)*”60s”, (10.5,4.5)); label(scale(0.8)*”7”, (10.5,3.5)); label(scale(0.8)*”4”, (10.5,2.5)); label(scale(0.8)*”4”,
+       (10.5,1.5)); label(scale(0.8)*”9”, (10.5,0.5));
+       label(scale(0.8)*”70s”, (13.5,4.5)); label(scale(0.8)*”12”, (13.5,3.5)); label(scale(0.8)*”12”, (13.5,2.5)); label(scale(0.8)*”6”,
+       (13.5,1.5)); label(scale(0.8)*”13”, (13.5,0.5));
+       label(scale(0.8)*”80s”, (16.5,4.5)); label(scale(0.8)*”8”, (16.5,3.5)); label(scale(0.8)*”15”, (16.5,2.5)); label(scale(0.8)*”10”,
+       (16.5,1.5)); label(scale(0.8)*”9”, (16.5,0.5));
+       label(scale(0.8)*”Country”, (3,4.5));         label(scale(0.8)*”Brazil”, (3,3.5));    label(scale(0.8)*”France”, (3,2.5));     la-
+       bel(scale(0.8)*”Peru”, (3,1.5)); label(scale(0.8)*”Spain”, (3,0.5));
+       label(scale(0.9)*”Juan’s Stamp Collection”, (9,0), S); label(scale(0.9)*”Number of Stamps by Decade”, (9,5), N); [/asy] What
+       was the average price, in cents, of his 70’s stamps? Round your answer to the nearest tenth of a cent.
+
+
+   Step       Generated Reasoning Steps ( Draft πS , Target πB )                                                                      r(yiS∗ )/r(yjB∗ )
+
+
+   1           To determine the average price of Juan’s 70s stamps, we need to follow these steps:                                         0.986
+
+
+               1. **Identify the number of stamps from each country in the 70s:** - Brazil: 12 stamps - France: 12 stamps - Peru: 6
+   2           stamps - Spain: 13 stamps                                                                                                   0.993
+
+
+
+               2. **Calculate the total number of 70s stamps:**
+   3                                                    12 + 12 + 6 + 13 = 43 stamps                                                       0.999
+
+
+
+
+               3. **Determine the total cost of the stamps from each country:** - Brazil: 12 stamps × 6 cents/stamp = 72 cents -
+   4           France: 12 stamps×6 cents/stamp = 72 cents - Peru: 6 stamps×4 cents/stamp = 24 cents - Spain: 13 stamps×                    0.999
+               5 cents/stamp = 65 cents
+
+
+               4. **Calculate the total cost of all the 70s stamps:**
+   5                                                                                                                                       0.999
+                                                        72 + 72 + 24 + 65 = 233 cents
+
+
+
+               5. **Find the average price per stamp:**
+
+   6                                                                     Total cost          233 cents                                     1.000
+                                             Average price =                             =
+                                                                Total number of stamps       43 stamps
+
+
+
+               6. **Perform the division to find the average price:**
+
+   7                                                             233                                                                       0.999
+                                                                         ≈ 5.488372
+                                                                  43
+
+
+
+               7. **Round the result to the nearest tenth of a cent:**
+   8                                                                                                                                       0.999
+                                                              5.488372 ≈ 5.5 cents
+
+
+
+
+   9           Thus, the average price of Juan’s 70s stamps is 5.5 cents.                                                                  1.000
+
+
+   Correct Answer found: False
+
+
+
+
+                                                                                 35
+Published as a conference paper at ICLR 2026
+
+
+
+
+   GSI: MATH500, Example 6 (Qwen2.5-Math)
+
+       Prompt: Evaluate
+                                          sin(arcsin 0.4 + arcsin 0.5) · sin(arcsin 0.5 − arcsin 0.4).
+
+
+   Step      Generated Reasoning Steps ( Draft πS , Target πB )                                                        r̃(yiS∗ )/r(yjB∗ )
+
+
+              To evaluate sin(arcsin 0.4+arcsin 0.5)·sin(arcsin 0.5−arcsin 0.4), we start by letting α = arcsin 0.4
+   1          and β = arcsin 0.5. This means that sin α = 0.4 and sin β = 0.5. We need to find sin(α+β)·sin(β−α).           1.033
+
+
+             First, we use the angle addition formulas for sine:
+
+   2                                                sin(α + β) = sin α cos β + cos α sin β                                  0.231
+
+                                                    sin(β − α) = sin β cos α − cos β sin α
+
+
+              Using the sine addition and subtraction formulas, we have:
+
+                                                   sin(α + β) = sin α cos β + cos α sin β
+
+                                                   sin(β − α) = sin β cos α − cos α sin β
+              Multiplying these two expressions together, we get:
+
+                       sin(α + β) · sin(β − α) = (sin α cos β + cos α sin β)(sin β cos α − cos α sin β)
+
+              This is a difference of squares, so it simplifies to:
+
+                                                                                        2            2
+                                      sin(α + β) · sin(β − α) = (sin α cos β) − (cos α sin β)
+                                                                                                                            0.982
+              We know that cos2 θ = 1 − sin2 θ for any angle θ. Therefore, we can substitute cos2 α = 1 − sin2 α and
+              cos2 β = 1 − sin2 β into the equation:
+
+                                                                        2           2            2       2
+                            sin(α + β) · sin(β − α) = (sin α) (1 − sin β) − (sin β) (1 − sin α)
+
+              Substituting sin α = 0.4 and sin β = 0.5 into the equation, we get:
+
+                                                                        2               2    2           2
+                               sin(α + β) · sin(β − α) = (0.4) (1 − (0.5) ) − (0.5) (1 − (0.4) )
+
+              Simplifying the terms inside the parentheses, we have:
+
+              sin(α + β) · sin(β − α) = (0.16)(1 − 0.25) − (0.25)(1 − 0.16) = (0.16)(0.75) − (0.25)(0.84)
+
+
+
+              Calculating the products, we get:
+
+                                            sin(α + β) · sin(β − α) = 0.12 − 0.21 = −0.09
+   3                                                                                                                        0.940
+              Therefore, the value is:
+                                                                       −0.09
+
+
+
+   Correct Answer found: False
+
+
+
+
+                                                                               36
+Published as a conference paper at ICLR 2026
+
+
+
+
+   RSD: MATH500, Example 6 (Qwen2.5-Math)
+
+       Prompt: Evaluate
+                                        sin(arcsin 0.4 + arcsin 0.5) · sin(arcsin 0.5 − arcsin 0.4).
+
+
+   Step      Generated Reasoning Steps ( Draft πS , Target πB )                                                                                       r(yiS∗ )/r(yjB∗ )
+
+
+              To evaluate the expression sin(arcsin 0.4 + arcsin 0.5) · sin(arcsin 0.5 − arcsin 0.4), we will use trigono-
+   1          metric identities and properties of the inverse sine function. Let’s denote arcsin 0.4 by α and arcsin 0.5 by β.                             0.997
+              Therefore, we have sin α = 0.4 and sin β = 0.5.
+
+                                                                                                                                   p
+              First, we need to find cos α and cos β. Since
+                                                        q α = √arcsin 0.4, we have cos α =                                             1 − sin2 α =
+   2          p                √              √            21 = 21                                                                                         0.996
+                 1 − 0.42 = 1 − 0.16 = 0.84 =              25   5
+                                                                   .
+
+
+                                                                                   p                           p                       √
+                           q β =√arcsin 0.5, we have cos β =
+              Similarly, since                                                         1 − sin2 β =                1 − 0.52 =           1 − 0.25 =
+   3          √               3 =  3                                                                                                                       0.999
+                0.75 =        4   2
+                                     .
+
+
+              Now, we use the angle addition and subtraction formulas for sine:
+
+   4                                              sin(α + β) = sin α cos β + cos α sin β                                                                   1.000
+                                                  sin(β − α) = sin β cos α − cos β sin α
+
+
+
+              Substituting the values we found:
+                                         √          √                     √                √                   √          √              √   √
+                                          3          21                0.4 3            0.5 21                2 3          21           2 3 + 21
+               sin(α + β) = 0.4 ·             +              · 0.5 =               +                      =          +             =
+   5                                     2             5                  2                   5               10           10              10              0.999
+                                        √              √                  √                     √             √            √            √      √
+                                          21             3             0.5 21               0.4 3              21         2 3            21 − 2 3
+               sin(β − α) = 0.5 ·              −             · 0.4 =                   −                  =          −             =
+                                          5            2                   5                     2             10             10             10
+
+
+
+              Now, we need to find the product of these two sines:
+                                                                                   √         √        !       √      √ !
+   6                                                                           2       3+        21            21 − 2 3                                    1.000
+                                   sin(α + β) · sin(β − α) =
+                                                                                        10                          10
+
+
+
+                                                                                                          √            √
+                                                                                                           21
+              This is a product of the form (a + b)(a − b) = a2 − b2 , where a =                          10
+                                                                                                              and b = 2103 :
+                      √             √ !       √                  √ !       √           !2              √ !2
+   7                      21       2 3            21         2    3            21                     2 3                21        12         9            0.999
+                               +                       −               =                     −                  =              −         =
+                        10         10          10            10            10                         10             100           100       100
+
+
+
+              Thus, the value of the given expression is:
+                                                                               9
+   8                                                                                                                                                       1.000
+                                                                           100
+
+
+
+   Correct Answer found: True
+
+
+
+
+                                                                                       37
+Published as a conference paper at ICLR 2026
+
+
+
+
+   GSI: MMLU-STEM, Example 1 (Qwen2.5-Math)
+
+       Prompt: The seventh cranial nerve supplies
+       Choices:
+       Answer 1: taste buds on the posterior third of the tongue.
+       Answer 2: muscles of the soft palate.
+       Answer 3: muscles of the lower lip.
+       Answer 4: the parotid salivary gland.
+
+
+   Step       Generated Reasoning Steps ( Draft πS , Target πB )                                                                               r̃(yiS∗ )/r(yjB∗ )
+
+   1           To determine the correct answer, we need to identify which of the given options describes the seventh cranial涨幅.                     -0.571
+
+
+               To determine which structure the seventh cranialner Ben supplies, we need to understand the functions of the cranial
+               nerves and their corresponding structures. Let’s analyze each option step by step:                                                   0.984
+
+
+               1. **T Lagrange’s test**: This is not a standard term in the context of cranial semester, and it doesn’t directly relate to a
+   2                                                                                                                                                -1.412
+               specific part of the body.
+
+
+               1. **Taste Buds on the Posterior Third of the tongue**: The fifth cranialner Ben supplies the taste buds on the
+               posterior third of the tongue. Therefore, the seventh cranialner Ben does not supply taste buds on the posterior third of            0.970
+               the tongue.
+
+
+               2. **Muscles of the Soft Problem**: The seventh cranialner Ben supplies themu centroid of the soft problem. The
+   3           hard problem is the seventh cranialner Ben supplies, not the mu centroid of the soft problem.                                        3.062
+
+
+
+               3. **mu centroid of the lower lip**: The seventh cranialner Ben supplies the mu centroid of the lower lip. This is a
+   4           correct description of the structure the seventh cranialner Ben supplies.                                                            2.188
+
+
+               4. **Parotid Salivary cone**: The seventh cranialner Ben supplies the parotid salivary cone. The parotid salivary cone
+   5           is the seventh cranialner Ben supplies, but it is not the correct answer because we are looking for the structure, not the           -2.126
+               process.
+
+
+               4. **The Parotid Salivary Gland**: The sixth cranialner Ben supplies the parotid salivary gland. Therefore, the
+               seventh cranialner Ben does not supply the parotid salivary gland.                                                                   0.993
+
+
+
+   6           Based on the analysis, the correct answer is:                                                                                        1.052
+
+
+
+   7            3                                                                                                                                   0.995
+
+
+   Correct Answer found: True
+
+
+
+
+                                                                                 38
+Published as a conference paper at ICLR 2026
+
+
+
+
+   RSD: MMLU-STEM, Example 1 (Qwen2.5-Math)
+
+       Prompt: The seventh cranial nerve supplies
+       Choices:
+       Answer 1: taste buds on the posterior third of the tongue.
+       Answer 2: muscles of the soft palate.
+       Answer 3: muscles of the lower lip.
+       Answer 4: the parotid salivary gland.
+
+
+   Step       Generated Reasoning Steps ( Draft πS , Target πB )                                                                        r(yiS∗ )/r(yjB∗ )
+
+
+   1           To determine the correct answer, let’s analyze each option step by step:                                                      0.989
+
+
+               1. **Taste grands on theerior third of the**: This is not a correct description of the seventh cranial variable. The
+   2                                                                                                                                         0.644
+               taste弦, which is the seventh cranial variable, is actually located on the lateral third of the, not theerior third.
+
+
+               1. **Taste Buds on the Posterior Third of the tongue:** - The seventh cranial nerve does indeed supply the taste buds
+               on the posterior third of the tongue. This is a well-known fact in anatomy.                                                   0.969
+
+
+
+   3           2. **Muscles of the Softsample:** - The seventh cranial use supplies themu of the soft sample, not the soft dividends.        0.577
+               This is incorrect.
+
+
+               2. ** muscles of the Soft Palate:** - The seventh cranial nerve does not supply the muscles of the soft palate. This
+               function is performed by the sixth cranial nerve.                                                                             0.989
+
+
+
+               3. **Muscles of the Lower Ch Betty:** - The seventh cranial note does not supply themu of the lower lip. This
+   4           function is performed by the eighth cranial note.                                                                             0.987
+
+
+
+               4. **Parotid Turicine:** - The seventh cranial note does not supply the parotid salivary gland. This function is
+   5           performed by the tenth cranial note.                                                                                          0.921
+
+
+
+   6           Based on the analysis, the correct answer is:                                                                                 0.973
+
+
+
+   7            1                                                                                                                            1.000
+
+
+   Correct Answer found: False
+
+
+
+
+                                                                                39
+Published as a conference paper at ICLR 2026
+
+
+
+
+   GSI: MMLU-STEM, Example 2 (Qwen2.5-Math)
+
+       Prompt: The members of a bird species capable of nesting in treetops or on the ledges of nearby cliffs make their homes only
+       in the treetops due to the established presence of a more aggressive bird species on the cliff ledges. With respect to habitat, the
+       treetop-nesting birds are utilizing
+       Choices:
+       Answer 1: their fundamental niche only
+       Answer 2: their realistic niche only
+       Answer 3: their ecological niche only
+       Answer 4: neither their fundamental niche nor their realistic niche
+
+
+   Step       Generated Reasoning Steps ( Draft πS , Target πB )                                                                              r̃(yiS∗ )/r(yjB∗ )
+
+
+   1           To determine the correct answer, let’s analyze the situation step by step:                                                          0.868
+
+
+               1. **Understanding the Situation**: The problem states that the bird species capable of nesting in t nestops or on the
+   2           ledges of nearby临ches make their homes only in the t ᄂ
+                                                                    ᆸops due to the established presence of a more aggregate bird
+                                                                    ᅥ                                                                              -3.779
+               species on the临ches.
+
+
+               1. **Understanding the Fundamental Niche**: The fundamental niche of a species refers to the set of environmen-
+               tal conditions under which the species can exist in isolation. It includes all the abiotic (non-living) factors such as             0.975
+               temperature, rainfall, soil type, and light.
+
+
+               2. **Understanding the Realistic Niche**: The real教室 of a species refers to the set of environmental conditions
+   3           under which the species can survive and replace itself. It includes all the abiotic and biotic (living) factors such as food        2.667
+               availability, competition, and predation.
+
+
+               3. **Understanding theECological Niche**: The ecologicaln Meghan of a species refers to the set of environmental
+   4           conditions that the species can survive and profit from in its particular community. It takes into account the interactions         0.918
+               with other species and the community environment.
+
+
+               4. **Analyzing the Problem**: The problem states that the t观影 birds are using only tsetops, which means they are
+               using the tsetops as their fundamentaln肯. This is because they are the only places they can find food and water, and
+   5                                                                                                                                               -6.190
+               there are no other t setops available for other species to occupy. Therefore, their fundamentaln资金 is satisfied by t
+               setops.
+
+
+               4. **Analyzing the Given situation**: The members of the bird species capable of nested in tree tops or on the ledges
+               of nearby cliffs make their homes only in the t plunged due to the established presence of a more aggressive bird
+               species on the cliff ledges. This means that the tress top-nesting birds have chosen a specific part of the community               0.985
+               where they can nested without being outcompeted or eaten by the more aggressive birds on the cliff ledges.
+
+
+               5. **Determining the Niche**: Since the tress top-nestling birds have chosen a specific part of the community where
+               they can nested without being outcomp住院 by the moreagonometric birds on the cliff ledges, it means they have
+   6                                                                                                                                               0.431
+               chosen their ecologicalnwide. They are not using their fundamental or realisticnights, but rather their ecologicalnwide,
+               which takes into account the interactions with other species and the community environment.
+
+
+               From this information, we can see that the tress top-nesting birds are utilizing their ecological niche only because they
+               have chosen a specific part of the community where they can nested without being affected by the presence of the more               0.907
+               aggressive birds on the cliff ledges.
+
+
+
+   7           Therefore, the correct answer is 3 .                                                                                                0.996
+
+
+   Correct Answer found: False
+
+
+
+
+                                                                                 40
+Published as a conference paper at ICLR 2026
+
+
+
+
+   RSD: MMLU-STEM, Example 2 (Qwen2.5-Math)
+
+       Prompt: The members of a bird species capable of nesting in treetops or on the ledges of nearby cliffs make their homes only
+       in the treetops due to the established presence of a more aggressive bird species on the cliff ledges. With respect to habitat, the
+       treetop-nesting birds are utilizing
+       Choices:
+       Answer 1: their fundamental niche only
+       Answer 2: their realistic niche only
+       Answer 3: their ecological niche only
+       Answer 4: neither their fundamental niche nor their realistic niche
+
+
+   Step       Generated Reasoning Steps ( Draft πS , Target πB )                                                                            r(yiS∗ )/r(yjB∗ )
+
+
+   1           To determine the appropriate answer, let’s analyze the situation step by step.                                                    0.999
+
+
+               1. **Identify the environment and the birds involved:** - The birds are capable of nesting in t peanuts or on the ledges
+   2           of nearby采用 plates. - The t peanuts are home to a more Aggressive bird species on the use plates.                                 0.904
+
+
+
+               2. **Understand the terms:** - ** Fundamental2:** - The fundamentaln的话 is the most basic or essential function
+               or purpose of something. - **Realisticn:** - The realisticn is the practical or real looking function or purpose of
+   3                                                                                                                                             0.935
+               something. - **ECologicaln:** - The ecologicaln is the relationship between all living things (biots) in their common
+               environment.
+
+
+               3. **Analyze the situation:** - The birds are using their t peanuts as their home for their napping, which is likely based
+               on the establish presence of a more Aggressive bird species on the use plates. - This implies that the t peanuts are a
+   4                                                                                                                                             0.362
+               natural medium for the birds to concentrated their napping and are likely a ”realistic”n place where they can depends on
+               the presence of the more Aggressive bird species.
+
+
+               3. **Analyze the birds’ habitat:** - The t tree-nesting birds choose to nested only in the t peanuts. - This suggests
+               they have a specific preference for this environment over the ledges.                                                             0.986
+
+
+
+               4. ** Evaluate the options:** - **Answer 1: their fundamentaltracker only:** - This would imply that the birds’
+               tress-nested are the most essential or basic function of their environment. - **Answer 2: their realistic tissues only:**
+               - This would imply that the birds’ tress-nested are the practical or real look function of their environment. - ** answer
+   5           3: their ecological n uses only:** - This would imply that the birds’ tress-nested are the ecological function of their           0.922
+               environment. - **answer 4: neither their fundamentaln nor their realistic n:** - This would imply that the birds’
+               tress-nested are not the most essential or basic or practical or real look function of their environment.
+
+
+               5. **Determine the most appropriate answer:** - The birds’ tress-nested is their ecologicaln use of the t tree-nest
+   6           because they choose to nested only in the t tree-nest due to the established presence of a more Agable bird species on            0.874
+               the use plates.
+
+
+
+   7           Therefore, the correct choice is 3 .                                                                                              0.998
+
+
+   Correct Answer found: False
+
+
+
+
+                                                                                41
+

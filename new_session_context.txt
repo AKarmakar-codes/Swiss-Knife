@@ -71,16 +71,8 @@ knockout tournament over the K candidates.
   - Append the fallback token, discard the remaining draft lookahead, and restart
     drafting.
 
-5. THE SLOWDOWN BOTTLENECK & OPTIMIZATION STRATEGY
---------------------------------------------------
-* The Bottleneck:
-  A knockout tournament of K = 8 has 7 matches. Scoring each match sequentially
-  by running the 7B LLM forward pass under different hook/functional states
-  takes up to 14 forward passes per draft position. With a long prefix (>1,000 tokens),
-  this runs at ~9 seconds per token.
 
-
-6. IMPORTANT THEORETICAL INSIGHTS
+5. IMPORTANT THEORETICAL INSIGHTS
 ---------------------------------
 * Swiss Knife Analysis (Why tournament over argmax?):
   DPO reward models are often miscalibrated on absolute scale. Argmax-based decoders
@@ -91,4 +83,11 @@ knockout tournament over the K candidates.
   GSI approximates the optimal tilted distribution (KL-regularized reward policy)
   using a draft model and a verifier. The tilted reward ensures the distribution of
   accepted tokens converges to the target tilted distribution.
-================================================================================
+
+6. What to implement next:
+Use ELO instead of knockout or tournament
+
+use RRM
+1. Parallel DraftingAt the current generation step, the lightweight drafter proposes a batch of $K$ short continuations (e.g., $K=8$ individual sentences, code blocks, or logical steps) rather than attempting to write the whole response.2. Immediate Blade EvaluationThe active alignment head (e.g., the DPOBlade) scores these $K$ chunks instantly. This localized scoring acts as a micro-correction, preventing the model from veering into unhelpful or unsafe territory before those errors can compound into the next sentence.3. Softmax Selection & VerificationThe system calculates the "tilted reward" by combining the base model's log probabilities with the blade's score. It applies the softmax function to this distribution and samples the winning chunk. The base model then verifies the tokens, retokenizes if necessary, and commits the chunk to the master context.4. Iterative ConstructionThis localized loop repeats until the end-of-sequence token is reached. Because the trajectory was continuously corrected during generation, the resulting complete response is tightly aligned to the desired criteria.5. Candidate Pool GenerationTo prepare for the Pairwise RM, this entire step-by-step process is run $N$ times in parallel (e.g., $N=4$ or $N=8$).
+
+  ================================================================================

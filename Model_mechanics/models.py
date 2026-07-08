@@ -79,32 +79,44 @@ _base_model_cache: dict = {}
 
 
 def _download_base_model(cfg: SwissKnifeConfig) -> str:
-    """Download the SFT-merged base model from the HuggingFace dataset repo.
+    """Download the base model from HuggingFace dataset or model repo.
 
-    The model is stored inside a dataset repo subfolder, so we use
-    snapshot_download with allow_patterns to fetch only the relevant files.
+    If base_model_repo_type is 'model' and there is no subfolder, we return the
+    base_model_id directly to let HuggingFace's standard cache mechanisms handle it.
+    Otherwise, we use snapshot_download to fetch the model files.
     Results are cached in memory for the process lifetime.
 
     Returns
     -------
     str
-        Local path to the downloaded model directory.
+        Local path to the downloaded model directory or HuggingFace repo ID.
     """
-    cache_key = (cfg.base_model_id, cfg.base_model_subfolder)
+    repo_type = getattr(cfg, "base_model_repo_type", "dataset")
+    cache_key = (cfg.base_model_id, cfg.base_model_subfolder, repo_type)
     if cache_key in _base_model_cache:
         return _base_model_cache[cache_key]
 
     subfolder = cfg.base_model_subfolder
+
+    if repo_type == "model" and not subfolder:
+        # For standard model repositories without subfolders, return base_model_id
+        # directly so AutoModel/AutoTokenizer loads from HuggingFace cache.
+        _base_model_cache[cache_key] = cfg.base_model_id
+        logger.info("Using base model ID from model repository directly: %s", cfg.base_model_id)
+        return cfg.base_model_id
+
     logger.info(
-        "Downloading base model from dataset repo: %s / %s",
-        cfg.base_model_id, subfolder,
+        "Downloading base model from %s repo: %s / %s",
+        repo_type, cfg.base_model_id, subfolder,
     )
+    
+    allow_patterns = [f"{subfolder}/*"] if subfolder else None
     local_dir = snapshot_download(
         repo_id=cfg.base_model_id,
-        repo_type="dataset",
-        allow_patterns=[f"{subfolder}/*"],
+        repo_type=repo_type,
+        allow_patterns=allow_patterns,
     )
-    model_path = os.path.join(local_dir, subfolder)
+    model_path = os.path.join(local_dir, subfolder) if subfolder else local_dir
     _base_model_cache[cache_key] = model_path
     logger.info("Base model cached at: %s", model_path)
     return model_path
@@ -141,11 +153,20 @@ def load_base_model(cfg: SwissKnifeConfig) -> PreTrainedModel:
         "Loading base model (draft + ref): %s  [dtype=%s, device=%s]",
         model_path, dtype, device,
     )
+    attn_kwargs = {}
+    if dtype in [torch.float16, torch.bfloat16] and torch.cuda.is_available():
+        try:
+            import flash_attn
+            attn_kwargs["attn_implementation"] = "flash_attention_2"
+        except ImportError:
+            pass
+
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
         torch_dtype=dtype,
         device_map=device,
         trust_remote_code=True,
+        **attn_kwargs,
     )
     model.eval()
     for param in model.parameters():
@@ -195,11 +216,20 @@ def load_blade_model(
         "Loading blade '%s' base copy [dtype=%s, device=%s]...",
         blade_name, dtype, device,
     )
+    attn_kwargs = {}
+    if dtype in [torch.float16, torch.bfloat16] and torch.cuda.is_available():
+        try:
+            import flash_attn
+            attn_kwargs["attn_implementation"] = "flash_attention_2"
+        except ImportError:
+            pass
+
     base_for_blade = AutoModelForCausalLM.from_pretrained(
         model_path,
         torch_dtype=dtype,
         device_map=device,
         trust_remote_code=True,
+        **attn_kwargs,
     )
 
     if repo_type == "model":
@@ -257,3 +287,99 @@ def load_all(
     base_model  = load_base_model(cfg)
     blade_model = load_blade_model(cfg, blade_name)
     return tokenizer, base_model, blade_model
+
+
+def load_drafter_tokenizer(cfg: SwissKnifeConfig) -> PreTrainedTokenizer:
+    """Load the tokenizer for the drafter model."""
+    logger.info("Loading drafter tokenizer from: %s", cfg.drafter_model_id)
+    tokenizer = AutoTokenizer.from_pretrained(
+        cfg.drafter_model_id,
+        trust_remote_code=True,
+    )
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+    tokenizer.padding_side = "left"
+    return tokenizer
+
+
+def load_drafter_model(cfg: SwissKnifeConfig) -> PreTrainedModel:
+    """Load the frozen drafter model (π_S)."""
+    dtype = _resolve_dtype(cfg)
+    device = _resolve_device(cfg)
+    logger.info("Loading drafter model: %s  [dtype=%s, device=%s]", cfg.drafter_model_id, dtype, device)
+    model = AutoModelForCausalLM.from_pretrained(
+        cfg.drafter_model_id,
+        torch_dtype=dtype,
+        device_map=device,
+        trust_remote_code=True,
+    )
+    model.eval()
+    for param in model.parameters():
+        param.requires_grad = False
+    return model
+
+
+def load_verifier_tokenizer(cfg: SwissKnifeConfig) -> PreTrainedTokenizer:
+    """Load the tokenizer for the verifier model."""
+    # Build custom config with verifier model settings
+    temp_cfg = SwissKnifeConfig(
+        base_model_id=cfg.verifier_model_id,
+        base_model_subfolder=cfg.verifier_model_subfolder,
+        base_model_repo_type=cfg.verifier_model_repo_type
+    )
+    return load_tokenizer(temp_cfg)
+
+
+def load_verifier_model(cfg: SwissKnifeConfig) -> PreTrainedModel:
+    """Load the verifier model (π_B)."""
+    temp_cfg = SwissKnifeConfig(
+        base_model_id=cfg.verifier_model_id,
+        base_model_subfolder=cfg.verifier_model_subfolder,
+        base_model_repo_type=cfg.verifier_model_repo_type
+    )
+    return load_base_model(temp_cfg)
+
+
+def load_rrm_model(cfg: SwissKnifeConfig) -> PreTrainedModel:
+    """Load the Reward Reasoning Model (RRM) judge model."""
+    dtype = _resolve_dtype(cfg)
+    device = _resolve_device(cfg)
+    logger.info("Loading RRM model: %s  [dtype=%s, device=%s]", cfg.rrm_model_id, dtype, device)
+    attn_kwargs = {}
+    if dtype in [torch.float16, torch.bfloat16] and torch.cuda.is_available():
+        try:
+            import flash_attn
+            attn_kwargs["attn_implementation"] = "flash_attention_2"
+        except ImportError:
+            pass
+
+    model = AutoModelForCausalLM.from_pretrained(
+        cfg.rrm_model_id,
+        torch_dtype=dtype,
+        device_map=device,
+        trust_remote_code=True,
+        **attn_kwargs,
+    )
+    model.eval()
+    for param in model.parameters():
+        param.requires_grad = False
+    return model
+
+
+def load_rrm_tokenizer(cfg: SwissKnifeConfig) -> PreTrainedTokenizer:
+    """Load the tokenizer for the RRM judge model.
+
+    RRM-7B is a Qwen2.5-based model and exposes its own tokenizer directly
+    from the model repo. This loader fetches it explicitly rather than sharing
+    the verifier tokenizer, so that special tokens (pad, eos) are correctly
+    configured for the RRM model.
+    """
+    logger.info("Loading RRM tokenizer from: %s", cfg.rrm_model_id)
+    tokenizer = AutoTokenizer.from_pretrained(cfg.rrm_model_id, trust_remote_code=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+    tokenizer.padding_side = "left"
+    return tokenizer
+

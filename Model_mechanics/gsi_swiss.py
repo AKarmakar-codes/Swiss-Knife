@@ -2,11 +2,29 @@
 Swiss Knife — GSI Strategy 3: Swiss-System Matches → Points Table → Softmax
 =============================================================================
 
-Implements the Swiss Knife's novel tournament selection adapted for GSI
-step-level inference. This is the strategy that combines the Swiss-system
-pairing mechanism (§4.3.1 of swiss_knife_analysis.pdf) with softmax
-selection over the final cumulative points.
-Uses LLaMA 3.2 3B as the drafter and Qwen 2.5 7B as the verifier/base.
+Implements the Swiss Knife's tournament selection adapted for GSI
+step-level inference. This combines the Swiss-system pairing mechanism 
+(§4.3.1 of swiss_knife_analysis.pdf) with softmax selection over the final 
+cumulative points. 
+Uses Qwen 2.5 3B as the drafter and Qwen 2.5 7B as the verifier/base.
+
+Algorithm Pipeline:
+-------------------
+1. Drafting: Sample `n` candidate reasoning steps from the drafting model (π_S).
+2. Swiss Tournament (R rounds):
+   - Candidates are paired based on their current cumulative points (similar 
+     scores play each other, avoiding rematches when possible). If `n` is odd, 
+     the unpaired candidate gets a "bye" (0.5 points).
+   - Match evaluation: 
+     MATCH(A,B) = α·(log π_draft) + (1-α)·(r_blade)
+   - Winner gets 1 point; loser gets 0 points.
+3. Softmax Selection: Apply softmax (temperature β) over the final points 
+   table to stochastically select a winning step.
+4. Verification & Thresholding: 
+   - Compute tilted reward: r_tilted = r_blade + (1/β)*(log π_verifier - log π_draft)
+   - If r_tilted >= threshold, accept the step, append to prefix, and repeat.
+   - If r_tilted < threshold, reject. Fall back to sampling directly from the 
+     verifier (π_B), run the tournament again, and accept the selected step unconditionally.
 """
 
 import logging
@@ -23,8 +41,8 @@ from peft import PeftModel
 from .config import SwissKnifeConfig
 from .blades import DPOBlade
 
-# Import retokenisation utilities from evaluation
-from evaluation.retokenisation_llama_to_qwen import compute_logprob, retokenize_step
+# Import logprob utility (shared tokenizer — no retokenisation needed)
+from evaluation.retokenisation_llama_to_qwen import compute_logprob
 
 logger = logging.getLogger(__name__)
 
@@ -89,12 +107,6 @@ def swiss_system_points_table(
     rounds: int = 0,
 ) -> Tuple[List[float], int, int]:
     """Run Swiss-system matches and return the cumulative points table.
-
-    This implements §4.3.1 of swiss_knife_analysis.pdf:
-    - R rounds of pairwise matches.
-    - Each round: pair candidates by current cumulative score (Swiss pairing).
-    - Match function: MATCH(A,B) = α·(draft_A - draft_B) + (1-α)·(blade_A - blade_B)
-    - Winner gets 1 point, bye = 0.5 points.
 
     Parameters
     ----------
@@ -238,7 +250,7 @@ class GSISwissGenerator:
     cfg : SwissKnifeConfig
         Full pipeline configuration.
     drafter_model : PreTrainedModel
-        The draft model (e.g. LLaMA 3.2 3B).
+        The draft model (e.g. Qwen 2.5 3B).
     drafter_tokenizer : PreTrainedTokenizer
         Tokenizer for the draft model.
     verifier_model : PreTrainedModel
@@ -383,62 +395,53 @@ class GSISwissGenerator:
         threshold = self.cfg.gsi_threshold
         swiss_rounds = self.cfg.swiss_rounds
 
-        llama_prefix_text = prompt
-        qwen_prefix_text = prompt
+        prefix_text = prompt
 
-        generated_qwen_tokens: List[int] = []
+        generated_tokens: List[int] = []
         stats = GSISwissStats()
         t_start = time.perf_counter()
 
-        initial_qwen_encoded = self.verifier_tokenizer(
+        initial_encoded = self.verifier_tokenizer(
             prompt, return_tensors="pt", padding=False, truncation=True
         )
-        initial_qwen_prefix_ids = initial_qwen_encoded["input_ids"].squeeze(0).tolist()
+        initial_prefix_ids = initial_encoded["input_ids"].squeeze(0).tolist()
 
-        while len(generated_qwen_tokens) < max_tokens:
+        while len(generated_tokens) < max_tokens:
             stats.total_steps += 1
 
-            # Prepare tokenized prefixes for both tokenizers
-            llama_encoded = self.drafter_tokenizer(
-                llama_prefix_text, return_tensors="pt", padding=False, truncation=True
+            # Prepare tokenized prefix
+            encoded = self.verifier_tokenizer(
+                prefix_text, return_tensors="pt", padding=False, truncation=True
             )
-            llama_prefix_ids = llama_encoded["input_ids"].squeeze(0).to(self.drafter_device)
+            prefix_ids_verifier = encoded["input_ids"].squeeze(0).to(self.verifier_device)
+            prefix_ids_drafter = prefix_ids_verifier.to(self.drafter_device)
 
-            qwen_encoded = self.verifier_tokenizer(
-                qwen_prefix_text, return_tensors="pt", padding=False, truncation=True
-            )
-            qwen_prefix_ids = qwen_encoded["input_ids"].squeeze(0).to(self.verifier_device)
-
-            # ── Step 1: Sample n reasoning steps from LLaMA ────────────────
-            llama_step_ids_list, step_texts = self._sample_reasoning_steps(
-                self.drafter_model, self.drafter_tokenizer, llama_prefix_ids.unsqueeze(0), n, self.drafter_device
+            # ── Step 1: Sample n reasoning steps from Drafter ────────────────
+            draft_step_ids_list, step_texts = self._sample_reasoning_steps(
+                self.drafter_model, self.drafter_tokenizer, prefix_ids_drafter.unsqueeze(0), n, self.drafter_device
             )
             stats.total_candidates_scored += n
 
-            non_empty = [(ids, txt) for ids, txt in zip(llama_step_ids_list, step_texts) if len(ids) > 0]
+            non_empty = [(ids, txt) for ids, txt in zip(draft_step_ids_list, step_texts) if len(ids) > 0]
             if not non_empty:
                 logger.info("All candidate steps empty (EOS). Stopping.")
                 break
-            llama_step_ids_list = [x[0] for x in non_empty]
+            draft_step_ids_list = [x[0] for x in non_empty]
             step_texts = [x[1] for x in non_empty]
             n_actual = len(step_texts)
 
-            # Compute LLaMA logprobs & retokenize to Qwen for DPO blade scoring
+            # Compute Drafter logprobs (no retokenization needed since tokenizers are identical)
             draft_logprobs_list = []
-            qwen_step_ids_list = []
+            verifier_step_ids_list = []
             for i in range(n_actual):
-                step_text = step_texts[i]
-                llama_step_ids = llama_step_ids_list[i]
+                draft_step_ids = draft_step_ids_list[i]
 
-                # Compute LLaMA log probability on exact generated IDs
-                llama_lp = compute_logprob(self.drafter_model, llama_prefix_ids, llama_step_ids)
-                draft_logprobs_list.append(llama_lp)
+                # Compute Drafter log probability on exact generated IDs
+                draft_lp = compute_logprob(self.drafter_model, prefix_ids_drafter, draft_step_ids)
+                draft_logprobs_list.append(draft_lp)
 
-                # Qwen retokenization
-                qwen_step_ids = retokenize_step(
-                    self.verifier_tokenizer, qwen_prefix_text, step_text, qwen_prefix_ids, self.verifier_device
-                )
-                qwen_step_ids_list.append(qwen_step_ids)
+                # Step IDs for verifier device
+                verifier_step_ids_list.append(draft_step_ids.to(self.verifier_device))
 
             if not draft_logprobs_list:
                 logger.info("All candidate steps empty. Stopping.")
@@ -446,8 +449,8 @@ class GSISwissGenerator:
 
             draft_logprobs = torch.tensor(draft_logprobs_list, dtype=torch.float, device=self.verifier_device)
 
-            # Compute blade rewards for all candidates on Qwen-tokenized IDs
-            blade_rewards = self.blade.score_reasoning_steps(qwen_prefix_ids.unsqueeze(0), qwen_step_ids_list)
+            # Compute blade rewards for all candidates
+            blade_rewards = self.blade.score_reasoning_steps(prefix_ids_verifier.unsqueeze(0), verifier_step_ids_list)
 
             # ── Step 2: Swiss-system tournament → points table ──────────
             points, n_rounds, n_matches = swiss_system_points_table(
@@ -469,10 +472,10 @@ class GSISwissGenerator:
             selected_idx = softmax_over_points(points, beta, self.verifier_device)
             selected_reward = blade_rewards[selected_idx].item()
             winner_draft_lp = draft_logprobs_list[selected_idx]
-            winner_qwen_step_ids = qwen_step_ids_list[selected_idx]
+            winner_verifier_step_ids = verifier_step_ids_list[selected_idx]
 
             # ── Step 4: Compute tilted reward for the winner ────────────────
-            winner_target_lp = compute_logprob(self.verifier_model, qwen_prefix_ids, winner_qwen_step_ids)
+            winner_target_lp = compute_logprob(self.verifier_model, prefix_ids_verifier, winner_verifier_step_ids)
             selected_tilted_reward = selected_reward + (1.0 / beta) * (winner_target_lp - winner_draft_lp)
 
             # ── Step 5: Rejection threshold check ───────────────────────
@@ -486,7 +489,7 @@ class GSISwissGenerator:
                     stats.total_steps, selected_tilted_reward, threshold,
                 )
                 resample_ids_list, resample_texts = self._sample_reasoning_steps(
-                    self.verifier_model, self.verifier_tokenizer, qwen_prefix_ids.unsqueeze(0), n, self.verifier_device
+                    self.verifier_model, self.verifier_tokenizer, prefix_ids_verifier.unsqueeze(0), n, self.verifier_device
                 )
                 stats.total_candidates_scored += n
 
@@ -502,10 +505,10 @@ class GSISwissGenerator:
                     break
 
                 resample_blade = self.blade.score_reasoning_steps(
-                    qwen_prefix_ids.unsqueeze(0), resample_ids_list_clean,
+                    prefix_ids_verifier.unsqueeze(0), resample_ids_list_clean,
                 )
                 resample_draft = self.blade.compute_step_draft_logprobs(
-                    qwen_prefix_ids.unsqueeze(0), resample_ids_list_clean,
+                    prefix_ids_verifier.unsqueeze(0), resample_ids_list_clean,
                 )
                 resample_points, n_r2, n_m2 = swiss_system_points_table(
                     resample_draft, resample_blade, alpha,
@@ -517,14 +520,14 @@ class GSISwissGenerator:
                 resample_idx = softmax_over_points(resample_points, beta, self.verifier_device)
                 selected_reward = resample_blade[resample_idx].item()
                 selected_tilted_reward = selected_reward  # no log ratio term on fallback
-                winner_qwen_step_ids = resample_ids_list_clean[resample_idx]
+                winner_verifier_step_ids = resample_ids_list_clean[resample_idx]
                 winner_text = resample_texts_clean[resample_idx]
 
             stats.step_rewards.append(selected_tilted_reward)
 
             # ── Step 6: Commit ──────────────────────────────────────────
-            winner_tokens = winner_qwen_step_ids.tolist()
-            remaining = max_tokens - len(generated_qwen_tokens)
+            winner_tokens = winner_verifier_step_ids.tolist()
+            remaining = max_tokens - len(generated_tokens)
             winner_tokens = winner_tokens[:remaining]
 
             eos_hit = False
@@ -535,12 +538,11 @@ class GSISwissGenerator:
                     break
                 clean_tokens.append(tok)
 
-            generated_qwen_tokens.extend(clean_tokens)
+            generated_tokens.extend(clean_tokens)
             stats.total_tokens += len(clean_tokens)
 
-            # Update prefixes for next iteration
-            llama_prefix_text = llama_prefix_text + winner_text
-            qwen_prefix_text = qwen_prefix_text + winner_text
+            # Update prefix for next iteration
+            prefix_text = prefix_text + winner_text
 
             if verbose:
                 logger.info(
@@ -558,7 +560,7 @@ class GSISwissGenerator:
         # ── Finalize ─────────────────────────────────────────────────────
         stats.total_time_s = time.perf_counter() - t_start
 
-        all_ids = initial_qwen_prefix_ids + generated_qwen_tokens
+        all_ids = initial_prefix_ids + generated_tokens
         output_text = self.verifier_tokenizer.decode(all_ids, skip_special_tokens=True)
 
         if verbose:

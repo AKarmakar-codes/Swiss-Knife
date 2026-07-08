@@ -9,8 +9,14 @@ step-level log probabilities. Used across all GSI decoding strategies.
 import torch
 
 def compute_logprob(model, prefix_ids, step_ids):
-    """Compute log-probability of step_ids conditioned on prefix_ids.
-    
+    """Compute the mean per-token log-probability of step_ids conditioned on prefix_ids.
+
+    Returns the **mean** (not sum) over step tokens so that the tilted reward
+    penalty ``(1/β) * (qwen_lp - draft_lp)`` is independent of step length.
+    Without length normalization, long steps accumulate large negative log-prob
+    sums and are almost always rejected by the threshold, causing the override
+    rate to vary wildly with prompt difficulty regardless of β or u.
+
     Parameters
     ----------
     model : PreTrainedModel
@@ -18,11 +24,11 @@ def compute_logprob(model, prefix_ids, step_ids):
         1D tensor of prefix token IDs.
     step_ids : torch.Tensor
         1D tensor of step token IDs.
-        
+
     Returns
     -------
     float
-        The sum of log-probabilities of step tokens.
+        Mean log-probability per token of the step.
     """
     if step_ids.shape[0] == 0:
         return 0.0
@@ -37,15 +43,15 @@ def compute_logprob(model, prefix_ids, step_ids):
 
     # The logit at index t predicts token at index t+1.
     pred_positions = torch.arange(
-        prefix_len - 1, 
-        prefix_len + step_ids.shape[0] - 1, 
+        prefix_len - 1,
+        prefix_len + step_ids.shape[0] - 1,
         device=prefix_ids.device
     )
     log_probs = torch.log_softmax(logits[pred_positions].float(), dim=-1)
-    
-    # Gather step_ids probabilities
+
+    # Gather step token log-probabilities and return their mean
     step_logprobs = log_probs.gather(dim=-1, index=step_ids.unsqueeze(-1)).squeeze(-1)
-    return step_logprobs.sum().item()
+    return step_logprobs.mean().item()  # per-token mean, not sum
 
 
 def retokenize_step(tokenizer, prefix_text, step_text, prefix_ids, device):

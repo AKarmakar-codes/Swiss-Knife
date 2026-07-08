@@ -6,12 +6,21 @@ Covers both Option A (non-speculative Best-of-K tournament) and
 Option B (speculative-decoding-integrated tournament verifier).
 
 NOTE ON BASE MODEL:
-    The DPO adapters at MGPGRAD/Swiss-Knife and divyajot5005/ndna were
-    trained on a Qwen2.5-based SFT-merged checkpoint (Qwen2ForCausalLM,
-    hidden=3584, 28 layers, vocab=152064). The SFT-merged model is hosted
-    ungated as a HuggingFace *dataset* at:
-        divyajot5005/ndna  →  SFT/Qwen_SFT_merged/
-    We load it via snapshot_download (no gating).
+    The SFT-merged checkpoint at divyajot5005/ndna → SFT/Qwen_SFT_merged/
+    is a Qwen 2.5 **7B** model (Qwen2ForCausalLM, hidden=3584, 28 layers,
+    vocab=152064).  Despite earlier comments calling it '3B', the config.json
+    dimensions confirm it matches Qwen2.5-7B-Instruct exactly.
+    It is hosted ungated as a HuggingFace *dataset* and loaded via
+    snapshot_download (no gating required).
+
+    GSI role assignments:
+        Drafter  (π_S): Qwen/Qwen2.5-3B-Instruct  — official HF model repo
+                        (hidden=2048, 36 layers) — the true 3B model.
+        Verifier (π_B): divyajot5005/ndna / SFT/Qwen_SFT_merged
+                        — the 7B SFT checkpoint on which all DPO blades
+                        were trained.  Using this as the verifier ensures
+                        blade logprobs and verifier logprobs are on the same
+                        model family and the blades load without arch mismatch.
 
 NOTE ON BLADES:
     Blades are heterogeneous in where they live on the HF Hub:
@@ -36,6 +45,9 @@ class SwissKnifeConfig:
 
     base_model_subfolder: str = "SFT/Qwen_SFT_merged"
     """Subfolder within base_model_id containing the full model weights."""
+
+    base_model_repo_type: str = "dataset"
+    """HuggingFace repository type for the base model ('dataset' or 'model')."""
 
     blade_sources: Dict[str, Dict[str, str]] = field(default_factory=lambda: {
         "helpfulness": {
@@ -73,16 +85,22 @@ class SwissKnifeConfig:
     ONE forward pass over all γ positions. Typical values: 4–8."""
 
     tournament_mode: str = "swiss"
-    """Which tournament format to use: 'knockout' or 'swiss'.
+    """Which tournament format to use: 'knockout', 'swiss', or 'elo'.
     'knockout'  — single-elimination bracket (log2 K rounds, K−1 matches).
     'swiss'     — Swiss-system schedule (swiss_rounds rounds, K/2·R matches).
-    Swiss-system is the default: more robust to auditor noise because
-    candidates play all rounds (no early elimination)."""
+    'elo'       — Elo rating system tournament (fixed to 3 rounds with decaying K-factors: 40, 20, 10)."""
 
     swiss_rounds: int = 3
     """Number of rounds in the Swiss-system tournament (used only when
     tournament_mode='swiss'). Typical value: ceil(log2(K)).
     With K=8, ceil(log2(8))=3 rounds, giving 12 total matches."""
+
+    elo_temperature: float = 1.0
+    """Temperature parameter for relative strength selection in Elo mode. Higher values increase diversity."""
+
+    elo_rounds: int = 3
+    """Number of rounds in the Elo rating system tournament (used only when
+    tournament_mode='elo'). Default: 3."""
 
     generation_mode: str = "option_b"
     """Which generation loop to run:
@@ -90,7 +108,9 @@ class SwissKnifeConfig:
     'option_b' — speculative-decoding-integrated verifier (speculative_generator.py).
     'gsi_softmax'  — GSI with softmax selection over reasoning steps.
     'gsi_pairwise' — GSI with pairwise Bradley-Terry selection.
-    'gsi_swiss'    — GSI with Swiss-system matches → points → softmax."""
+    'gsi_swiss'    — GSI with Swiss-system matches → points → softmax.
+    'gsi_elo'      — GSI with Elo-system tournament selection.
+    'gsi_gumbel'   — GSI with speculative Gumbel-Top-k selection."""
 
     # ── GSI hyperparameters ─────────────────────────────────────────────
     gsi_n: int = 8
@@ -110,6 +130,9 @@ class SwissKnifeConfig:
     """Maximum tokens per reasoning step. If the model hasn't produced the
     step delimiter after this many tokens, the step is force-terminated."""
 
+    gsi_step_max_tokens: int = 512
+    """Alias for compatibility."""
+
     gsi_tau: float = 1.0
     """Temperature τ for pairwise Bradley-Terry selection (Strategy 2).
     P(A wins) = 1 / (1 + exp(-MATCH(A,B) / τ)).
@@ -123,6 +146,31 @@ class SwissKnifeConfig:
 
     beta: float = 0.1
     """DPO implicit reward scaling:  r_blade = β · log(π_blade / π_ref)."""
+
+    # ── Drafter/Verifier Settings ───────────────────────────────────────
+    drafter_model_id: str = "Qwen/Qwen2.5-3B-Instruct"
+    """Repo ID for the drafter model (π_S).
+    This is the official Qwen 2.5 3B Instruct model from the HF hub
+    (hidden=2048, 36 layers) — the true 3B model used for cheap fast drafting."""
+
+    verifier_model_id: str = "divyajot5005/ndna"
+    """HuggingFace *dataset* repo hosting the SFT-merged verifier model (π_B).
+    Despite earlier assumptions this is a Qwen 2.5 **7B** checkpoint
+    (hidden=3584, 28 layers, vocab=152064) — confirmed by config.json inspection.
+    All DPO blade adapters were trained on this exact checkpoint, so blades
+    load onto the verifier without any architecture mismatch."""
+
+    verifier_model_subfolder: str = "SFT/Qwen_SFT_merged"
+    """Subfolder within verifier_model_id containing the 7B SFT model weights."""
+
+    verifier_model_repo_type: str = "dataset"
+    """Repository type for the verifier model. 'dataset' because the 7B SFT
+    checkpoint is hosted in a HuggingFace dataset repo (not a model repo)."""
+
+
+
+    drafter_temperature: float = 1.1
+    """Temperature for the drafter during GSI candidate step sampling."""
 
     # ── Generation parameters ───────────────────────────────────────────
     max_new_tokens: int = 200
@@ -161,7 +209,6 @@ class SwissKnifeConfig:
 
     stochastic_num_layers_to_mask: int = 2
     """Number of final transformer layers to mask attention heads in head_subsample mode."""
-
 
     dtype: str = "float32"
     """Compute dtype: 'float16', 'bfloat16', or 'float32'.
@@ -203,11 +250,13 @@ class SwissKnifeConfig:
         assert self.L >= 1, f"Span length L must be ≥ 1, got {self.L}"
         assert self.beta > 0, f"β must be positive, got {self.beta}"
         assert self.gamma >= 1, f"γ (lookahead) must be ≥ 1, got {self.gamma}"
-        assert self.tournament_mode in ("knockout", "swiss"), \
-            f"tournament_mode must be 'knockout' or 'swiss', got '{self.tournament_mode}'"
+        assert self.tournament_mode in ("knockout", "swiss", "elo"), \
+            f"tournament_mode must be 'knockout', 'swiss', or 'elo', got '{self.tournament_mode}'"
+        assert self.elo_temperature >= 0.0, f"elo_temperature must be non-negative, got {self.elo_temperature}"
+        assert self.elo_rounds >= 1, f"elo_rounds must be ≥ 1, got {self.elo_rounds}"
         _valid_gen_modes = (
             "option_a", "option_b",
-            "gsi_softmax", "gsi_pairwise", "gsi_swiss",
+            "gsi_softmax", "gsi_pairwise", "gsi_swiss", "gsi_elo", "gsi_gumbel",
         )
         assert self.generation_mode in _valid_gen_modes, \
             f"generation_mode must be one of {_valid_gen_modes}, got '{self.generation_mode}'"

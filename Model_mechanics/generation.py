@@ -27,6 +27,8 @@ from peft import PeftModel
 from .config import SwissKnifeConfig
 from .blades import DPOBlade
 from .tournament import knockout_bracket
+from .swiss_system import swiss_system_bracket
+from .elo_system import elo_bracket
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,13 @@ class SwissKnifeGenerator:
         self.tokenizer = tokenizer
         self.base_model = base_model
         self.blade = DPOBlade(cfg, base_model, blade_model, tokenizer)
+
+        if cfg.tournament_mode == "knockout":
+            self._run_tournament = lambda ts, bs: knockout_bracket(ts, bs, self.cfg.alpha)
+        elif cfg.tournament_mode == "swiss":
+            self._run_tournament = lambda ts, bs: swiss_system_bracket(ts, bs, self.cfg.alpha, rounds=self.cfg.swiss_rounds)
+        else:
+            self._run_tournament = lambda ts, bs: elo_bracket(ts, bs, self.cfg.alpha, normalize=self.cfg.normalize_scores, temperature=self.cfg.elo_temperature, rounds=self.cfg.elo_rounds)
 
     # ── Candidate sampling ─────────────────────────────────────────────
 
@@ -230,9 +239,9 @@ class SwissKnifeGenerator:
                 draft_scores = (draft_scores - draft_scores.mean()) / (draft_scores.std() + 1e-6)
                 blade_scores = (blade_scores - blade_scores.mean()) / (blade_scores.std() + 1e-6)
 
-            # ── Step 4: w ← KnockoutBracket(C, s_d, s_b, α) ─────────
-            winner_idx = knockout_bracket(
-                draft_scores, blade_scores, self.cfg.alpha,
+            # ── Step 4: w ← Tournament(C, s_d, s_b, α) ─────────
+            winner_idx = self._run_tournament(
+                draft_scores, blade_scores
             )
 
             # Optional JSONL dump of per-round score vectors for plotting.

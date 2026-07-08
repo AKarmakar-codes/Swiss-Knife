@@ -8,7 +8,7 @@ GEval rubric (LLM-as-judge) plus an optional judge-free Detoxify
 deterministic cross-check.
 
 Generation wiring is identical to benchmark_gsi_strategies_harmlessness.py
-(LLaMA 3.2 3B drafter + Qwen 2.5 7B verifier/base + harmlessness blade);
+(Qwen 2.5 3B drafter + Qwen 2.5 7B verifier/base + harmlessness blade);
 the only difference is the scoring axis — toxicity only, instead of the
 full GEval/AQI suite.
 
@@ -95,7 +95,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DRAFTER_MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"
+DRAFTER_MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
 _DTYPE_MAP = {
     "float16": torch.float16,
     "bfloat16": torch.bfloat16,
@@ -276,7 +276,7 @@ def aggregate(scored):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_drafter(dtype_str):
-    logger.info("Loading LLaMA 3.2 3B Instruct drafter...")
+    logger.info("Loading Qwen 2.5 3B Instruct drafter...")
     dtype = _DTYPE_MAP.get(dtype_str) or torch.float32
     if dtype == torch.float16 and not torch.cuda.is_available():
         dtype = torch.float32
