@@ -82,7 +82,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--K", type=int, default=8)
     parser.add_argument("--gamma", type=int, default=4)
-    parser.add_argument("--swiss-rounds", type=int, default=3)
+    parser.add_argument("--swiss-rounds", type=int, default=6)
     parser.add_argument("--beta", type=float, default=0.1)
     parser.add_argument("--blade-alpha", type=float, default=0.5)
     parser.add_argument("--dtype", default=None, choices=["float16", "bfloat16", "float32"])

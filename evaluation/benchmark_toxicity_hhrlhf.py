@@ -330,7 +330,7 @@ def parse_args():
     p.add_argument("--beta", type=float, default=0.1)
     p.add_argument("--gsi-threshold", type=float, default=0.0)
     p.add_argument("--gsi-tau", type=float, default=1.0)
-    p.add_argument("--swiss-rounds", type=int, default=0)
+    p.add_argument("--swiss-rounds", type=int, default=6)
     p.add_argument("--gsi-max-step-tokens", type=int, default=512)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--dtype", type=str, default="bfloat16", choices=["float16", "bfloat16", "float32"])

@@ -191,16 +191,16 @@ def elo_bracket(
             "Elo champion (Greedy, T=0): c%d (rating=%.1f)", champion, ratings[champion]
         )
     else:
-        # Zero-center ratings then scale by beta.
-        # logits_i = (R_i - 1500) * beta  →  same scale as gsi_swiss softmax(beta * points).
+        # Zero-center ratings then scale by temperature.
+        # logits_i = (R_i - 1500) / temperature
         ratings_tensor = torch.tensor(ratings, dtype=torch.float, device=target_scores.device)
-        logits = (ratings_tensor - 1500.0) * beta
+        logits = (ratings_tensor - 1500.0) / temperature
         logits = logits - torch.max(logits)  # numerical stability
         probs = torch.softmax(logits, dim=0)
         champion = int(torch.multinomial(probs, num_samples=1).item())
         logger.debug(
-            "Elo champion (Probabilistic, β=%.2f): c%d (rating=%.1f, prob=%.3f)",
-            beta, champion, ratings[champion], probs[champion].item()
+            "Elo champion (Probabilistic, T=%.2f): c%d (rating=%.1f, prob=%.3f)",
+            temperature, champion, ratings[champion], probs[champion].item()
         )
 
     return champion
@@ -317,7 +317,7 @@ def stochastic_elo_bracket(
         )
     else:
         ratings_tensor = torch.tensor(ratings, dtype=torch.float, device=target_scores.device)
-        logits = (ratings_tensor - 1500.0) * beta
+        logits = (ratings_tensor - 1500.0) / temperature
         logits = logits - torch.max(logits)
         probs = torch.softmax(logits, dim=0)
         champion = int(torch.multinomial(probs, num_samples=1).item())

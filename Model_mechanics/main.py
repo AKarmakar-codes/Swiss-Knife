@@ -113,8 +113,8 @@ def parse_args() -> argparse.Namespace:
         help="Temperature parameter for Elo relative strength selection (default: 1.0).",
     )
     p.add_argument(
-        "--elo-rounds", type=int, default=3,
-        help="Number of rounds in the Elo rating system tournament (default: 3).",
+        "--elo-rounds", type=int, default=6,
+        help="Number of rounds in the Elo rating system tournament (default: 6).",
     )
 
     # ── GSI-specific arguments ──────────────────────────────────────────
@@ -136,8 +136,8 @@ def parse_args() -> argparse.Namespace:
         help="Temperature τ for Bradley-Terry pairwise selection (default: 1.0).",
     )
     gsi.add_argument(
-        "--swiss-rounds", type=int, default=0,
-        help="Swiss-system rounds. 0 = auto ceil(log2(n)) (default: 0).",
+        "--swiss-rounds", type=int, default=6,
+        help="Swiss-system rounds. 0 = auto ceil(log2(n)) (default: 6).",
     )
     gsi.add_argument(
         "--stats-out", type=str, default="",

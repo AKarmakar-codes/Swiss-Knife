@@ -88,7 +88,7 @@ class SwissKnifeConfig:
     """Which tournament format to use: 'knockout', 'swiss', or 'elo'.
     'knockout'  — single-elimination bracket (log2 K rounds, K−1 matches).
     'swiss'     — Swiss-system schedule (swiss_rounds rounds, K/2·R matches).
-    'elo'       — Elo rating system tournament (fixed to 3 rounds with decaying K-factors: 40, 20, 10)."""
+    'elo'       — Elo rating system tournament (fixed to 6 rounds with decaying K-factors: 40, 32, 24, 16, 12, 10)."""
 
     swiss_rounds: int = 6
     """Number of rounds in the Swiss-system tournament (used only when
@@ -98,9 +98,9 @@ class SwissKnifeConfig:
     elo_temperature: float = 1.0
     """Temperature parameter for relative strength selection in Elo mode. Higher values increase diversity."""
 
-    elo_rounds: int = 3
+    elo_rounds: int = 6
     """Number of rounds in the Elo rating system tournament (used only when
-    tournament_mode='elo'). Default: 3."""
+    tournament_mode='elo'). Default: 6."""
 
     generation_mode: str = "option_b"
     """Which generation loop to run:
