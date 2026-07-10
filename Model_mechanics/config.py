@@ -95,7 +95,7 @@ class SwissKnifeConfig:
     tournament_mode='swiss'). Set to 6 to match gsi_elo's 6-round budget
     for a fair head-to-head comparison. With K=8, 6 rounds gives 24 total matches."""
 
-    elo_temperature: float = 1.0
+    elo_temperature: float = 15.0
     """Temperature parameter for relative strength selection in Elo mode. Higher values increase diversity."""
 
     elo_rounds: int = 6

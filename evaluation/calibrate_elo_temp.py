@@ -192,7 +192,7 @@ def main():
     for res in results:
         print(
             f"  {res['temperature']:<10.2f} | "
-            f"{res['avg_override']:<14.4% } | "
+            f"{res['avg_override']:<14.2%} | "
             f"{res['avg_reward']:<18.5f} | "
             f"{res['avg_refusal']:<12.1%}"
         )

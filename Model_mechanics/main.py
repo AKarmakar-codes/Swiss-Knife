@@ -109,8 +109,8 @@ def parse_args() -> argparse.Namespace:
              "winner index. Used for plotting.",
     )
     p.add_argument(
-        "--elo-temperature", type=float, default=1.0,
-        help="Temperature parameter for Elo relative strength selection (default: 1.0).",
+        "--elo-temperature", type=float, default=15.0,
+        help="Temperature parameter for Elo relative strength selection (default: 15.0).",
     )
     p.add_argument(
         "--elo-rounds", type=int, default=6,

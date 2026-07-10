@@ -77,10 +77,10 @@ from Model_mechanics.gsi_softmax import GSISoftmaxGenerator
 from Model_mechanics.gsi_pairwise import GSIPairwiseGenerator
 from Model_mechanics.gsi_swiss import GSISwissGenerator
 
-# Reuse the greedy baseline generator + prompt extractor from the existing
-# GSI harmlessness benchmark so generation behaviour stays byte-identical.
-from evaluation.benchmark_gsi_strategies_harmlessness import (
+from evaluation.benchmark_gsi_strategies_helpfulness import (
     BaselineGreedyGenerator,
+)
+from evaluation.benchmark_gsi_strategies_harmlessness import (
     extract_prompt,
 )
 

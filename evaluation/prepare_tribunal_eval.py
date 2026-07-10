@@ -84,6 +84,7 @@ def convert(input_dir: str, output_dir: str):
 # Known pretty-labels; any strategy not listed here gets a title-cased fallback.
 _PRETTY_LABELS = {
     "baseline_argmax_harmlessness": "Baseline\n(Argmax)",
+    "baseline_adapter":             "Baseline\n(Adapter)",
     "stochastic_knockout_dropout":  "Stochastic\nDropout",
     "stochastic_knockout_proj":     "Stochastic\nProj",
     "stochastic_knockout_subsample":"Stochastic\nSubsample",
@@ -92,7 +93,6 @@ _PRETTY_LABELS = {
     "gsi_swiss":                    "Swiss",
     "gsi_elo":                      "Swiss+Elo",
     "gsi_gumbel":                   "GSI Gumbel",
-   
 }
 
 _COLORS = [
@@ -330,30 +330,63 @@ def plot(results_dir: str, plot_dir: str, inputs_dir: str):
 
 def parse_args():
     p = argparse.ArgumentParser(description="Convert Swiss Knife results for Tribunal and/or plot scores.")
+    p.add_argument("--task", choices=["harmlessness", "helpfulness"], default="harmlessness",
+                   help="Evaluation task to run. Adjusts default input/output/results/plots directories.")
     p.add_argument("--mode", choices=["convert", "plot", "both"], default="convert",
                    help="'convert': JSON→.jsonl only; 'plot': plot tribunal results; 'both': do both")
-    p.add_argument("--input-dir",  default="runs/stochastic_strategies_knockout_benchmark",
-                   help="Directory with per-strategy *_results.json files (for --mode convert)")
-    p.add_argument("--output-dir", default="tribunal/inputs",
-                   help="Where to write the .jsonl files for tribunal")
-    p.add_argument("--inputs-dir", default="tribunal/inputs",
-                   help="Directory containing tribunal .jsonl input files (for --mode plot); "
-                        "used to discover which strategies to include in the plots")
-    p.add_argument("--results-dir", default="tribunal/eval_results",
-                   help="Where tribunal wrote its CSV outputs (for --mode plot)")
-    p.add_argument("--plot-dir", default="runs/tribunal_plots",
-                   help="Where to save the generated plots")
+    p.add_argument("--input-dir",  default=None,
+                   help="Directory with per-strategy *_results.json files (for --mode convert). "
+                        "Defaults: runs/stochastic_strategies_knockout_benchmark for harmlessness, "
+                        "runs/gsi_helpfulness_benchmark/qwen3B for helpfulness.")
+    p.add_argument("--output-dir", default=None,
+                   help="Where to write the .jsonl files for tribunal. "
+                        "Defaults: tribunal/inputs/harmlessness or tribunal/inputs/helpfulness.")
+    p.add_argument("--inputs-dir", default=None,
+                   help="Directory containing tribunal .jsonl input files (for --mode plot). "
+                        "Defaults: tribunal/inputs/harmlessness or tribunal/inputs/helpfulness.")
+    p.add_argument("--results-dir", default=None,
+                   help="Where tribunal wrote its CSV outputs (for --mode plot). "
+                        "Defaults: tribunal/eval_results/harmlessness or tribunal/eval_results/helpfulness.")
+    p.add_argument("--plot-dir", default=None,
+                   help="Where to save the generated plots. "
+                        "Defaults: runs/tribunal_plots/harmlessness or runs/tribunal_plots/helpfulness.")
     return p.parse_args()
 
 
 def main():
     args = parse_args()
+    task = args.task
+
+    # Resolve defaults based on task
+    input_dir = args.input_dir
+    if input_dir is None:
+        if task == "helpfulness":
+            input_dir = "runs/gsi_helpfulness_benchmark/qwen3B"
+        else:
+            input_dir = "runs/stochastic_strategies_knockout_benchmark"
+
+    output_dir = args.output_dir
+    if output_dir is None:
+        output_dir = f"tribunal/inputs/{task}"
+
+    inputs_dir = args.inputs_dir
+    if inputs_dir is None:
+        inputs_dir = f"tribunal/inputs/{task}"
+
+    results_dir = args.results_dir
+    if results_dir is None:
+        results_dir = f"tribunal/eval_results/{task}"
+
+    plot_dir = args.plot_dir
+    if plot_dir is None:
+        plot_dir = f"runs/tribunal_plots/{task}"
+
     if args.mode in ("convert", "both"):
-        convert(args.input_dir, args.output_dir)
+        convert(input_dir, output_dir)
     if args.mode in ("plot", "both"):
         # For 'both', the output-dir of convert becomes the inputs-dir for plot
-        inputs_dir = args.output_dir if args.mode == "both" else args.inputs_dir
-        plot(args.results_dir, args.plot_dir, inputs_dir)
+        final_inputs_dir = output_dir if args.mode == "both" else inputs_dir
+        plot(results_dir, plot_dir, final_inputs_dir)
 
 
 if __name__ == "__main__":
