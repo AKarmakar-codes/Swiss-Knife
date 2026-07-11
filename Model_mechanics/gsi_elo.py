@@ -75,6 +75,12 @@ class GSIEloStats:
             return 0.0
         return self.total_tokens / self.total_time_s
 
+    @property
+    def avg_step_tokens(self) -> float:
+        if self.total_steps == 0:
+            return 0.0
+        return self.total_tokens / self.total_steps
+
     def to_dict(self) -> dict:
         return {
             "strategy": "gsi_elo",
@@ -85,6 +91,7 @@ class GSIEloStats:
             "acceptance_rate": round(self.acceptance_rate, 4),
             "total_candidates_scored": self.total_candidates_scored,
             "tokens_per_second": round(self.tokens_per_second, 2),
+            "avg_step_tokens": round(self.avg_step_tokens, 2),
             "total_time_s": round(self.total_time_s, 3),
             "mean_reward": round(sum(self.step_rewards) / max(len(self.step_rewards), 1), 6),
         }
@@ -206,6 +213,7 @@ class GSIEloGenerator:
         max_new_tokens: Optional[int] = None,
         verbose: bool = False,
         return_stats: bool = False,
+        use_tilted_elo: Optional[bool] = None,
     ):
         """Run GSI Strategy 4: Elo tournament selection over reasoning steps.
 
@@ -231,6 +239,7 @@ class GSIEloGenerator:
         threshold = self.cfg.gsi_threshold
         elo_rounds = self.cfg.elo_rounds
         elo_temp = self.cfg.elo_temperature
+        active_use_tilted_elo = use_tilted_elo if use_tilted_elo is not None else getattr(self.cfg, "use_tilted_elo", False)
 
         prefix_text = prompt
 
@@ -285,6 +294,17 @@ class GSIEloGenerator:
             # Compute blade rewards for all candidates
             blade_rewards = self.blade.score_reasoning_steps(prefix_ids_verifier.unsqueeze(0), verifier_step_ids_list)
 
+            if active_use_tilted_elo:
+                # Compute verifier logprobs for all candidates to get their tilted rewards
+                verifier_logprobs_list = []
+                for step_ids in verifier_step_ids_list:
+                    verifier_lp = compute_logprob(self.verifier_model, prefix_ids_verifier, step_ids)
+                    verifier_logprobs_list.append(verifier_lp)
+                verifier_logprobs = torch.tensor(verifier_logprobs_list, dtype=torch.float, device=self.verifier_device)
+                tilted_rewards = blade_rewards + (1.0 / beta) * (verifier_logprobs - draft_logprobs)
+            else:
+                tilted_rewards = None
+
             # ── Step 2: Elo tournament to select winner ────────────────
             selected_idx = elo_bracket(
                 draft_logprobs,
@@ -294,13 +314,17 @@ class GSIEloGenerator:
                 temperature=elo_temp,
                 rounds=elo_rounds,
                 beta=beta,
+                tilted_rewards=tilted_rewards,
             )
             selected_reward = blade_rewards[selected_idx].item()
             winner_draft_lp = draft_logprobs_list[selected_idx]
             winner_verifier_step_ids = verifier_step_ids_list[selected_idx]
 
             # ── Step 3: Compute tilted reward for the winner ────────────────
-            winner_target_lp = compute_logprob(self.verifier_model, prefix_ids_verifier, winner_verifier_step_ids)
+            if active_use_tilted_elo:
+                winner_target_lp = verifier_logprobs[selected_idx].item()
+            else:
+                winner_target_lp = compute_logprob(self.verifier_model, prefix_ids_verifier, winner_verifier_step_ids)
             selected_tilted_reward = selected_reward + (1.0 / beta) * (winner_target_lp - winner_draft_lp)
 
             # ── Step 4: Rejection threshold check ───────────────────────
@@ -349,6 +373,7 @@ class GSIEloGenerator:
                     temperature=elo_temp,
                     rounds=elo_rounds,
                     beta=beta,
+                    tilted_rewards=resample_blade if active_use_tilted_elo else None,
                 )
                 selected_reward = resample_blade[resample_idx].item()
                 selected_tilted_reward = selected_reward  # no log ratio term on fallback

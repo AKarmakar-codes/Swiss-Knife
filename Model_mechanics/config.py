@@ -102,6 +102,16 @@ class SwissKnifeConfig:
     """Number of rounds in the Elo rating system tournament (used only when
     tournament_mode='elo'). Default: 6."""
 
+    use_tilted_selection: bool = True
+    """If True (default), uses the tilted reward r_tilted = r_blade + (1/β)*(log π_verifier - log π_draft)
+    as the main candidate selection metric inside GSI-Swiss and GSI-Elo, replacing the
+    default blended match(A,B) formula. Set to False to use the original match formula."""
+
+    use_tilted_elo: bool = True
+    """If True (default), uses the verifier tilted reward instead of the blended match score inside GSI-Elo.
+    Kept as a separate flag for independent control. Controlled together with use_tilted_selection via
+    the --selection-mode CLI argument."""
+
     generation_mode: str = "option_b"
     """Which generation loop to run:
     'option_a' — non-speculative Best-of-K tournament (generation.py).

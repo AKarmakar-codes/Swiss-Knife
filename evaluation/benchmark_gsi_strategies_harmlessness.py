@@ -82,6 +82,32 @@ REFUSAL_MARKERS = [
 ]
 
 
+class BaselineGreedyGenerator:
+    def __init__(self, tokenizer, model, name="baseline"):
+        self.tokenizer = tokenizer
+        self.model = model
+        self.name = name
+    def generate(self, prompt: str, max_new_tokens: int, return_stats: bool = False, **kwargs):
+        device = next(self.model.parameters()).device
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(device)
+        with torch.no_grad():
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                pad_token_id=self.tokenizer.pad_token_id,
+            )
+        generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        
+        class EmptyStats:
+            def to_dict(self):
+                return {}
+        
+        if return_stats:
+            return generated_text, EmptyStats()
+        return generated_text
+
+
 def detect_refusal(text: str) -> bool:
     """Crude lexical heuristic for refusal-shaped output."""
     lowered = text.lower()
@@ -118,6 +144,13 @@ def extract_override_rate(stats_dict: dict) -> float:
     if "rejected_steps" in stats_dict and "total_steps" in stats_dict and stats_dict["total_steps"]:
         return round(stats_dict["rejected_steps"] / stats_dict["total_steps"], 4)
     return None  # baseline generators have no tournament, no override concept
+
+
+def extract_avg_step_tokens(stats_dict: dict) -> float:
+    """Pull average step tokens out of the stats dict."""
+    if "avg_step_tokens" in stats_dict:
+        return stats_dict["avg_step_tokens"]
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -167,6 +200,7 @@ def run_single_strategy(
         )
         is_refusal = detect_refusal(generated)
         override_rate = extract_override_rate(stats_dict)
+        avg_step_tokens = extract_avg_step_tokens(stats_dict)
 
         all_responses.append({
             "prompt_idx": idx,
@@ -175,6 +209,7 @@ def run_single_strategy(
             "blade_reward": round(blade_reward, 6),
             "refusal_heuristic": is_refusal,
             "override_rate": override_rate,
+            "avg_step_tokens": avg_step_tokens,
         })
         all_stats.append(stats_dict)
 
@@ -194,9 +229,14 @@ def run_single_strategy(
         override_rates_so_far = [r["override_rate"] for r in all_responses if r["override_rate"] is not None]
         avg_override = sum(override_rates_so_far) / len(override_rates_so_far) if override_rates_so_far else 0.0
         
+        tokens_so_far = sum(s.get("total_tokens", 0) for s in all_stats if isinstance(s, dict))
+        steps_so_far = sum(s.get("total_steps", 0) for s in all_stats if isinstance(s, dict))
+        avg_step_tokens_so_far = tokens_so_far / steps_so_far if steps_so_far > 0 else None
+        
+        step_tokens_str = f"avg_step_tokens={avg_step_tokens_so_far:.1f}" if avg_step_tokens_so_far is not None else "avg_step_tokens=n/a"
         logger.info(
-            "[%s] %d/%d | avg_blade_reward=%.5f | last_blade_reward=%.5f | refusals_so_far=%d | avg_override=%.4f",
-            strategy_name, idx + 1, len(test_prompts), avg_reward, blade_reward, refusals_so_far, avg_override,
+            "[%s] %d/%d | avg_blade_reward=%.5f | last_blade_reward=%.5f | refusals_so_far=%d | avg_override=%.4f | %s",
+            strategy_name, idx + 1, len(test_prompts), avg_reward, blade_reward, refusals_so_far, avg_override, step_tokens_str,
         )
 
     elapsed = time.perf_counter() - t_start
@@ -207,6 +247,10 @@ def run_single_strategy(
     refusal_rate = sum(1 for r in all_responses if r["refusal_heuristic"]) / len(all_responses)
     override_rates = [r["override_rate"] for r in all_responses if r["override_rate"] is not None]
     avg_override_rate = sum(override_rates) / len(override_rates) if override_rates else None
+    
+    total_tokens_all = sum(s.get("total_tokens", 0) for s in all_stats if isinstance(s, dict))
+    total_steps_all = sum(s.get("total_steps", 0) for s in all_stats if isinstance(s, dict))
+    global_avg_step_tokens = total_tokens_all / total_steps_all if total_steps_all > 0 else None
 
     return {
         "strategy": strategy_name,
@@ -214,6 +258,7 @@ def run_single_strategy(
         "std_blade_reward": round(std_blade_reward, 6),
         "refusal_rate": round(refusal_rate, 4),
         "avg_override_rate": round(avg_override_rate, 4) if avg_override_rate is not None else None,
+        "avg_step_tokens": round(global_avg_step_tokens, 2) if global_avg_step_tokens is not None else None,
         "num_prompts": len(test_prompts),
         "elapsed_s": round(elapsed, 1),
         "responses": all_responses,
@@ -246,9 +291,18 @@ def parse_args():
     p.add_argument("--skip-existing", action="store_true",
                     help="If a strategy's *_results.json already exists, skip regenerating.")
     p.add_argument(
+        "--selection-mode", type=str, default="tilted",
+        choices=["tilted", "match"],
+        help=(
+            "Candidate comparison metric used inside tournament brackets.\n"
+            "  tilted — use the tilted reward r_tilted = r_blade + (1/β)*(log π_verifier - log π_draft) [default]\n"
+            "  match  — use the original blended match formula: α·Δlog_draft + (1-α)·Δblade"
+        ),
+    )
+    p.add_argument(
         "--strategies", type=str, nargs="+",
-        default=["gsi_softmax", "gsi_pairwise", "gsi_swiss", "gsi_elo", "gsi_gumbel"],
-        choices=["gsi_softmax", "gsi_pairwise", "gsi_swiss", "gsi_elo", "gsi_gumbel"],
+        default=["baseline", "gsi_softmax", "gsi_swiss", "gsi_elo"],
+        choices=["baseline", "baseline_adapter", "gsi_softmax", "gsi_pairwise", "gsi_swiss", "gsi_elo", "gsi_gumbel"],
         help="Which strategies to benchmark.",
     )
     # gsi_gumbel-specific args
@@ -281,6 +335,9 @@ def main():
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
 
+    # Derive per-flag booleans from the unified --selection-mode argument
+    use_tilted = (args.selection_mode == "tilted")
+
     device = "auto" if torch.cuda.is_available() else "cpu"
 
     # ── Load dataset ──────────────────────────────────────────────────
@@ -309,6 +366,8 @@ def main():
         elo_rounds=args.elo_rounds,
         elo_temperature=args.elo_temperature,
         seed=args.seed,
+        use_tilted_elo=use_tilted,
+        use_tilted_selection=use_tilted,
     )
 
     logger.info("Loading shared verifier base model (Qwen 2.5 7B) + blade...")
@@ -329,6 +388,8 @@ def main():
 
     # ── Run each strategy ─────────────────────────────────────────────
     strategy_generators = {
+        "baseline": lambda cfg: BaselineGreedyGenerator(tokenizer, blade_model, "baseline"),
+        "baseline_adapter": lambda cfg: BaselineGreedyGenerator(tokenizer, blade_model, "baseline_adapter"),
         "gsi_softmax": lambda cfg: GSISoftmaxGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
         "gsi_pairwise": lambda cfg: GSIPairwiseGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
         "gsi_swiss": lambda cfg: GSISwissGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
@@ -352,6 +413,7 @@ def main():
                         "std_blade_reward": existing["std_blade_reward"],
                         "refusal_rate": existing["refusal_rate"],
                         "avg_override_rate": existing["avg_override_rate"],
+                        "avg_step_tokens": existing.get("avg_step_tokens"),
                         "num_prompts": existing["num_prompts"],
                         "elapsed_s": existing["elapsed_s"],
                     }
@@ -372,7 +434,7 @@ def main():
             max_new_tokens=args.max_tokens,
             dtype=args.dtype,
             device=device,
-            generation_mode=strat_name,
+            generation_mode="gsi_softmax" if strat_name.startswith("baseline") else strat_name,
             gsi_n=args.gsi_n,
             gsi_threshold=args.gsi_threshold,
             gsi_max_step_tokens=args.gsi_max_step_tokens,
@@ -381,6 +443,8 @@ def main():
             elo_rounds=args.elo_rounds,
             elo_temperature=args.elo_temperature,
             seed=args.seed,
+            use_tilted_elo=use_tilted,
+            use_tilted_selection=use_tilted,
             **gumbel_kwargs,
         )
 
@@ -401,6 +465,7 @@ def main():
             "std_blade_reward": result["std_blade_reward"],
             "refusal_rate": result["refusal_rate"],
             "avg_override_rate": result["avg_override_rate"],
+            "avg_step_tokens": result.get("avg_step_tokens"),
             "num_prompts": result["num_prompts"],
             "elapsed_s": result["elapsed_s"],
         }
@@ -426,6 +491,7 @@ def main():
                 "std_blade_reward": result["std_blade_reward"],
                 "refusal_rate": result["refusal_rate"],
                 "avg_override_rate": result["avg_override_rate"],
+                "avg_step_tokens": result.get("avg_step_tokens"),
                 "num_prompts": result["num_prompts"],
                 "elapsed_s": result["elapsed_s"],
                 "responses": result["responses"],
@@ -434,18 +500,19 @@ def main():
         logger.info("Saved %s results → %s", strat_name, out_file)
 
     # ── Results comparison table ──────────────────────────────────────
-    print("\n" + "=" * 70)
+    print("\n" + "=" * 80)
     print("  GSI Five-Strategy Harmlessness Benchmark — Steering Diagnostics")
-    print("=" * 70)
-    print(f"\n  {'Strategy':<22} {'BladeReward':>12} {'Std':>8} {'Refusal%':>9} {'OverrideRate':>13} {'Time':>8}")
-    print(f"  {'─' * 22} {'─' * 12} {'─' * 8} {'─' * 9} {'─' * 13} {'─' * 8}")
+    print("=" * 80)
+    print(f"\n  {'Strategy':<22} {'BladeReward':>12} {'Std':>8} {'Refusal%':>9} {'OverrideRate':>13} {'AvgStepTok':>11} {'Time':>8}")
+    print(f"  {'─' * 22} {'─' * 12} {'─' * 8} {'─' * 9} {'─' * 13} {'─' * 11} {'─' * 8}")
 
     for strat_name in args.strategies:
         r = all_results[strat_name]
         override_str = f"{r['avg_override_rate']:.4f}" if r["avg_override_rate"] is not None else "n/a"
+        step_tok_str = f"{r['avg_step_tokens']:.1f}" if r.get("avg_step_tokens") is not None else "n/a"
         print(
             f"  {strat_name:<22} {r['avg_blade_reward']:>12.5f} {r['std_blade_reward']:>8.4f} "
-            f"{r['refusal_rate']*100:>8.1f}% {override_str:>13} "
+            f"{r['refusal_rate']*100:>8.1f}% {override_str:>13} {step_tok_str:>11} "
             f"{r['elapsed_s']:>7.1f}s"
         )
 

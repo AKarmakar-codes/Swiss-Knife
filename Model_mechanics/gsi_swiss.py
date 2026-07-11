@@ -16,12 +16,15 @@ Algorithm Pipeline:
      scores play each other, avoiding rematches when possible). If `n` is odd, 
      the unpaired candidate gets a "bye" (0.5 points).
    - Match evaluation: 
-     MATCH(A,B) = α·(log π_draft) + (1-α)·(r_blade)
+     - If `use_tilted_selection` is True: The winner of A vs B is decided directly by comparing their tilted rewards:
+       MATCH(A,B) = tilted_reward(A) - tilted_reward(B)
+       where tilted_reward = r_blade + (1/β)*(log π_verifier - log π_draft).
+     - If `use_tilted_selection` is False: The winner is decided using the blended match score:
+       MATCH(A,B) = α·Δlog_draft + (1-α)·Δblade.
    - Winner gets 1 point; loser gets 0 points.
 3. Softmax Selection: Apply softmax (temperature β) over the final points 
    table to stochastically select a winning step.
 4. Verification & Thresholding: 
-   - Compute tilted reward: r_tilted = r_blade + (1/β)*(log π_verifier - log π_draft)
    - If r_tilted >= threshold, accept the step, append to prefix, and repeat.
    - If r_tilted < threshold, reject. Fall back to sampling directly from the 
      verifier (π_B), run the tournament again, and accept the selected step unconditionally.
@@ -79,6 +82,12 @@ class GSISwissStats:
             return 0.0
         return self.total_tokens / self.total_time_s
 
+    @property
+    def avg_step_tokens(self) -> float:
+        if self.total_steps == 0:
+            return 0.0
+        return self.total_tokens / self.total_steps
+
     def to_dict(self) -> dict:
         return {
             "strategy": "gsi_swiss",
@@ -91,6 +100,7 @@ class GSISwissStats:
             "total_swiss_rounds": self.total_swiss_rounds,
             "total_matches": self.total_matches,
             "tokens_per_second": round(self.tokens_per_second, 2),
+            "avg_step_tokens": round(self.avg_step_tokens, 2),
             "total_time_s": round(self.total_time_s, 3),
             "mean_reward": round(sum(self.step_rewards) / max(len(self.step_rewards), 1), 6),
         }
@@ -105,6 +115,7 @@ def swiss_system_points_table(
     blade_scores: torch.Tensor,
     alpha: float,
     rounds: int = 0,
+    tilted_rewards: Optional[torch.Tensor] = None,
 ) -> Tuple[List[float], int, int]:
     """Run Swiss-system matches and return the cumulative points table.
 
@@ -118,6 +129,9 @@ def swiss_system_points_table(
         Mixing coefficient.
     rounds : int
         Number of Swiss rounds. 0 → auto = ceil(log2(n)).
+    tilted_rewards : torch.Tensor, optional
+        Shape ``[n]``. Precomputed tilted rewards for all candidates. If provided,
+        matches are decided directly using tilted rewards instead of draft and blade scores.
 
     Returns
     -------
@@ -142,6 +156,10 @@ def swiss_system_points_table(
 
     draft_normed = _znorm(draft_scores.float())
     blade_normed = _znorm(blade_scores.float())
+    if tilted_rewards is not None:
+        tilted_normed = _znorm(tilted_rewards.float())
+    else:
+        tilted_normed = None
 
     # Cumulative points
     cum_points = [0.0] * n
@@ -188,9 +206,12 @@ def swiss_system_points_table(
 
         # ── Execute matches ────────────────────────────────────────────
         for a, b in pairs:
-            delta_draft = draft_normed[a] - draft_normed[b]
-            delta_blade = blade_normed[a] - blade_normed[b]
-            match_score = alpha * delta_draft + (1.0 - alpha) * delta_blade
+            if tilted_normed is not None:
+                match_score = tilted_normed[a] - tilted_normed[b]
+            else:
+                delta_draft = draft_normed[a] - draft_normed[b]
+                delta_blade = blade_normed[a] - blade_normed[b]
+                match_score = alpha * delta_draft + (1.0 - alpha) * delta_blade
 
             if match_score > 0:
                 winner, loser = a, b
@@ -202,9 +223,9 @@ def swiss_system_points_table(
 
             logger.debug(
                 "Swiss Round %d | c%d vs c%d → winner=c%d "
-                "(Δdraft=%.4f Δblade=%.4f score=%.4f)",
-                rnd + 1, a, b, winner,
-                delta_draft.item(), delta_blade.item(), match_score.item(),
+                "(score=%.4f%s)",
+                rnd + 1, a, b, winner, match_score.item(),
+                " [tilted]" if tilted_normed is not None else "",
             )
 
     return cum_points, rounds, total_matches
@@ -370,10 +391,11 @@ class GSISwissGenerator:
         max_new_tokens: Optional[int] = None,
         verbose: bool = False,
         return_stats: bool = False,
+        use_tilted_selection: Optional[bool] = None,
     ):
         """Run GSI Strategy 3: Swiss-system → points → softmax.
 
-        Parameters
+        Parameterstilted
         ----------
         prompt : str
             Input prompt.
@@ -394,6 +416,7 @@ class GSISwissGenerator:
         beta = self.cfg.beta
         threshold = self.cfg.gsi_threshold
         swiss_rounds = self.cfg.swiss_rounds
+        active_use_tilted = use_tilted_selection if use_tilted_selection is not None else getattr(self.cfg, "use_tilted_selection", False)
 
         prefix_text = prompt
 
@@ -452,10 +475,22 @@ class GSISwissGenerator:
             # Compute blade rewards for all candidates
             blade_rewards = self.blade.score_reasoning_steps(prefix_ids_verifier.unsqueeze(0), verifier_step_ids_list)
 
+            if active_use_tilted:
+                # Precompute verifier logprobs for all candidates
+                verifier_logprobs_list = [
+                    compute_logprob(self.verifier_model, prefix_ids_verifier, step_ids)
+                    for step_ids in verifier_step_ids_list
+                ]
+                verifier_logprobs = torch.tensor(verifier_logprobs_list, dtype=torch.float, device=self.verifier_device)
+                tilted_rewards_all = blade_rewards + (1.0 / beta) * (verifier_logprobs - draft_logprobs)
+            else:
+                tilted_rewards_all = None
+
             # ── Step 2: Swiss-system tournament → points table ──────────
             points, n_rounds, n_matches = swiss_system_points_table(
                 draft_logprobs, blade_rewards, alpha,
                 rounds=swiss_rounds if swiss_rounds > 0 else 0,
+                tilted_rewards=tilted_rewards_all,
             )
             stats.total_swiss_rounds += n_rounds
             stats.total_matches += n_matches
@@ -475,7 +510,11 @@ class GSISwissGenerator:
             winner_verifier_step_ids = verifier_step_ids_list[selected_idx]
 
             # ── Step 4: Compute tilted reward for the winner ────────────────
-            winner_target_lp = compute_logprob(self.verifier_model, prefix_ids_verifier, winner_verifier_step_ids)
+            if active_use_tilted:
+                # Reuse precomputed verifier logprob for winner — no extra forward pass
+                winner_target_lp = verifier_logprobs[selected_idx].item()
+            else:
+                winner_target_lp = compute_logprob(self.verifier_model, prefix_ids_verifier, winner_verifier_step_ids)
             selected_tilted_reward = selected_reward + (1.0 / beta) * (winner_target_lp - winner_draft_lp)
 
             # ── Step 5: Rejection threshold check ───────────────────────
@@ -519,6 +558,7 @@ class GSISwissGenerator:
                 resample_points, n_r2, n_m2 = swiss_system_points_table(
                     resample_verifier_logprobs, resample_blade, alpha,
                     rounds=swiss_rounds if swiss_rounds > 0 else 0,
+                    tilted_rewards=resample_blade if active_use_tilted else None,
                 )
                 stats.total_swiss_rounds += n_r2
                 stats.total_matches += n_m2

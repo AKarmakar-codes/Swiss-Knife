@@ -68,6 +68,12 @@ class GSISoftmaxStats:
             return 0.0
         return self.total_tokens / self.total_time_s
 
+    @property
+    def avg_step_tokens(self) -> float:
+        if self.total_steps == 0:
+            return 0.0
+        return self.total_tokens / self.total_steps
+
     def to_dict(self) -> dict:
         return {
             "strategy": "gsi_softmax",
@@ -78,6 +84,7 @@ class GSISoftmaxStats:
             "acceptance_rate": round(self.acceptance_rate, 4),
             "total_candidates_scored": self.total_candidates_scored,
             "tokens_per_second": round(self.tokens_per_second, 2),
+            "avg_step_tokens": round(self.avg_step_tokens, 2),
             "total_time_s": round(self.total_time_s, 3),
             "mean_reward": round(sum(self.step_rewards) / max(len(self.step_rewards), 1), 6),
         }

@@ -16,7 +16,7 @@ Implements the Elo rating tournament strategy:
 
 import logging
 import math
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 
 import torch
 
@@ -41,6 +41,7 @@ def elo_bracket(
     temperature: float = 1.0,
     rounds: int = 6,
     beta: float = 1.0,
+    tilted_rewards: Optional[torch.Tensor] = None,
 ) -> int:
     """Run an Elo rating system tournament over candidates to select a champion.
 
@@ -97,6 +98,8 @@ def elo_bracket(
             return (t - t.mean()) / (std + 1e-6)
         target_scores = _znorm(target_scores)
         blade_scores  = _znorm(blade_scores)
+        if tilted_rewards is not None:
+            tilted_rewards = _znorm(tilted_rewards)
 
     # Initialize ratings
     ratings = [1500.0] * N
@@ -114,10 +117,11 @@ def elo_bracket(
     for round_idx in range(rounds):
         k_factor = k_factors[round_idx]
 
-        # Pair candidates based on current ratings DESC, breaking ties with target_scores DESC
+        # Pair candidates based on current ratings DESC, breaking ties with target_scores/tilted_rewards DESC
+        tie_breaker = tilted_rewards if tilted_rewards is not None else target_scores
         sorted_by_rating = sorted(
             indices,
-            key=lambda i: (-ratings[i], -target_scores[i].item()),
+            key=lambda i: (-ratings[i], -tie_breaker[i].item()),
         )
 
         pairs: List[Tuple[int, int]] = []
@@ -149,9 +153,12 @@ def elo_bracket(
 
         # Execute matches and update ratings
         for a, b in pairs:
-            delta_target = target_scores[a] - target_scores[b]
-            delta_blade  = blade_scores[a]  - blade_scores[b]
-            score = alpha * delta_target + (1.0 - alpha) * delta_blade
+            if tilted_rewards is not None:
+                score = tilted_rewards[a] - tilted_rewards[b]
+            else:
+                delta_target = target_scores[a] - target_scores[b]
+                delta_blade  = blade_scores[a]  - blade_scores[b]
+                score = alpha * delta_target + (1.0 - alpha) * delta_blade
 
             # Determine actual outcome
             if score > 1e-6:
@@ -183,9 +190,10 @@ def elo_bracket(
 
     # Determine champion based on temperature
     if temperature < 1e-5:
+        tie_breaker = tilted_rewards if tilted_rewards is not None else target_scores
         champion = max(
             indices,
-            key=lambda i: (ratings[i], target_scores[i].item()),
+            key=lambda i: (ratings[i], tie_breaker[i].item()),
         )
         logger.debug(
             "Elo champion (Greedy, T=0): c%d (rating=%.1f)", champion, ratings[champion]

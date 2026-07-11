@@ -241,6 +241,8 @@ def parse_args():
     p.add_argument("--verbose", action="store_true")
     p.add_argument("--skip-existing", action="store_true",
                     help="If a strategy's *_results.json already exists, skip regenerating.")
+    p.add_argument("--use-tilted-elo", action="store_true",
+                    help="Use the tilted reward instead of the blended match score inside GSI-Elo.")
     p.add_argument(
         "--strategies", type=str, nargs="+",
         default=["gsi_softmax", "gsi_swiss", "gsi_elo", "baseline_adapter"],
@@ -298,6 +300,7 @@ def main():
         elo_rounds=args.elo_rounds,
         elo_temperature=args.elo_temperature,
         seed=args.seed,
+        use_tilted_elo=args.use_tilted_elo,
     )
 
     logger.info("Loading shared verifier base model (Qwen 2.5 7B) + blade...")
@@ -361,6 +364,7 @@ def main():
             elo_rounds=args.elo_rounds,
             elo_temperature=args.elo_temperature,
             seed=args.seed,
+            use_tilted_elo=args.use_tilted_elo,
         )
 
         generator = strategy_generators[strat_name](cfg)
