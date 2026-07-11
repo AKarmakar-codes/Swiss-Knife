@@ -1,0 +1,30 @@
+============================================================
+  Swiss Knife — Tournament Engine Verification
+============================================================
+
+[basic_winner] Winner: c2
+  ✓ PASSED
+
+[alpha=1.0] Winner: c2
+  ✓ PASSED
+
+[alpha=0.0] Winner: c7
+  ✓ PASSED
+
+[calibration_invariance] Original winner: c2
+[calibration_invariance] Shifted winner:  c2
+  ✓ PASSED — Winner unchanged under +1000 blade offset
+
+[antisymmetry] Score matrix:
+tensor([[ 0.0000,  0.0000, -0.5000,  0.0000],
+        [ 0.0000,  0.0000, -0.5000,  0.0000],
+        [ 0.5000,  0.5000,  0.0000,  0.5000],
+        [ 0.0000,  0.0000, -0.5000,  0.0000]])
+  ✓ PASSED — max|M + M^T| = 0.00e+00
+
+[condorcet] Winner: c0
+  ✓ PASSED — Condorcet winner wins the bracket
+
+============================================================
+  ALL TESTS PASSED ✓
+============================================================

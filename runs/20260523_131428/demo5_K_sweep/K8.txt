@@ -1,0 +1,55 @@
+========================================================================
+  Swiss Knife — Decode-Time Alignment via Tournament Sampling
+  Option A: Non-Speculative Best-of-K Tournament
+========================================================================
+  Base model : divyajot5005/ndna/SFT/Qwen_SFT_merged
+  Blade      : helpfulness
+  α (mix)    : 0.5
+  β (DPO)    : 0.1
+  K (cands)  : 8
+  L (span)   : 5
+  Max tokens : 60
+  Dtype      : bfloat16
+  Device     : CUDA
+------------------------------------------------------------------------
+  Prompt     : Explain transformer self-attention in three sentences.
+========================================================================
+
+⏳ Loading models...
+13:20:05 │ swiss_knife.models        │ INFO  │ Downloading base model from dataset repo: divyajot5005/ndna / SFT/Qwen_SFT_merged
+13:20:05 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/revision/main "HTTP/1.1 200 OK"
+13:20:05 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+13:20:05 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D "HTTP/1.1 200 OK"
+Fetching ... files: 0it [00:00, ?it/s]Fetching ... files: 14it [00:00, 73126.10it/s]
+13:20:05 │ swiss_knife.models        │ INFO  │ Base model cached at: /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+13:20:05 │ swiss_knife.models        │ INFO  │ Loading tokenizer from: /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+13:20:06 │ swiss_knife.models        │ INFO  │ CUDA GPU detected — pinning model to cuda:0
+13:20:06 │ swiss_knife.models        │ INFO  │ Loading base model (draft + ref): /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged  [dtype=torch.bfloat16, device={'': 0}]
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/339 [00:00<?, ?it/s]Loading weights:   0%|          | 1/339 [00:00<02:51,  1.97it/s]Loading weights:   5%|▌         | 17/339 [00:00<00:09, 35.55it/s]Loading weights:   9%|▊         | 29/339 [00:00<00:05, 53.82it/s]Loading weights:  12%|█▏        | 40/339 [00:00<00:04, 64.34it/s]Loading weights:  18%|█▊        | 60/339 [00:00<00:02, 95.62it/s]Loading weights:  22%|██▏       | 73/339 [00:01<00:02, 103.38it/s]Loading weights:  25%|██▌       | 86/339 [00:01<00:02, 98.54it/s] Loading weights:  29%|██▉       | 98/339 [00:01<00:02, 102.16it/s]Loading weights:  33%|███▎      | 112/339 [00:01<00:02, 98.23it/s]Loading weights:  37%|███▋      | 125/339 [00:01<00:02, 102.38it/s]Loading weights:  40%|████      | 137/339 [00:01<00:01, 106.32it/s]Loading weights:  44%|████▍     | 149/339 [00:01<00:01, 107.21it/s]Loading weights:  51%|█████     | 172/339 [00:01<00:01, 116.28it/s]Loading weights:  55%|█████▍    | 185/339 [00:02<00:01, 111.46it/s]Loading weights:  59%|█████▉    | 201/339 [00:02<00:01, 123.29it/s]Loading weights:  63%|██████▎   | 214/339 [00:02<00:01, 121.88it/s]Loading weights:  67%|██████▋   | 227/339 [00:02<00:00, 121.87it/s]Loading weights:  71%|███████▏  | 242/339 [00:02<00:00, 126.98it/s]Loading weights:  75%|███████▌  | 255/339 [00:02<00:00, 126.85it/s]Loading weights:  79%|███████▉  | 268/339 [00:02<00:00, 106.69it/s]Loading weights:  83%|████████▎ | 280/339 [00:02<00:00, 107.54it/s]Loading weights:  86%|████████▋ | 293/339 [00:03<00:00, 104.23it/s]Loading weights:  93%|█████████▎| 316/339 [00:03<00:00, 115.53it/s]Loading weights:  97%|█████████▋| 329/339 [00:03<00:00, 117.59it/s]Loading weights: 100%|██████████| 339/339 [00:03<00:00, 101.25it/s]
+13:20:10 │ swiss_knife.models        │ INFO  │ Base model loaded and frozen. Params: 7,615,616,512
+13:20:10 │ swiss_knife.models        │ INFO  │ CUDA GPU detected — pinning model to cuda:0
+13:20:10 │ swiss_knife.models        │ INFO  │ Loading blade 'helpfulness' base copy [dtype=torch.bfloat16, device={'': 0}]...
+Loading weights:   0%|          | 0/339 [00:00<?, ?it/s]Loading weights:   0%|          | 1/339 [00:00<02:22,  2.37it/s]Loading weights:   1%|          | 2/339 [00:00<01:20,  4.20it/s]Loading weights:   5%|▌         | 17/339 [00:00<00:07, 40.37it/s]Loading weights:   9%|▊         | 29/339 [00:00<00:05, 61.18it/s]Loading weights:  15%|█▌        | 52/339 [00:00<00:02, 95.91it/s]Loading weights:  19%|█▉        | 64/339 [00:01<00:03, 90.30it/s]Loading weights:  23%|██▎       | 78/339 [00:01<00:02, 98.93it/s]Loading weights:  27%|██▋       | 90/339 [00:01<00:02, 102.58it/s]Loading weights:  33%|███▎      | 112/339 [00:01<00:01, 119.76it/s]Loading weights:  37%|███▋      | 125/339 [00:01<00:01, 108.14it/s]Loading weights:  44%|████▎     | 148/339 [00:01<00:01, 123.29it/s]Loading weights:  47%|████▋     | 161/339 [00:01<00:01, 106.50it/s]Loading weights:  54%|█████▍    | 184/339 [00:02<00:01, 122.66it/s]Loading weights:  58%|█████▊    | 197/339 [00:02<00:01, 119.14it/s]Loading weights:  64%|██████▍   | 218/339 [00:02<00:00, 139.97it/s]Loading weights:  69%|██████▊   | 233/339 [00:02<00:00, 117.16it/s]Loading weights:  76%|███████▌  | 256/339 [00:02<00:00, 131.90it/s]Loading weights:  80%|███████▉  | 270/339 [00:02<00:00, 126.61it/s]Loading weights:  86%|████████▌ | 292/339 [00:02<00:00, 131.24it/s]Loading weights:  90%|█████████ | 306/339 [00:02<00:00, 129.17it/s]Loading weights:  97%|█████████▋| 328/339 [00:03<00:00, 126.60it/s]Loading weights: 100%|██████████| 339/339 [00:03<00:00, 107.89it/s]
+13:20:14 │ swiss_knife.models        │ INFO  │ Attaching LoRA adapter from model repo MGPGRAD/Swiss-Knife / dpo_out/hh_helpfulness/final_adapter ...
+13:20:14 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+13:20:14 │ huggingface_hub.utils._http │ WARNING │ Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+13:20:14 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/MGPGRAD/Swiss-Knife/dd68a07e6cc18b879a0703381dbcdbbbfd58b533/dpo_out%2Fhh_helpfulness%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+13:20:14 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+13:20:14 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/MGPGRAD/Swiss-Knife/dd68a07e6cc18b879a0703381dbcdbbbfd58b533/dpo_out%2Fhh_helpfulness%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+13:20:16 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+13:20:16 │ httpx                     │ INFO  │ HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+13:20:16 │ swiss_knife.models        │ INFO  │ Blade 'helpfulness' loaded. LoRA params: 40,370,176
+✓ Models loaded in 11.2s
+
+⏳ Generating with tournament sampling...
+
+
+========================================================================
+  GENERATED OUTPUT
+========================================================================
+Explain transformer self-attention in three sentences. Transformer self-attention is a type of attention mechanism used in the transformer architecture. It allows each part of the input sequence to attend to every other part, allowing the model to learn long-range dependencies. It is an essential part of the transformer, allowing the model to focus on different parts of the input
+========================================================================
+  Generation time: 4.3s
+========================================================================

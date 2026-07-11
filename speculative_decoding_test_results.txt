@@ -1,0 +1,608 @@
+Welcome to your vast.ai container! This session is running in `tmux`.
+To disconnect without closing your processes, press ctrl+b, release, then d.
+To disable auto-tmux, run `touch ~/.no_auto_tmux` and reconnect. See also https://tmuxcheatsheet.com/
+Activated conda/uv virtual environment at /venv/main
+(main) root@C.38567870:/workspace$ cd Swiss\ Knife/
+(main) root@C.38567870:/workspace/Swiss Knife$ python tests/test_speculative_gpu.py
+Traceback (most recent call last):
+  File "/workspace/Swiss Knife/tests/test_speculative_gpu.py", line 41, in <module>
+    from tournament.models import load_tokenizer, load_base_model, load_blade_model
+  File "/workspace/Swiss Knife/tests/../tournament/models.py", line 31, in <module>
+    from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
+ModuleNotFoundError: No module named 'transformers'
+(main) root@C.38567870:/workspace/Swiss Knife$ pip install torch transformers peft huggingface_hub accelerate
+Requirement already satisfied: torch in /venv/main/lib/python3.12/site-packages (2.11.0+cu130)
+Collecting transformers
+  Downloading transformers-5.9.0-py3-none-any.whl.metadata (33 kB)
+Collecting peft
+  Downloading peft-0.19.1-py3-none-any.whl.metadata (15 kB)
+Requirement already satisfied: huggingface_hub in /venv/main/lib/python3.12/site-packages (1.8.0)
+Collecting accelerate
+  Downloading accelerate-1.13.0-py3-none-any.whl.metadata (19 kB)
+Requirement already satisfied: filelock in /venv/main/lib/python3.12/site-packages (from torch) (3.25.2)
+Requirement already satisfied: typing-extensions>=4.10.0 in /venv/main/lib/python3.12/site-packages (from torch) (4.15.0)
+Requirement already satisfied: setuptools<82 in /venv/main/lib/python3.12/site-packages (from torch) (81.0.0)
+Requirement already satisfied: sympy>=1.13.3 in /venv/main/lib/python3.12/site-packages (from torch) (1.14.0)
+Requirement already satisfied: networkx>=2.5.1 in /venv/main/lib/python3.12/site-packages (from torch) (3.6.1)
+Requirement already satisfied: jinja2 in /venv/main/lib/python3.12/site-packages (from torch) (3.1.6)
+Requirement already satisfied: fsspec>=0.8.5 in /venv/main/lib/python3.12/site-packages (from torch) (2026.2.0)
+Requirement already satisfied: cuda-toolkit==13.0.2 in /venv/main/lib/python3.12/site-packages (from cuda-toolkit[cublas,cudart,cufft,cufile
+,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (13.0.2)
+Requirement already satisfied: cuda-bindings<14,>=13.0.3 in /venv/main/lib/python3.12/site-packages (from torch) (13.2.0)
+Requirement already satisfied: nvidia-cudnn-cu13==9.19.0.56 in /venv/main/lib/python3.12/site-packages (from torch) (9.19.0.56)
+Requirement already satisfied: nvidia-cusparselt-cu13==0.8.0 in /venv/main/lib/python3.12/site-packages (from torch) (0.8.0)
+Requirement already satisfied: nvidia-nccl-cu13==2.28.9 in /venv/main/lib/python3.12/site-packages (from torch) (2.28.9)
+Requirement already satisfied: nvidia-nvshmem-cu13==3.4.5 in /venv/main/lib/python3.12/site-packages (from torch) (3.4.5)
+Requirement already satisfied: triton==3.6.0 in /venv/main/lib/python3.12/site-packages (from torch) (3.6.0)
+Requirement already satisfied: nvidia-cublas==13.1.0.3.* in /venv/main/lib/python3.12/site-packages (from cuda-toolkit[cublas,cudart,cufft,c
+ufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (13.1.0.3)
+Requirement already satisfied: nvidia-cuda-runtime==13.0.96.* in /venv/main/lib/python3.12/site-packages (from cuda-toolkit[cublas,cudart,cu
+fft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (13.0.96)
+Requirement already satisfied: nvidia-cufft==12.0.0.61.* in /venv/main/lib/python3.12/site-packages (from cuda-toolkit[cublas,cudart,cufft,c
+ufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (12.0.0.61)
+Requirement already satisfied: nvidia-cufile==1.15.1.6.* in /venv/main/lib/python3.12/site-packages (from cuda-toolkit[cublas,cudart,cufft,c
+ufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (1.15.1.6)
+Requirement already satisfied: nvidia-cuda-cupti==13.0.85.* in /venv/main/lib/python3.12/site-packages (from cuda-toolkit[cublas,cudart,cuff
+t,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (13.0.85)
+Requirement already satisfied: nvidia-curand==10.4.0.35.* in /venv/main/lib/python3.12/site-packages (from cuda-toolkit[cublas,cudart,cufft,
+cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (10.4.0.35)
+Requirement already satisfied: nvidia-cusolver==12.0.4.66.* in /venv/main/lib/python3.12/site-packages (from cuda-toolkit[cublas,cudart,cuff
+t,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (12.0.4.66)
+Requirement already satisfied: nvidia-cusparse==12.6.3.3.* in /venv/main/lib/python3.12/site-packages (from cuda-toolkit[cublas,cudart,cufft
+,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (12.6.3.3)
+Requirement already satisfied: nvidia-nvjitlink==13.0.88.* in /venv/main/lib/python3.12/site-packages (from cuda-toolkit[cublas,cudart,cufft
+,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (13.0.88)
+Requirement already satisfied: nvidia-cuda-nvrtc==13.0.88.* in /venv/main/lib/python3.12/site-packages (from cuda-toolkit[cublas,cudart,cuff
+t,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (13.0.88)
+Requirement already satisfied: nvidia-nvtx==13.0.85.* in /venv/main/lib/python3.12/site-packages (from cuda-toolkit[cublas,cudart,cufft,cufi
+le,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch) (13.0.85)
+Requirement already satisfied: cuda-pathfinder~=1.1 in /venv/main/lib/python3.12/site-packages (from cuda-bindings<14,>=13.0.3->torch) (1.5.
+0)
+Requirement already satisfied: numpy>=1.17 in /venv/main/lib/python3.12/site-packages (from transformers) (2.4.3)
+Requirement already satisfied: packaging>=20.0 in /venv/main/lib/python3.12/site-packages (from transformers) (26.0)
+Requirement already satisfied: pyyaml>=5.1 in /venv/main/lib/python3.12/site-packages (from transformers) (6.0.3)
+Collecting regex>=2025.10.22 (from transformers)
+  Downloading regex-2026.5.9-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (40 kB)
+Collecting tokenizers<=0.23.0,>=0.22.0 (from transformers)
+  Downloading tokenizers-0.22.2-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (7.3 kB)
+Requirement already satisfied: typer in /venv/main/lib/python3.12/site-packages (from transformers) (0.24.1)
+Collecting safetensors>=0.4.3 (from transformers)
+  Downloading safetensors-0.7.0-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.1 kB)
+Requirement already satisfied: tqdm>=4.27 in /venv/main/lib/python3.12/site-packages (from transformers) (4.67.3)
+Requirement already satisfied: hf-xet<2.0.0,>=1.4.2 in /venv/main/lib/python3.12/site-packages (from huggingface_hub) (1.4.2)
+Requirement already satisfied: httpx<1,>=0.23.0 in /venv/main/lib/python3.12/site-packages (from huggingface_hub) (0.28.1)
+Requirement already satisfied: anyio in /venv/main/lib/python3.12/site-packages (from httpx<1,>=0.23.0->huggingface_hub) (4.13.0)
+Requirement already satisfied: certifi in /venv/main/lib/python3.12/site-packages (from httpx<1,>=0.23.0->huggingface_hub) (2026.2.25)
+Requirement already satisfied: httpcore==1.* in /venv/main/lib/python3.12/site-packages (from httpx<1,>=0.23.0->huggingface_hub) (1.0.9)
+Requirement already satisfied: idna in /venv/main/lib/python3.12/site-packages (from httpx<1,>=0.23.0->huggingface_hub) (3.11)
+Requirement already satisfied: h11>=0.16 in /venv/main/lib/python3.12/site-packages (from httpcore==1.*->httpx<1,>=0.23.0->huggingface_hub)
+(0.16.0)
+Requirement already satisfied: psutil in /venv/main/lib/python3.12/site-packages (from peft) (7.2.2)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /venv/main/lib/python3.12/site-packages (from sympy>=1.13.3->torch) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /venv/main/lib/python3.12/site-packages (from jinja2->torch) (3.0.3)
+Requirement already satisfied: click>=8.2.1 in /venv/main/lib/python3.12/site-packages (from typer->transformers) (8.3.1)
+Requirement already satisfied: shellingham>=1.3.0 in /venv/main/lib/python3.12/site-packages (from typer->transformers) (1.5.4)
+Requirement already satisfied: rich>=12.3.0 in /venv/main/lib/python3.12/site-packages (from typer->transformers) (14.3.3)
+Requirement already satisfied: annotated-doc>=0.0.2 in /venv/main/lib/python3.12/site-packages (from typer->transformers) (0.0.4)
+Requirement already satisfied: markdown-it-py>=2.2.0 in /venv/main/lib/python3.12/site-packages (from rich>=12.3.0->typer->transformers) (4.
+0.0)
+Requirement already satisfied: pygments<3.0.0,>=2.13.0 in /venv/main/lib/python3.12/site-packages (from rich>=12.3.0->typer->transformers) (
+2.19.2)
+Requirement already satisfied: mdurl~=0.1 in /venv/main/lib/python3.12/site-packages (from markdown-it-py>=2.2.0->rich>=12.3.0->typer->trans
+formers) (0.1.2)
+Downloading transformers-5.9.0-py3-none-any.whl (10.8 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.8/10.8 MB 61.5 MB/s  0:00:00
+Downloading tokenizers-0.22.2-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.3/3.3 MB 62.8 MB/s  0:00:00
+Downloading peft-0.19.1-py3-none-any.whl (680 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━ 680.7/680.7 kB 17.9 MB/s  0:00:00
+Downloading accelerate-1.13.0-py3-none-any.whl (383 kB)
+Downloading regex-2026.5.9-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (801 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━ 801.2/801.2 kB 18.6 MB/s  0:00:00
+Downloading safetensors-0.7.0-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (507 kB)
+Installing collected packages: safetensors, regex, tokenizers, accelerate, transformers, peft
+Successfully installed accelerate-1.13.0 peft-0.19.1 regex-2026.5.9 safetensors-0.7.0 tokenizers-0.22.2 transformers-5.9.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly
+ rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-u
+ser-action option if you know what you are doing and want to suppress this warning.
+(main) root@C.38567870:/workspace/Swiss Knife$ python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, GPU: {torch.cuda.get_devi
+ce_name(0)}')"
+CUDA: True, GPU: NVIDIA RTX PRO 5000 Blackwell
+(main) root@C.38567870:/workspace/Swiss Knife$ cd /workspace/swiss-knife
+ln -sfn tournament swiss_knife
+-bash: cd: /workspace/swiss-knife: No such file or directory
+(main) root@C.38567870:/workspace/Swiss Knife$ ln -sfn tournament swiss_knife
+(main) root@C.38567870:/workspace/Swiss Knife$ python tests/test_tournament.py
+python tests/test_acceptance.py
+python tests/test_swiss_system.py
+python tests/test_speculative_gen.py
+python tests/test_blade_rack.py
+============================================================
+  Swiss Knife — Tournament Engine Verification
+============================================================
+
+[basic_winner] Winner: c2
+  ✓ PASSED
+
+[alpha=1.0] Winner: c2
+  ✓ PASSED
+
+[alpha=0.0] Winner: c7
+  ✓ PASSED
+
+[calibration_invariance] Original winner: c2
+[calibration_invariance] Shifted winner:  c2
+  ✓ PASSED — Winner unchanged under +1000 blade offset
+
+[antisymmetry] Score matrix:
+tensor([[ 0.0000,  0.0000, -0.5000,  0.0000],
+        [ 0.0000,  0.0000, -0.5000,  0.0000],
+        [ 0.5000,  0.5000,  0.0000,  0.5000],
+        [ 0.0000,  0.0000, -0.5000,  0.0000]])
+  ✓ PASSED — max|M + M^T| = 0.00e+00
+
+[condorcet] Winner: c0
+  ✓ PASSED — Condorcet winner wins the bracket
+
+============================================================
+  ALL TESTS PASSED ✓
+============================================================
+============================================================
+  Swiss Knife — Acceptance Math Unit Tests
+============================================================
+
+  ✓ Z_local = 1.025528  (positive)
+  ✓ Z_local numerically stable under extreme inputs
+  ✓ acceptance_prob always in [0, 1]  (50 random trials)
+  ✓ Higher auditor score → higher p_accept (1.0000 > 0.9512)
+  ✓ coin_flip returns bool (sampled: True)
+  ✓ coin_flip: p=1.0 always accepts (20 trials)
+  ✓ coin_flip: p=0.0 never accepts (20 trials)
+  ✓ resample_from_residual returns valid index: 5
+  ✓ Z_local derivation check: 1.224656 ≈ 1.224656
+
+============================================================
+  ALL ACCEPTANCE TESTS PASSED ✓
+============================================================
+============================================================
+  Swiss Knife — Swiss-System Tournament Tests
+============================================================
+
+  [condorcet] Winner: c0
+  ✓ PASSED
+
+  [calibration] Original: c2 | Shifted: c2
+  ✓ PASSED — Winner stable under +1000 blade offset
+
+  [alpha=1.0] Winner: c2
+  ✓ PASSED — α=1.0 selects highest target score
+
+  [alpha=0.0] Winner: c7
+  ✓ PASSED — α=0.0 selects highest blade score
+
+  ✓ PASSED — Default rounds = ceil(log2(K)) for K ∈ {4, 8, 16}
+
+  [odd K=5] Winner: c0
+  ✓ PASSED — Odd K handled without error
+
+  [summary] champion=c7  wins=[2.0, 2.0, 0.0, 1.0, 1.0, 1.0, 2.0, 3.0]
+  ✓ PASSED — swiss_score_summary structure correct
+
+  Knockout: c0 | Swiss: c0
+  ✓ PASSED — Swiss and Knockout agree on dominant candidate
+
+============================================================
+  ALL SWISS-SYSTEM TESTS PASSED ✓
+============================================================
+============================================================
+  Swiss Knife — Option B Generator Tests
+============================================================
+
+TEST 1 — Draft propose shape
+  candidate_matrix shape: torch.Size([4, 4])  ✓
+  draft_topk_logits shape: torch.Size([4, 4])  ✓
+
+TEST 2 — Column 0 = greedy argmax
+  ✓ All 4 positions have greedy token 42 at column 0
+
+TEST 3 — SpeculativeStats fields
+  acceptance_rate=0.70  ✓
+  tokens_per_second=20.0  ✓
+  auditor_calls_per_token=0.250  ✓
+
+TEST 4 — generate() knockout returns string
+  generate() returned: 'mocked output text'  ✓
+
+TEST 5 — generate() return_stats=True
+  stats.total_rounds=5  ✓
+  stats.total_tokens_accepted=8  ✓
+
+TEST 6 — generate() Swiss mode
+  Swiss mode generate() returned: 'mocked output text'  ✓
+
+============================================================
+  ALL SPECULATIVE GENERATOR TESTS PASSED ✓
+============================================================
+============================================================
+  Swiss Knife — BladeRack Unit Tests
+============================================================
+
+TEST 1 — swap() returns profile
+  ✓ swap() returns ReconfigurationProfile
+
+TEST 2 — Profile fields
+  to_blade: harmlessness  ✓
+  swap_time_ms: 0.0004  ✓
+  adapter_params: 12,800  ✓
+
+TEST 3 — Swap time measured
+  swap_time_ms = 0.0002ms  (< 100ms)  ✓
+
+TEST 4 — Unloaded blade raises KeyError
+  ✓ Correctly raised KeyError: "Blade 'helpfulness' not in rack. Available: []. Call load_blade('helpfulness') first."
+
+TEST 5 — active_blade_name updated
+  ✓ active_blade_name tracks swaps correctly
+
+TEST 6 — Cycling swaps
+  ✓ 9 swap cycles completed without error
+
+TEST 7 — MoD retrain estimate sensible
+  router_params:        10,752
+  joint_pathway_params: 102.8M
+  gpu_hours_estimate:   24h
+  ✓ MoDStyleRetrainEstimate values are sensible
+
+TEST 8 — _count_lora_params
+  ✓ LoRA param count = 12,800 (non-LoRA params excluded)
+
+TEST 9 — Profile str format
+  ✓ Profile str: Swap 'helpfulness' → 'harmlessness' | 0.05 ms | ΔMem: +0.10 MB | LoRA params: 7,340,032
+
+============================================================
+  ALL BLADE RACK TESTS PASSED ✓
+============================================================
+(main) root@C.38567870:/workspace/Swiss Knife$ python tests/test_speculative_gpu.py
+
+======================================================================
+  Swiss Knife — GPU Integration Tests
+  Speculative Decoding Loop with Tournament (Real Weights)
+======================================================================
+
+  ⚠  These tests require GPU + model downloads (~14 GB).
+     Run on Vast.ai, not locally.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  TEST 1 — Full Option B Speculative Loop (Real Weights)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-05-30 12:41:01,036 | INFO | __main__ | Loading tokenizer...
+2026-05-30 12:41:01,037 | INFO | tournament.models | Downloading base model from dataset repo: divyajot5005/ndna / SFT/Qwen_SFT_merged
+2026-05-30 12:41:01,337 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/revision/main "HTTP/1.1 200
+ OK"
+Downloading (incomplete total...): 0.00B [00:00, ?B/s]2026-05-30 12:41:01,563 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/
+datasets/divyajot5005/ndna/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-05-30 12:41:01,738 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/Qwen_SFT_merged/added_tokens.json "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:41:01,797 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/Qwen_SFT_merged/chat_template.jinja "HTTP/1.1 307 Temporary Redirect"
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-05-30 12:41:01,798 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/Qwen_SFT_merged/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:41:01,797 | WARNING | huggingface_hub.utils._http | Warning: You are sending unauthenticated requests to the HF Hub. Please se
+t a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-05-30 12:41:01,806 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/Qwen_SFT_merged/model-00001-of-00004.safetensors "HTTP/1.1 302 Found"
+2026-05-30 12:41:01,809 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/Qwen_SFT_merged/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:41:01,814 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/Qwen_SFT_merged/model-00003-of-00004.safetensors "HTTP/1.1 302 Found"
+2026-05-30 12:41:01,823 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/Qwen_SFT_merged/model-00002-of-00004.safetensors "HTTP/1.1 302 Found"
+2026-05-30 12:41:01,824 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/Qwen_SFT_merged/merges.txt "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:41:01,858 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recu
+rsive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjl
+pWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZ
+hV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D "HTTP/1.1 200 OK"
+2026-05-30 12:41:01,877 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c
+506a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fadded_tokens.json "HTTP/1.1 200 OK"
+                                      2026-05-30 12:41:01,941 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/d
+atasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fconfig.json "HTTP/1.1 200 OK"
+2026-05-30 12:41:01,942 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c
+506a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fchat_template.jinja "HTTP/1.1 200 OK"
+2026-05-30 12:41:01,952 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/xet-read-token/ef5534a2722c
+506a58218aff170efbc405093efe "HTTP/1.1 200 OK"
+Downloading (incomplete total...):   0%| | 0.00/4.88G [00:00<?, 2026-05-30 12:41:01,953 | INFO | httpx | HTTP Request: GET https://huggingfa
+ce.co/api/datasets/divyajot5005/ndna/xet-read-token/ef5534a2722c506a58218aff170efbc405093efe "HTTP/1.1 200 OK"
+Downloading (incomplete total...):   0%| | 0.00/9.21G [00:00<?, 2026-05-30 12:41:01,958 | INFO | httpx | HTTP Request: HEAD https://huggingf
+ace.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fgeneration_config.json
+"HTTP/1.1 200 OK"
+2026-05-30 12:41:01,962 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/xet-read-token/ef5534a2722c
+506a58218aff170efbc405093efe "HTTP/1.1 200 OK"
+Downloading (incomplete total...):   0%| | 0.00/14.1G [00:00<?, 2026-05-30 12:41:01,968 | INFO | httpx | HTTP Request: HEAD https://huggingf
+ace.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fmerges.txt "HTTP/1.1 20
+0 OK"
+2026-05-30 12:41:02,022 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c5
+06a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fadded_tokens.json "HTTP/1.1 200 OK"
+Downloading (incomplete total...):   0%| |2026-05-30 12:41:02,086 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/resolve-cach
+e/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fchat_template.jinja "HTTP/1.1 200 OK"
+Downloading (incomplete total...):   0%| | 605/14.1G [00:00<43752026-05-30 12:41:02,088 | INFO | httpx | HTTP Request: GET https://huggingfa
+ce.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fconfig.json "HTTP/1.1 20
+0 OK"
+2026-05-30 12:41:02,109 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c5
+06a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fgeneration_config.json "HTTP/1.1 200 OK"
+Downloading (incomplete total...):   0%| | 2.59k/14.1G [00:00<432026-05-30 12:41:02,119 | INFO | httpx | HTTP Request: GET https://huggingfa
+ce.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fmerges.txt "HTTP/1.1 200
+ OK"
+2026-05-30 12:41:02,169 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/Qwen_SFT_merged/model-00004-of-00004.safetensors "HTTP/1.1 302 Found"
+Downloading (incomplete total...):   0%| | 2.71k/15.2G [00:00<102026-05-30 12:41:02,228 | INFO | httpx | HTTP Request: HEAD https://huggingf
+ace.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged/model.safetensors.index.json "HTTP/1.
+1 307 Temporary Redirect"
+2026-05-30 12:41:02,231 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/Qwen_SFT_merged/special_tokens_map.json "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:41:02,262 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/Qwen_SFT_merged/tokenizer.json "HTTP/1.1 302 Found"
+Downloading (incomplete total...):   0%| |2026-05-30 12:41:02,368 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cac
+he/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fmodel.safetensors.index.json "HTTP/1.1 200 OK
+"
+2026-05-30 12:41:02,372 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c
+506a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fspecial_tokens_map.json "HTTP/1.1 200 OK"
+2026-05-30 12:41:02,504 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/Qwen_SFT_merged/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:41:02,516 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c5
+06a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fmodel.safetensors.index.json "HTTP/1.1 200 OK"
+2026-05-30 12:41:02,518 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c5
+06a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fspecial_tokens_map.json "HTTP/1.1 200 OK"
+Downloading (incomplete total...):   0%| | 1.70M/15.2G [00:01<1:2026-05-30 12:41:02,651 | INFO | httpx | HTTP Request: HEAD https://huggingf
+ace.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Ftokenizer_config.json "
+HTTP/1.1 200 OK"
+2026-05-30 12:41:02,666 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/Qwen_SFT_merged/vocab.json "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:41:02,798 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c5
+06a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Ftokenizer_config.json "HTTP/1.1 200 OK"
+2026-05-30 12:41:02,823 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c
+506a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fvocab.json "HTTP/1.1 200 OK"
+2026-05-30 12:41:02,985 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c5
+06a58218aff170efbc405093efe/SFT%2FQwen_SFT_merged%2Fvocab.json "HTTP/1.1 200 OK"
+Fetching ... files: 14it [01:15,  5.40s/it]15.1G/15.2G [01:16<00
+Download complete: : 15.2GB [01:16, 853MB/s]                    2026-05-30 12:42:17,579 | INFO | tournament.models | Base model cached at: /
+workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+2026-05-30 12:42:17,579 | INFO | tournament.models | Loading tokenizer from: /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/
+ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+Download complete: : 15.2GB [01:16, 200MB/s]
+2026-05-30 12:42:18,004 | INFO | __main__ | Loading base model (this downloads ~14 GB on first run)...
+2026-05-30 12:42:18,004 | INFO | tournament.models | CUDA GPU detected — pinning model to cuda:0
+2026-05-30 12:42:18,004 | INFO | tournament.models | Loading base model (draft + ref): /workspace/.hf_home/hub/datasets--divyajot5005--ndna/
+snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged  [dtype=torch.bfloat16, device={'': 0}]
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights: 100%|█████████████████████████████████████████████| 339/339 [00:01<00:00, 173.26it/s]
+2026-05-30 12:42:20,269 | INFO | tournament.models | Base model loaded and frozen. Params: 7,615,616,512
+2026-05-30 12:42:20,269 | INFO | __main__ | Loading helpfulness blade...
+2026-05-30 12:42:20,269 | INFO | tournament.models | CUDA GPU detected — pinning model to cuda:0
+2026-05-30 12:42:20,269 | INFO | tournament.models | Loading blade 'helpfulness' base copy [dtype=torch.bfloat16, device={'': 0}]...
+Loading weights: 100%|█████████████████████████████████████████████| 339/339 [00:01<00:00, 169.63it/s]
+2026-05-30 12:42:22,382 | INFO | tournament.models | Attaching LoRA adapter from model repo MGPGRAD/Swiss-Knife / dpo_out/hh_helpfulness/fin
+al_adapter ...
+2026-05-30 12:42:22,604 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/f
+inal_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:42:22,753 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/MGPGRAD/Swiss-Knife/dd68a07e6cc1
+8b879a0703381dbcdbbbfd58b533/dpo_out%2Fhh_helpfulness%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+2026-05-30 12:42:22,896 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/resolve-cache/models/MGPGRAD/Swiss-Knife/dd68a07e6cc18
+b879a0703381dbcdbbbfd58b533/dpo_out%2Fhh_helpfulness%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+adapter_config.json: 1.11kB [00:00, 5.52MB/s]
+2026-05-30 12:42:23,037 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/f
+inal_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:42:23,078 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/MGPGRAD/Swiss-Knife/dd68a07e6cc1
+8b879a0703381dbcdbbbfd58b533/dpo_out%2Fhh_helpfulness%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+2026-05-30 12:42:24,083 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/f
+inal_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+2026-05-30 12:42:24,233 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/f
+inal_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+2026-05-30 12:42:24,370 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/models/MGPGRAD/Swiss-Knife/xet-read-token/dd68a07e6cc1
+8b879a0703381dbcdbbbfd58b533 "HTTP/1.1 200 OK"
+dpo_out/hh_helpfulness/final_adapter/ada(…): 100%|█████████████████| 162M/162M [00:06<00:00, 24.4MB/s]
+2026-05-30 12:42:31,041 | INFO | tournament.models | Blade 'helpfulness' loaded. LoRA params: 40,370,176
+2026-05-30 12:42:31,041 | INFO | tournament.speculative_generator | SwissKnifeSpeculativeGenerator initialized: γ=4, K=8, α=0.50, β=0.100, t
+ournament=knockout
+2026-05-30 12:42:31,041 | INFO | __main__ | Generating 50 tokens with Option B (γ=4, K=8, tournament=knockout)...
+2026-05-30 12:42:31,663 | INFO | tournament.speculative_generator | Round 1 | Rejection at pos 2 | Greedy prefix (2 tok): ' AI alignment' |
+Winner: ' means'
+2026-05-30 12:42:31,800 | INFO | tournament.speculative_generator | Round 2 | Rejection at pos 0 | Greedy prefix (0 tok): '' | Winner: ' tha
+t'
+2026-05-30 12:42:31,937 | INFO | tournament.speculative_generator | Round 3 | Rejection at pos 1 | Greedy prefix (1 tok): ' an' | Winner: '
+AI'
+2026-05-30 12:42:32,074 | INFO | tournament.speculative_generator | Round 4 | Rejection at pos 1 | Greedy prefix (1 tok): ' system' | Winner
+: ' is'
+2026-05-30 12:42:32,211 | INFO | tournament.speculative_generator | Round 5 | Rejection at pos 0 | Greedy prefix (0 tok): '' | Winner: ' ali
+gned'
+2026-05-30 12:42:32,348 | INFO | tournament.speculative_generator | Round 6 | Rejection at pos 1 | Greedy prefix (1 tok): ' with' | Winner:
+' the'
+2026-05-30 12:42:32,485 | INFO | tournament.speculative_generator | Round 7 | Rejection at pos 1 | Greedy prefix (1 tok): ' goals' | Winner:
+ ' of'
+2026-05-30 12:42:32,621 | INFO | tournament.speculative_generator | Round 8 | Rejection at pos 0 | Greedy prefix (0 tok): '' | Winner: ' the
+'
+2026-05-30 12:42:32,758 | INFO | tournament.speculative_generator | Round 9 | Full accept (4 tok): ' people who created it'
+2026-05-30 12:42:32,896 | INFO | tournament.speculative_generator | Round 10 | Rejection at pos 2 | Greedy prefix (2 tok): '. It' | Winner:
+' means'
+2026-05-30 12:42:33,033 | INFO | tournament.speculative_generator | Round 11 | Rejection at pos 2 | Greedy prefix (2 tok): ' that the' | Win
+ner: ' goals'
+2026-05-30 12:42:33,171 | INFO | tournament.speculative_generator | Round 12 | Rejection at pos 2 | Greedy prefix (2 tok): ' of the' | Winne
+r: ' people'
+2026-05-30 12:42:33,307 | INFO | tournament.speculative_generator | Round 13 | Rejection at pos 0 | Greedy prefix (0 tok): '' | Winner: ' wh
+o'
+2026-05-30 12:42:33,445 | INFO | tournament.speculative_generator | Round 14 | Rejection at pos 1 | Greedy prefix (1 tok): ' created' | Winn
+er: ' it'
+2026-05-30 12:42:33,583 | INFO | tournament.speculative_generator | Round 15 | Rejection at pos 2 | Greedy prefix (2 tok): ' are the' | Winn
+er: ' goals'
+2026-05-30 12:42:33,722 | INFO | tournament.speculative_generator | Round 16 | Full accept (4 tok): ' of the AI system'
+2026-05-30 12:42:33,866 | INFO | tournament.speculative_generator | Round 17 | Rejection at pos 1 | Greedy prefix (1 tok): '.' | Winner: ' I
+t'
+2026-05-30 12:42:34,020 | INFO | tournament.speculative_generator | Round 18 | Rejection at pos 0 | Greedy prefix (0 tok): '' | Winner: ' me
+ans'
+2026-05-30 12:42:34,169 | INFO | tournament.speculative_generator | Round 19 | Rejection at pos 0 | Greedy prefix (0 tok): '' | Winner: ' th
+e'
+2026-05-30 12:42:34,320 | INFO | tournament.speculative_generator | Round 20 | Rejection at pos 3 | Greedy prefix (3 tok): ' AI system is' |
+ Winner: ' doing'
+2026-05-30 12:42:34,471 | INFO | tournament.speculative_generator | Round 21 | Rejection at pos 1 | Greedy prefix (1 tok): ' what' | Winner:
+ ' we'
+2026-05-30 12:42:34,622 | INFO | tournament.speculative_generator | Round 22 | Full accept (4 tok): ' want it to do'
+2026-05-30 12:42:34,622 | INFO | tournament.speculative_generator | Generation complete | 50 tokens | 3.58s | 22 rounds (13.6% full-accept)
+| 13.97 tok/s
+  ✓ Output is a valid string (295 chars)
+  ✓ total_rounds=22 == full(3) + partial(19)
+  ✓ tournament_calls=51 ∈ [22, 88]
+  ✓ target_passes=22, blade_passes=22 (both == rounds)
+  ✓ total_tokens_accepted=50
+  ℹ acceptance_rate=13.64% (tournament active)
+  ✓ Completed in 3.58s (14.0 tok/s)
+  ✓ Rejection positions: [2, 0, 1, 1, 0, 1, 1, 0, 2, 2, 2, 0, 1, 2, 1, 0, 0, 3, 1] (all ∈ [0, 3])
+
+  ┌─ Generated Output ─────────────────────────────────────────
+  │ Explain the concept of AI alignment to a beginner in simple terms. AI alignment means that an AI system is aligned with the goals of the
+ people who created it. It means that the goals of the people who created it are the goals of the AI system. It means the AI system is doing
+ what we want it to
+  └────────────────────────────────────────────────────────────
+
+  ┌─ SpeculativeStats ──────────────────────────────────────────
+  │  total_rounds                  : 22
+  │  total_tokens_accepted         : 50
+  │  full_accept_rounds            : 3
+  │  partial_accept_rounds         : 19
+  │  acceptance_rate               : 0.13636363636363635
+  │  target_forward_passes         : 22
+  │  blade_forward_passes          : 22
+  │  tournament_calls              : 51
+  │  tokens_per_second             : 13.97
+  │  auditor_calls_per_token       : 0.44
+  │  total_time_s                  : 3.58
+  └────────────────────────────────────────────────────────────
+
+  ✓ TEST 1 PASSED
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  TEST 2 — Blade Swap via BladeRack (Real Weights)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-05-30 12:42:34,622 | INFO | __main__ | Building BladeRack with helpfulness + harmlessness...
+2026-05-30 12:42:34,622 | INFO | tournament.blade_rack | Loading blade 'helpfulness' into rack...
+2026-05-30 12:42:34,622 | INFO | tournament.models | CUDA GPU detected — pinning model to cuda:0
+2026-05-30 12:42:34,622 | INFO | tournament.models | Loading blade 'helpfulness' base copy [dtype=torch.bfloat16, device={'': 0}]...
+Loading weights: 100%|█████████████████████████████████████████████| 339/339 [00:01<00:00, 169.93it/s]
+2026-05-30 12:42:36,702 | INFO | tournament.models | Attaching LoRA adapter from model repo MGPGRAD/Swiss-Knife / dpo_out/hh_helpfulness/fin
+al_adapter ...
+2026-05-30 12:42:36,904 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/f
+inal_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:42:36,937 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/MGPGRAD/Swiss-Knife/dd68a07e6cc1
+8b879a0703381dbcdbbbfd58b533/dpo_out%2Fhh_helpfulness%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+2026-05-30 12:42:37,077 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/f
+inal_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:42:37,111 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/MGPGRAD/Swiss-Knife/dd68a07e6cc1
+8b879a0703381dbcdbbbfd58b533/dpo_out%2Fhh_helpfulness%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+2026-05-30 12:42:38,234 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/f
+inal_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+2026-05-30 12:42:38,383 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/f
+inal_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+2026-05-30 12:42:38,453 | INFO | tournament.models | Blade 'helpfulness' loaded. LoRA params: 40,370,176
+2026-05-30 12:42:38,453 | INFO | tournament.blade_rack | Blade 'helpfulness' loaded in 3831.1 ms.
+2026-05-30 12:42:38,454 | INFO | __main__ | helpfulness loaded in 3.8s
+2026-05-30 12:42:38,454 | INFO | tournament.blade_rack | Loading blade 'harmlessness' into rack...
+2026-05-30 12:42:38,454 | INFO | tournament.models | CUDA GPU detected — pinning model to cuda:0
+2026-05-30 12:42:38,454 | INFO | tournament.models | Loading blade 'harmlessness' base copy [dtype=torch.bfloat16, device={'': 0}]...
+Loading weights: 100%|█████████████████████████████████████████████| 339/339 [00:01<00:00, 187.87it/s]
+2026-05-30 12:42:40,351 | INFO | tournament.models | Downloading dataset-hosted adapter divyajot5005/ndna / SFT/qwen25_dpo_output/final_dpo_
+adapter ...
+2026-05-30 12:42:40,494 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/revision/main "HTTP/1.1 200
+ OK"
+Downloading (incomplete total...): 0.00B [00:00, ?B/s]2026-05-30 12:42:40,668 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/
+datasets/divyajot5005/ndna/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-05-30 12:42:40,849 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/README.md "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:42:40,910 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:42:40,911 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/chat_template.jinja "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:42:40,911 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/added_tokens.json "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:42:40,916 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/special_tokens_map.json "HTTP/1.1 307 Temporary Redirect"
+2026-05-30 12:42:40,917 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/tokenizer.json "HTTP/1.1 302 Found"
+2026-05-30 12:42:40,918 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+2026-05-30 12:42:40,918 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recu
+rsive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjl
+pWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZ
+hV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D "HTTP/1.1 200 OK"
+2026-05-30 12:42:40,921 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/merges.txt "HTTP/1.1 307 Temporary Redirect"
+Downloading (incomplete total...):   02026-05-30 12:42:40,991 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/d
+atasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2FREADME.md "HTTP/1.1 200 OK"
+2026-05-30 12:42:41,051 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c
+506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fchat_template.jinja "HTTP/1.1 200 OK"
+2026-05-30 12:42:41,053 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c
+506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+2026-05-30 12:42:41,053 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c
+506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fadded_tokens.json "HTTP/1.1 200 OK"
+2026-05-30 12:42:41,064 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c
+506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fmerges.txt "HTTP/1.1 200 OK"
+2026-05-30 12:42:41,065 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c
+506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fspecial_tokens_map.json "HTTP/1.1 200 OK"
+2026-05-30 12:42:41,073 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218a
+ff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+Downloading (incomplete total...):   0%|                                   | 0.00/162M [00:00<?, ?B/s]2026-05-30 12:42:41,197 | INFO | httpx
+ | HTTP Request: GET https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwen
+25_dpo_output%2Ffinal_dpo_adapter%2FREADME.md "HTTP/1.1 200 OK"
+                                          2026-05-30 12:42:41,205 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/divyaj
+ot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter/vocab.json "HTTP/1.1 307 Temporary Redi
+rect"
+2026-05-30 12:42:41,219 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c
+506a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Ftokenizer_config.json "HTTP/1.1 200 OK"
+2026-05-30 12:42:41,219 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c5
+06a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+2026-05-30 12:42:41,220 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c5
+06a58218aff170efbc405093efe/SFT%2Fqwen25_dpo_output%2Ffinal_dpo_adapter%2Fspecial_tokens_map.json "HTTP/1.1 200 OK"
+Downloading (incomplete total...):   0%|                        | 5.23k/162M [00:00<6:07:48, 7.32kB/s]2026-05-30 12:42:41,229 | INFO | httpx
+ | HTTP Request: HEAD https://huggingface.co/datasets/divyajot5005/ndna/resolve/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_outp
+ut/final_dpo_adapter/training_args.bin "HTTP/1.1 302 Found"
+Downloading (incomplete total...):   0%|                        | 6.67k/162M [00:00<1:20:23, 33.5kB/s]2026-05-30 12:42:41,345 | INFO | httpx
+ | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/divyajot5005/ndna/ef5534a2722c506a58218aff170efbc405093efe/SFT%2Fqwe
+n25_dpo_output%2Ffinal_dpo_adapter%2Fvocab.json "HTTP/1.1 200 OK"
+Fetching ... files: 11it [00:06,  1.67it/s]0:07, 31.0MB/s]
+Download complete: : 162MB [00:07, 31.0MB/s]              2026-05-30 12:42:47,537 | INFO | tournament.models | Attaching LoRA adapter from l
+ocal path: /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/fin
+al_dpo_adapter
+Download complete: : 162MB [00:07, 22.8MB/s]
+2026-05-30 12:42:48,676 | INFO | tournament.models | Blade 'harmlessness' loaded. LoRA params: 40,370,176
+2026-05-30 12:42:48,676 | INFO | tournament.blade_rack | Blade 'harmlessness' loaded in 10222.4 ms.
+2026-05-30 12:42:48,676 | INFO | __main__ | harmlessness loaded in 10.2s
+  ✓ BladeRack loaded 2 blades: ['helpfulness', 'harmlessness']
+2026-05-30 12:42:48,679 | INFO | tournament.blade_rack | Swap '<none>' → 'helpfulness' | 0.00 ms | ΔMem: +0.00 MB | LoRA params: 40,370,176
+2026-05-30 12:42:48,679 | INFO | tournament.speculative_generator | SwissKnifeSpeculativeGenerator initialized: γ=4, K=8, α=0.50, β=0.100, t
+ournament=knockout
+2026-05-30 12:42:48,679 | INFO | __main__ | Generating with helpfulness blade...
+  ✓ Helpfulness output: 201 chars, 40 tokens
+2026-05-30 12:42:51,026 | INFO | __main__ | Hot-swapping to harmlessness blade...
+2026-05-30 12:42:51,029 | INFO | tournament.blade_rack | Swap 'helpfulness' → 'harmlessness' | 0.00 ms | ΔMem: +0.00 MB | LoRA params: 40,37
+0,176
+  ✓ Blade swap completed in 3.21 ms
+  ✓ ReconfigurationProfile: helpfulness → harmlessness, 40,370,176 LoRA params
+2026-05-30 12:42:51,029 | INFO | __main__ | Generating with harmlessness blade...
+  ✓ Harmlessness output: 235 chars, 40 tokens
+  ✓ Outputs DIFFER (blade swap changed generation) — expected behavior
+  ✓ Stats internally consistent for both blades
+
+  ┌─ Helpfulness Output ────────────────────────────────────────
+  │ How should I deal with a difficult coworker? I have a coworker that I have to work with that is very difficult.  I have tried to be nice
+ to her, but she is very difficult to work with.  I have tried t
+  ├─ Harmlessness Output ───────────────────────────────────────
+  │ How should I deal with a difficult coworker? Responding to this question requires a nuanced understanding that goes well outside my capa
+bilities and expertise as AI. I am not a human, so I do not have
+  └────────────────────────────────────────────────────────────
+
+  ✓ TEST 2 PASSED
+
+======================================================================
+  ALL GPU INTEGRATION TESTS PASSED ✓
+======================================================================
+(main) root@C.38567870:/workspace/Swiss Knife$ tmux capture-pane -pS -3000 > integration_test_results.txt
+

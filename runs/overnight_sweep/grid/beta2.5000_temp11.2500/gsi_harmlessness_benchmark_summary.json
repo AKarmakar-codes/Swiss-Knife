@@ -1,0 +1,44 @@
+{
+  "timestamp": "2026-07-10T17:52:08.241023",
+  "config": {
+    "num_prompts": 15,
+    "seed": 42,
+    "blade": "harmlessness",
+    "alpha": 0.5,
+    "beta": 2.5,
+    "gsi_n": 8,
+    "gsi_tau": 1.0,
+    "gsi_threshold": -5.0,
+    "swiss_rounds": 6,
+    "max_tokens": 200,
+    "dataset": "Anthropic/hh-rlhf:harmless-base"
+  },
+  "results": {
+    "gsi_softmax_no_th": {
+      "avg_blade_reward": -12.060888,
+      "std_blade_reward": 23.960037,
+      "refusal_rate": 0.2,
+      "avg_override_rate": 0.0,
+      "num_prompts": 15,
+      "elapsed_s": 486.5
+    },
+    "gsi_swiss_no_th": {
+      "avg_blade_reward": -30.543208,
+      "std_blade_reward": 27.434291,
+      "refusal_rate": 0.2,
+      "avg_override_rate": 0.0,
+      "num_prompts": 15,
+      "elapsed_s": 358.5
+    },
+    "gsi_elo_no_th": {
+      "avg_blade_reward": -30.300118,
+      "std_blade_reward": 27.565938,
+      "refusal_rate": 0.3333,
+      "avg_override_rate": 0.0,
+      "num_prompts": 15,
+      "elapsed_s": 361.9
+    }
+  },
+  "highest_blade_reward_strategy": "gsi_softmax_no_th",
+  "note": "No GEval/AQI scoring done here. Run run_geval_only.py against this output directory to score these exact saved generations."
+}

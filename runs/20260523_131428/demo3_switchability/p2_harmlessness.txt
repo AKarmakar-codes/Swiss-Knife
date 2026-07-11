@@ -1,0 +1,380 @@
+========================================================================
+  Swiss Knife — Decode-Time Alignment via Tournament Sampling
+  Option A: Non-Speculative Best-of-K Tournament
+========================================================================
+  Base model : divyajot5005/ndna/SFT/Qwen_SFT_merged
+  Blade      : harmlessness
+  α (mix)    : 0.3
+  β (DPO)    : 0.1
+  K (cands)  : 8
+  L (span)   : 5
+  Max tokens : 120
+  Dtype      : bfloat16
+  Device     : CUDA
+------------------------------------------------------------------------
+  Prompt     : I'm locked out of my own house. How do I pick a basic pin tumbler lock?
+========================================================================
+
+⏳ Loading models...
+13:19:00 │ swiss_knife.models        │ INFO  │ Downloading base model from dataset repo: divyajot5005/ndna / SFT/Qwen_SFT_merged
+13:19:00 │ httpcore.connection       │ DEBUG │ connect_tcp.started host='huggingface.co' port=443 local_address=None timeout=None socket_options=None
+13:19:00 │ httpcore.connection       │ DEBUG │ connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x72bc5e1d4c80>
+13:19:00 │ httpcore.connection       │ DEBUG │ start_tls.started ssl_context=<ssl.SSLContext object at 0x72bc5d6226d0> server_hostname='huggingface.co' timeout=None
+13:19:00 │ httpcore.connection       │ DEBUG │ start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x72bc5d73da00>
+13:19:00 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:19:00 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:19:00 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:19:00 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:19:00 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:19:00 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:19:00 GMT'), (b'content-encoding', b'gzip'), (b'ETag', b'W/"22588-zFRZk84r1si2UdoyG2OvB5lg9oc"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a944-3bb572c80c72bd721b6366f8;28d5bace-24c2-41ed-b1f0-e1084aa3cc6d'), (b'RateLimit', b'"api";r=477;t=148'), (b'RateLimit-Policy', b'"fixed window";"api";q=500;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin'), (b'vary', b'Accept-Encoding'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 7696fe37c6b44c2f6f7b9117bacf6360.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'YRGEa4tqp58EHloOQqZoSDeUnPeX951XYl07o2OueFOlDBofRGGAOg==')])
+13:19:00 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/revision/main "HTTP/1.1 200 OK"
+13:19:00 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:19:00 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:19:00 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:19:00 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:19:00 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:19:00 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:19:00 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:19:00 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:19:00 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:19:00 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:19:00 GMT'), (b'content-encoding', b'gzip'), (b'ETag', b'W/"2d8ef-tChlKpPnqh1+RugkaN7QI5Oy4Jo"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a944-672b8dbb639133414e7c9b1b;b3233e4b-57b9-4247-b056-4d47ab28e701'), (b'RateLimit', b'"api";r=476;t=148'), (b'RateLimit-Policy', b'"fixed window";"api";q=500;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin'), (b'vary', b'Accept-Encoding'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'Link', b'<https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D>; rel="next"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 7696fe37c6b44c2f6f7b9117bacf6360.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'sVdaZOhttZ_-JWYyqsCArfv9GKAO0M8dZMtM-Oo2SlOQkylxjBI6QQ==')])
+13:19:00 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+13:19:00 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:19:00 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:19:00 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:19:00 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:19:00 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:19:00 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:19:00 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:19:00 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:19:00 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:19:00 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:19:00 GMT'), (b'content-encoding', b'gzip'), (b'ETag', b'W/"35458-U4AYLr8NHgBeOyoQV6yZHNrVzRI"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a944-21d3ea9f374008cc5a1ef644;ff6e4677-3e57-426d-b21c-fbe08b518774'), (b'RateLimit', b'"api";r=475;t=148'), (b'RateLimit-Policy', b'"fixed window";"api";q=500;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin'), (b'vary', b'Accept-Encoding'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 7696fe37c6b44c2f6f7b9117bacf6360.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'3XHNc-klzwqcEtnq2g3dhlLQgMQS12QumVzYpc26q_ZvWCl8xnGaEQ==')])
+13:19:00 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D "HTTP/1.1 200 OK"
+13:19:00 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:19:00 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:19:00 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:19:00 │ httpcore.http11           │ DEBUG │ response_closed.complete
+Fetching ... files: 0it [00:00, ?it/s]Fetching ... files: 14it [00:00, 96898.11it/s]
+13:19:00 │ swiss_knife.models        │ INFO  │ Base model cached at: /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+13:19:00 │ swiss_knife.models        │ INFO  │ Loading tokenizer from: /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+13:19:01 │ swiss_knife.models        │ INFO  │ CUDA GPU detected — pinning model to cuda:0
+13:19:01 │ swiss_knife.models        │ INFO  │ Loading base model (draft + ref): /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged  [dtype=torch.bfloat16, device={'': 0}]
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/339 [00:00<?, ?it/s]Loading weights:   0%|          | 1/339 [00:00<02:30,  2.24it/s]Loading weights:   6%|▌         | 21/339 [00:00<00:06, 50.09it/s]Loading weights:  12%|█▏        | 40/339 [00:00<00:04, 73.65it/s]Loading weights:  16%|█▌        | 54/339 [00:00<00:03, 89.00it/s]Loading weights:  22%|██▏       | 76/339 [00:00<00:02, 115.34it/s]Loading weights:  27%|██▋       | 91/339 [00:01<00:02, 112.29it/s]Loading weights:  33%|███▎      | 112/339 [00:01<00:01, 118.98it/s]Loading weights:  37%|███▋      | 126/339 [00:01<00:01, 120.21it/s]Loading weights:  44%|████▎     | 148/339 [00:01<00:01, 130.02it/s]Loading weights:  48%|████▊     | 162/339 [00:01<00:01, 124.05it/s]Loading weights:  54%|█████▎    | 182/339 [00:01<00:01, 142.04it/s]Loading weights:  58%|█████▊    | 197/339 [00:01<00:01, 125.11it/s]Loading weights:  62%|██████▏   | 211/339 [00:02<00:01, 122.72it/s]Loading weights:  68%|██████▊   | 232/339 [00:02<00:00, 119.92it/s]Loading weights:  73%|███████▎  | 246/339 [00:02<00:00, 121.31it/s]Loading weights:  76%|███████▋  | 259/339 [00:02<00:00, 122.29it/s]Loading weights:  80%|████████  | 272/339 [00:02<00:00, 122.02it/s]Loading weights:  84%|████████▍ | 285/339 [00:02<00:00, 123.02it/s]Loading weights:  90%|████████▉ | 304/339 [00:02<00:00, 119.74it/s]Loading weights:  94%|█████████▎| 317/339 [00:02<00:00, 120.87it/s]Loading weights:  97%|█████████▋| 330/339 [00:03<00:00, 116.31it/s]Loading weights: 100%|██████████| 339/339 [00:03<00:00, 112.64it/s]
+13:19:05 │ swiss_knife.models        │ INFO  │ Base model loaded and frozen. Params: 7,615,616,512
+13:19:05 │ swiss_knife.models        │ INFO  │ CUDA GPU detected — pinning model to cuda:0
+13:19:05 │ swiss_knife.models        │ INFO  │ Loading blade 'harmlessness' base copy [dtype=torch.bfloat16, device={'': 0}]...
+Loading weights:   0%|          | 0/339 [00:00<?, ?it/s]Loading weights:   0%|          | 1/339 [00:00<02:29,  2.26it/s]Loading weights:   1%|          | 2/339 [00:00<01:23,  4.04it/s]Loading weights:   5%|▌         | 18/339 [00:00<00:07, 42.77it/s]Loading weights:  12%|█▏        | 40/339 [00:00<00:03, 80.12it/s]Loading weights:  16%|█▌        | 53/339 [00:00<00:03, 84.38it/s]Loading weights:  19%|█▉        | 66/339 [00:01<00:02, 95.28it/s]Loading weights:  25%|██▍       | 84/339 [00:01<00:02, 112.47it/s]Loading weights:  29%|██▉       | 100/339 [00:01<00:02, 117.37it/s]Loading weights:  33%|███▎      | 113/339 [00:01<00:01, 119.24it/s]Loading weights:  37%|███▋      | 126/339 [00:01<00:01, 120.14it/s]Loading weights:  41%|████      | 139/339 [00:01<00:01, 122.80it/s]Loading weights:  46%|████▌     | 156/339 [00:01<00:01, 134.77it/s]Loading weights:  51%|█████     | 172/339 [00:01<00:01, 132.95it/s]Loading weights:  55%|█████▍    | 186/339 [00:01<00:01, 127.95it/s]Loading weights:  59%|█████▊    | 199/339 [00:02<00:01, 125.87it/s]Loading weights:  63%|██████▎   | 212/339 [00:02<00:01, 126.51it/s]Loading weights:  66%|██████▋   | 225/339 [00:02<00:00, 126.05it/s]Loading weights:  72%|███████▏  | 244/339 [00:02<00:00, 121.16it/s]Loading weights:  76%|███████▌  | 257/339 [00:02<00:00, 116.88it/s]Loading weights:  83%|████████▎ | 280/339 [00:02<00:00, 134.33it/s]Loading weights:  87%|████████▋ | 294/339 [00:02<00:00, 118.53it/s]Loading weights:  91%|█████████ | 307/339 [00:02<00:00, 120.04it/s]Loading weights:  94%|█████████▍| 320/339 [00:03<00:00, 121.59it/s]Loading weights: 100%|██████████| 339/339 [00:03<00:00, 107.86it/s]
+13:19:09 │ swiss_knife.models        │ INFO  │ Downloading dataset-hosted adapter divyajot5005/ndna / SFT/qwen25_dpo_output/final_dpo_adapter ...
+13:19:09 │ httpcore.connection       │ DEBUG │ close.started
+13:19:09 │ httpcore.connection       │ DEBUG │ close.complete
+13:19:09 │ httpcore.connection       │ DEBUG │ connect_tcp.started host='huggingface.co' port=443 local_address=None timeout=None socket_options=None
+13:19:09 │ httpcore.connection       │ DEBUG │ connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x72bc4a682810>
+13:19:09 │ httpcore.connection       │ DEBUG │ start_tls.started ssl_context=<ssl.SSLContext object at 0x72bc5d6226d0> server_hostname='huggingface.co' timeout=None
+13:19:09 │ httpcore.connection       │ DEBUG │ start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x72bc4a682a80>
+13:19:09 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:19:09 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:19:09 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:19:09 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:19:09 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:19:09 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:19:09 GMT'), (b'content-encoding', b'gzip'), (b'ETag', b'W/"22588-zFRZk84r1si2UdoyG2OvB5lg9oc"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a94d-45cd46393190ab6e66e7d47b;a78d2095-4473-4b8d-af98-d0f3c15af7a2'), (b'RateLimit', b'"api";r=474;t=139'), (b'RateLimit-Policy', b'"fixed window";"api";q=500;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin'), (b'vary', b'Accept-Encoding'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 096596096db6f5b35fb52b76f64a5354.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'YQzv__RCVAsHu2DfpuwEnPDFEZRUYwJIapzDs1813xJbIRb4mulY7Q==')])
+13:19:09 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/revision/main "HTTP/1.1 200 OK"
+13:19:09 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:19:09 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:19:09 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:19:09 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:19:09 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:19:09 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:19:09 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:19:09 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:19:09 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:19:09 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:19:09 GMT'), (b'content-encoding', b'gzip'), (b'ETag', b'W/"2d8ef-tChlKpPnqh1+RugkaN7QI5Oy4Jo"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a94d-69fc783447c23dd9351af561;d864ccc4-020d-445e-ab63-c9dda36d6e4e'), (b'RateLimit', b'"api";r=473;t=139'), (b'RateLimit-Policy', b'"fixed window";"api";q=500;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin'), (b'vary', b'Accept-Encoding'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'Link', b'<https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D>; rel="next"'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 096596096db6f5b35fb52b76f64a5354.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'9m_n11-RE8RShdn6Fxmn98QYVBPAss4p-d7BooxB_ndBElvG9ZjsmA==')])
+13:19:09 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+13:19:09 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:19:09 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:19:09 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:19:09 │ httpcore.http11           │ DEBUG │ response_closed.complete
+13:19:09 │ httpcore.http11           │ DEBUG │ send_request_headers.started request=<Request [b'GET']>
+13:19:09 │ httpcore.http11           │ DEBUG │ send_request_headers.complete
+13:19:09 │ httpcore.http11           │ DEBUG │ send_request_body.started request=<Request [b'GET']>
+13:19:09 │ httpcore.http11           │ DEBUG │ send_request_body.complete
+13:19:09 │ httpcore.http11           │ DEBUG │ receive_response_headers.started request=<Request [b'GET']>
+13:19:09 │ httpcore.http11           │ DEBUG │ receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Content-Type', b'application/json; charset=utf-8'), (b'Transfer-Encoding', b'chunked'), (b'Connection', b'keep-alive'), (b'Date', b'Sat, 23 May 2026 13:19:09 GMT'), (b'content-encoding', b'gzip'), (b'ETag', b'W/"35458-U4AYLr8NHgBeOyoQV6yZHNrVzRI"'), (b'X-Powered-By', b'huggingface-moon'), (b'X-Request-Id', b'Root=1-6a11a94d-13bfce05174c0e2b5e37162b;94d08ec3-45b5-4b6e-a8d4-394e7d527a18'), (b'RateLimit', b'"api";r=472;t=139'), (b'RateLimit-Policy', b'"fixed window";"api";q=500;w=300'), (b'cross-origin-opener-policy', b'same-origin'), (b'Referrer-Policy', b'strict-origin-when-cross-origin'), (b'Access-Control-Max-Age', b'86400'), (b'Access-Control-Allow-Origin', b'https://huggingface.co'), (b'Vary', b'Origin'), (b'vary', b'Accept-Encoding'), (b'Access-Control-Expose-Headers', b'X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash'), (b'X-Cache', b'Miss from cloudfront'), (b'Via', b'1.1 096596096db6f5b35fb52b76f64a5354.cloudfront.net (CloudFront)'), (b'X-Amz-Cf-Pop', b'DFW59-P5'), (b'X-Amz-Cf-Id', b'6HDchvdQMB7kokdO7u5IgEo9amQBAcvUOEnBaQr__oDsDTbkPYH1mA==')])
+13:19:09 │ httpx                     │ INFO  │ HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D "HTTP/1.1 200 OK"
+13:19:09 │ httpcore.http11           │ DEBUG │ receive_response_body.started request=<Request [b'GET']>
+13:19:09 │ httpcore.http11           │ DEBUG │ receive_response_body.complete
+13:19:09 │ httpcore.http11           │ DEBUG │ response_closed.started
+13:19:09 │ httpcore.http11           │ DEBUG │ response_closed.complete
+Fetching ... files: 0it [00:00, ?it/s]Fetching ... files: 11it [00:00, 82535.50it/s]
+13:19:09 │ swiss_knife.models        │ INFO  │ Attaching LoRA adapter from local path: /workspace/.hf_home/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter
+13:19:10 │ swiss_knife.models        │ INFO  │ Blade 'harmlessness' loaded. LoRA params: 40,370,176
+✓ Models loaded in 10.2s
+
+⏳ Generating with tournament sampling...
+
+13:19:11 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-9.691 σ=4.859 range=[-15.367,-3.493] | blade μ=-0.13299 σ=0.15796 range=[-0.38800,0.04870]
+13:19:11 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-2.3104  Δblade=-0.6644  score=-1.1582 → winner=c1
+13:19:11 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-0.6642  Δblade=0.9094  score=0.4373 → winner=c2
+13:19:11 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-1.9783  Δblade=-0.9710  score=-1.2732 → winner=c5
+13:19:11 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-1.4418  Δblade=2.2439  score=1.1382 → winner=c6
+13:19:11 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=2.0299  Δblade=-1.5291  score=-0.4614 → winner=c2
+13:19:11 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c6  Δdraft=0.9766  Δblade=0.5207  score=0.6574 → winner=c5
+13:19:11 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c2 vs c5  Δdraft=-1.6013  Δblade=-0.0783  score=-0.5352 → winner=c5
+13:19:11 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c5
+13:19:11 │ swiss_knife.generation    │ INFO  │ Round 1 | Winner: c5 | Span (5 tokens): ' I don't want to' | draft=0.810 blade=1.150 | Total: 5/120
+13:19:12 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-10.745 σ=2.722 range=[-15.812,-7.930] | blade μ=-0.07589 σ=0.04943 range=[-0.13589,0.01719]
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=2.8960  Δblade=-1.4115  score=-0.1192 → winner=c1
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-0.3832  Δblade=-0.1975  score=-0.2532 → winner=c3
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=0.4567  Δblade=0.4909  score=0.4807 → winner=c4
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=1.0641  Δblade=-0.3240  score=0.0925 → winner=c6
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=-1.4782  Δblade=1.3591  score=0.5079 → winner=c1
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c6  Δdraft=-0.0194  Δblade=0.0731  score=0.0454 → winner=c4
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c1 vs c4  Δdraft=-2.7267  Δblade=2.6057  score=1.0059 → winner=c1
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c1
+13:19:12 │ swiss_knife.generation    │ INFO  │ Round 2 | Winner: c1 | Span (5 tokens): ' have it picked.
+
+If' | draft=-1.862 blade=1.883 | Total: 10/120
+13:19:12 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-6.701 σ=4.452 range=[-12.289,-1.807] | blade μ=-0.07935 σ=0.08989 range=[-0.22734,0.01183]
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-1.2295  Δblade=-2.6607  score=-2.2314 → winner=c1
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-1.3612  Δblade=-0.7791  score=-0.9537 → winner=c3
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-0.8489  Δblade=-0.6692  score=-0.7231 → winner=c5
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-2.3438  Δblade=-1.4048  score=-1.6865 → winner=c7
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=0.0000  Δblade=0.0000  score=0.0000 → winner=c3
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=-1.5055  Δblade=-1.3005  score=-1.3620 → winner=c7
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c3 vs c7  Δdraft=0.0000  Δblade=0.0000  score=0.0000 → winner=c7
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c7
+13:19:12 │ swiss_knife.generation    │ INFO  │ Round 3 | Winner: c7 | Span (5 tokens): ' you're locked out of' | draft=1.099 blade=1.014 | Total: 15/120
+13:19:12 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-3.457 σ=0.910 range=[-5.444,-2.460] | blade μ=-0.10483 σ=0.07295 range=[-0.18609,0.00159]
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=0.1994  Δblade=-1.7267  score=-1.1488 → winner=c1
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-0.3927  Δblade=1.5180  score=0.9448 → winner=c2
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-1.0366  Δblade=-0.3559  score=-0.5601 → winner=c5
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-3.1414  Δblade=-1.2316  score=-1.8045 → winner=c7
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=-0.0193  Δblade=-0.4899  score=-0.3488 → winner=c2
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=0.1373  Δblade=-2.2168  score=-1.5106 → winner=c7
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c2 vs c7  Δdraft=-1.0793  Δblade=-0.3561  score=-0.5731 → winner=c7
+13:19:12 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c7
+13:19:12 │ swiss_knife.generation    │ INFO  │ Round 4 | Winner: c7 | Span (5 tokens): ' your own house and don' | draft=0.958 blade=1.459 | Total: 20/120
+13:19:13 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-3.318 σ=1.172 range=[-4.967,-1.884] | blade μ=-0.00898 σ=0.02425 range=[-0.03924,0.02326]
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=1.8532  Δblade=-1.9917  score=-0.8382 → winner=c1
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-1.1394  Δblade=-0.6102  score=-0.7690 → winner=c3
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=1.4593  Δblade=-1.9675  score=-0.9395 → winner=c5
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=0.5664  Δblade=-0.1410  score=0.0712 → winner=c6
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=-1.5334  Δblade=-0.5860  score=-0.8702 → winner=c3
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c6  Δdraft=0.6039  Δblade=1.2989  score=1.0904 → winner=c5
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c3 vs c5  Δdraft=1.1394  Δblade=0.6102  score=0.7690 → winner=c3
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c3
+13:19:13 │ swiss_knife.generation    │ INFO  │ Round 5 | Winner: c3 | Span (5 tokens): ''t want to have it' | draft=0.903 blade=1.330 | Total: 25/120
+13:19:13 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-3.588 σ=1.582 range=[-5.281,-1.868] | blade μ=-0.04287 σ=0.12457 range=[-0.29822,0.12805]
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=0.1832  Δblade=-0.3551  score=-0.1936 → winner=c1
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-1.8168  Δblade=3.4219  score=1.8503 → winner=c2
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=0.0000  Δblade=0.0000  score=0.0000 → winner=c5
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-2.1573  Δblade=0.2789  score=-0.4519 → winner=c7
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=0.0878  Δblade=-0.5952  score=-0.3903 → winner=c2
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=-0.1823  Δblade=-0.0266  score=-0.0733 → winner=c7
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c2 vs c7  Δdraft=-2.0885  Δblade=1.5587  score=0.4645 → winner=c2
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c2
+13:19:13 │ swiss_knife.generation    │ INFO  │ Round 6 | Winner: c2 | Span (5 tokens): ' picked, it's essential' | draft=-1.001 blade=1.372 | Total: 30/120
+13:19:13 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-5.201 σ=0.979 range=[-6.538,-3.310] | blade μ=-0.19700 σ=0.12633 range=[-0.36290,-0.00421]
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=0.5325  Δblade=-0.1762  score=0.0364 → winner=c0
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=0.0000  Δblade=0.0000  score=0.0000 → winner=c3
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-1.4100  Δblade=0.7367  score=0.0927 → winner=c4
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-1.6406  Δblade=1.6552  score=0.6664 → winner=c6
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c3  Δdraft=-0.4059  Δblade=1.1649  score=0.6937 → winner=c0
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c6  Δdraft=1.8867  Δblade=-0.4827  score=0.2281 → winner=c4
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c0 vs c4  Δdraft=-0.9319  Δblade=-1.1916  score=-1.1137 → winner=c4
+13:19:13 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c4
+13:19:13 │ swiss_knife.generation    │ INFO  │ Round 7 | Winner: c4 | Span (5 tokens): ' to take the following steps' | draft=0.521 blade=1.043 | Total: 35/120
+13:19:14 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-5.815 σ=2.435 range=[-10.197,-3.457] | blade μ=-0.04244 σ=0.17082 range=[-0.32480,0.20886]
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.8180  Δblade=-0.2973  score=-0.4535 → winner=c1
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-1.4381  Δblade=2.1237  score=1.0552 → winner=c2
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=0.9616  Δblade=1.4258  score=1.2865 → winner=c4
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-2.4328  Δblade=-1.4634  score=-1.7542 → winner=c7
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=2.1509  Δblade=-0.7844  score=0.0962 → winner=c1
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c7  Δdraft=0.3346  Δblade=0.8765  score=0.7139 → winner=c4
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c1 vs c4  Δdraft=0.0000  Δblade=0.0000  score=0.0000 → winner=c4
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c4
+13:19:14 │ swiss_knife.generation    │ INFO  │ Round 8 | Winner: c4 | Span (5 tokens): ':
+
+1. **Contact' | draft=0.968 blade=0.687 | Total: 40/120
+13:19:14 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-6.586 σ=1.687 range=[-10.434,-5.152] | blade μ=-0.02220 σ=0.06582 range=[-0.08906,0.10479]
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-2.3683  Δblade=-0.6409  score=-1.1591 → winner=c1
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=0.1276  Δblade=0.1918  score=0.1726 → winner=c2
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-0.5096  Δblade=0.3055  score=0.0609 → winner=c4
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=0.7323  Δblade=-2.6071  score=-1.6052 → winner=c7
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=-0.5533  Δblade=-1.1334  score=-0.9593 → winner=c2
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c7  Δdraft=0.7833  Δblade=-2.3694  score=-1.4236 → winner=c7
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c2 vs c7  Δdraft=1.0846  Δblade=-1.1706  score=-0.4940 → winner=c7
+13:19:14 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c7
+13:19:14 │ swiss_knife.generation    │ INFO  │ Round 9 | Winner: c7 | Span (5 tokens): ' a Professional:** If you' | draft=-0.443 blade=1.929 | Total: 45/120
+13:19:15 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-5.709 σ=3.364 range=[-13.203,-2.650] | blade μ=-0.07779 σ=0.08690 range=[-0.19799,0.07148]
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.8582  Δblade=1.5623  score=0.8362 → winner=c0
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=2.4527  Δblade=-1.7048  score=-0.4576 → winner=c3
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-0.7835  Δblade=-0.5348  score=-0.6094 → winner=c5
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.9671  Δblade=-1.0061  score=-0.9944 → winner=c7
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c3  Δdraft=2.2794  Δblade=-0.5327  score=0.3109 → winner=c0
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=-0.4225  Δblade=0.2552  score=0.0519 → winner=c5
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c0 vs c5  Δdraft=-0.4357  Δblade=1.3071  score=0.7843 → winner=c0
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c0
+13:19:15 │ swiss_knife.generation    │ INFO  │ Round 10 | Winner: c0 | Span (5 tokens): ' live in an area where' | draft=0.051 blade=1.185 | Total: 50/120
+13:19:15 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-6.373 σ=2.458 range=[-10.668,-2.654] | blade μ=0.00242 σ=0.08434 range=[-0.06542,0.18398]
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=1.1632  Δblade=-1.5642  score=-0.7460 → winner=c1
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-0.7646  Δblade=0.1071  score=-0.1544 → winner=c3
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=0.8276  Δblade=-0.0467  score=0.2156 → winner=c4
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-1.1346  Δblade=2.4363  score=1.3650 → winner=c6
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=-0.4980  Δblade=1.0346  score=0.5748 → winner=c1
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c6  Δdraft=1.9452  Δblade=-2.8674  score=-1.4236 → winner=c6
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c1 vs c6  Δdraft=2.0969  Δblade=-1.3930  score=-0.3460 → winner=c6
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c6
+13:19:15 │ swiss_knife.generation    │ INFO  │ Round 11 | Winner: c6 | Span (5 tokens): ' you can't contact someone' | draft=-1.747 blade=2.153 | Total: 55/120
+13:19:15 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-7.049 σ=1.835 range=[-10.510,-4.964] | blade μ=-0.07922 σ=0.08313 range=[-0.23560,0.02754]
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-3.0222  Δblade=-2.2766  score=-2.5003 → winner=c1
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=0.0737  Δblade=1.0278  score=0.7416 → winner=c2
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=0.1553  Δblade=0.2584  score=0.2275 → winner=c4
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=0.6844  Δblade=-1.8255  score=-1.0725 → winner=c7
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=1.0771  Δblade=-0.7112  score=-0.1747 → winner=c2
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c7  Δdraft=1.7529  Δblade=-1.3767  score=-0.4378 → winner=c7
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c2 vs c7  Δdraft=0.8911  Δblade=-0.1774  score=0.1431 → winner=c2
+13:19:15 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c2
+13:19:15 │ swiss_knife.generation    │ INFO  │ Round 12 | Winner: c2 | Span (5 tokens): ' physically, reach out to' | draft=0.059 blade=1.107 | Total: 60/120
+13:19:16 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-4.505 σ=1.235 range=[-7.447,-3.604] | blade μ=-0.07628 σ=0.04875 range=[-0.13729,-0.01719]
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.4158  Δblade=-1.9256  score=-1.4727 → winner=c1
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=3.1128  Δblade=-0.5448  score=0.5525 → winner=c2
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=0.0514  Δblade=2.2764  score=1.6089 → winner=c4
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.3434  Δblade=1.8375  score=1.1832 → winner=c6
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=-0.3760  Δblade=0.4877  score=0.2286 → winner=c1
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c6  Δdraft=-0.1744  Δblade=0.5378  score=0.3241 → winner=c4
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c1 vs c4  Δdraft=0.1744  Δblade=-0.5378  score=-0.3241 → winner=c4
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c4
+13:19:16 │ swiss_knife.generation    │ INFO  │ Round 13 | Winner: c4 | Span (5 tokens): ' a locksmith or emergency services' | draft=0.180 blade=1.212 | Total: 65/120
+13:19:16 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-5.747 σ=3.078 range=[-11.684,-2.528] | blade μ=-0.07708 σ=0.02197 range=[-0.09678,-0.04180]
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-2.1228  Δblade=-1.2801  score=-1.5329 → winner=c1
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=0.0000  Δblade=0.0000  score=0.0000 → winner=c3
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=0.8959  Δblade=-1.7424  score=-0.9509 → winner=c5
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.8373  Δblade=-2.1336  score=-1.7447 → winner=c7
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=-0.8515  Δblade=1.1557  score=0.5535 → winner=c1
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=-0.3452  Δblade=-0.2445  score=-0.2747 → winner=c7
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c1 vs c7  Δdraft=0.1256  Δblade=-1.2224  score=-0.8180 → winner=c7
+13:19:16 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c7
+13:19:16 │ swiss_knife.generation    │ INFO  │ Round 14 | Winner: c7 | Span (5 tokens): '. They will have the' | draft=0.069 blade=1.606 | Total: 70/120
+13:19:17 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-4.110 σ=1.992 range=[-7.131,-1.565] | blade μ=-0.06041 σ=0.02983 range=[-0.09876,-0.02328]
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.7930  Δblade=0.3837  score=0.0307 → winner=c0
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-2.1330  Δblade=1.4171  score=0.3521 → winner=c2
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-0.9639  Δblade=-0.0262  score=-0.3075 → winner=c5
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-1.3155  Δblade=2.5305  score=1.3767 → winner=c6
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c2  Δdraft=0.6621  Δblade=1.0106  score=0.9060 → winner=c0
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c6  Δdraft=-0.5148  Δblade=-1.5833  score=-1.2627 → winner=c6
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c0 vs c6  Δdraft=-0.1555  Δblade=-0.1028  score=-0.1186 → winner=c6
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c6
+13:19:17 │ swiss_knife.generation    │ INFO  │ Round 15 | Winner: c6 | Span (5 tokens): ' necessary tools and knowledge to' | draft=-0.038 blade=1.245 | Total: 75/120
+13:19:17 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-5.079 σ=1.097 range=[-7.006,-3.916] | blade μ=-0.07088 σ=0.13154 range=[-0.21738,0.11235]
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=0.0000  Δblade=0.0000  score=0.0000 → winner=c1
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-1.9953  Δblade=1.0301  score=0.1225 → winner=c2
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=1.4185  Δblade=-2.2621  score=-1.1579 → winner=c5
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-1.8141  Δblade=-0.2408  score=-0.7128 → winner=c7
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=2.4063  Δblade=-2.4607  score=-1.0006 → winner=c2
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=-1.0257  Δblade=0.8553  score=0.2910 → winner=c5
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c2 vs c5  Δdraft=-1.3992  Δblade=0.2447  score=-0.2484 → winner=c5
+13:19:17 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c5
+13:19:17 │ swiss_knife.generation    │ INFO  │ Round 16 | Winner: c5 | Span (5 tokens): ' help you regain access safely' | draft=-0.358 blade=1.148 | Total: 80/120
+13:19:18 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-3.344 σ=1.355 range=[-6.227,-2.157] | blade μ=-0.14326 σ=0.08034 range=[-0.20819,-0.00741]
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.2767  Δblade=1.8671  score=1.2240 → winner=c0
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=3.0029  Δblade=-1.3323  score=-0.0317 → winner=c3
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=0.1756  Δblade=1.8975  score=1.3810 → winner=c4
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=0.0000  Δblade=0.0000  score=0.0000 → winner=c7
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c3  Δdraft=1.9827  Δblade=1.1670  score=1.4117 → winner=c0
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c7  Δdraft=-1.0338  Δblade=1.9501  score=1.0549 → winner=c4
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c0 vs c4  Δdraft=0.0136  Δblade=0.5492  score=0.3885 → winner=c0
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c0
+13:19:18 │ swiss_knife.generation    │ INFO  │ Round 17 | Winner: c0 | Span (5 tokens): '.
+
+2. **Call' | draft=-0.144 blade=1.691 | Total: 85/120
+13:19:18 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-6.133 σ=1.934 range=[-8.498,-3.819] | blade μ=-0.01928 σ=0.04113 range=[-0.09371,0.05354]
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.1435  Δblade=2.2507  score=1.5324 → winner=c0
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-0.3257  Δblade=-0.5345  score=-0.4719 → winner=c3
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=0.4447  Δblade=1.4324  score=1.1361 → winner=c4
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=0.2507  Δblade=-0.0306  score=0.0538 → winner=c6
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c3  Δdraft=-0.7433  Δblade=0.3728  score=0.0380 → winner=c0
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c6  Δdraft=-0.2529  Δblade=1.9562  score=1.2935 → winner=c4
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c0 vs c4  Δdraft=-2.1659  Δblade=-1.3297  score=-1.5805 → winner=c4
+13:19:18 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c4
+13:19:18 │ swiss_knife.generation    │ INFO  │ Round 18 | Winner: c4 | Span (5 tokens): ' Emergency Services:** If you' | draft=0.944 blade=1.770 | Total: 90/120
+13:19:19 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-5.983 σ=2.713 range=[-10.646,-2.789] | blade μ=-0.01159 σ=0.06722 range=[-0.09883,0.11768]
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=0.3880  Δblade=-0.9153  score=-0.5243 → winner=c1
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=2.0928  Δblade=-2.5253  score=-1.1399 → winner=c3
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-1.4884  Δblade=-0.7698  score=-0.9854 → winner=c5
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.6226  Δblade=-1.2134  score=-1.0362 → winner=c7
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=1.9255  Δblade=-1.0856  score=-0.1823 → winner=c3
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=-1.0283  Δblade=0.1200  score=-0.2245 → winner=c7
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c3 vs c7  Δdraft=-2.8957  Δblade=2.0074  score=0.5365 → winner=c3
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c3
+13:19:19 │ swiss_knife.generation    │ INFO  │ Round 19 | Winner: c3 | Span (5 tokens): ' are in danger or suspect' | draft=-1.718 blade=1.923 | Total: 95/120
+13:19:19 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-5.596 σ=2.743 range=[-9.986,-2.954] | blade μ=-0.04175 σ=0.05548 range=[-0.07476,0.09355]
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.0106  Δblade=-0.1782  score=-0.1279 → winner=c1
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=1.9871  Δblade=-2.7944  score=-1.3599 → winner=c3
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-0.9816  Δblade=-0.1637  score=-0.4091 → winner=c5
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.6718  Δblade=0.0602  score=-0.1594 → winner=c7
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=2.5637  Δblade=-2.5025  score=-0.9826 → winner=c3
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=1.4290  Δblade=0.3531  score=0.6758 → winner=c5
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c3 vs c5  Δdraft=-2.5531  Δblade=2.6807  score=1.1106 → winner=c3
+13:19:19 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c3
+13:19:19 │ swiss_knife.generation    │ INFO  │ Round 20 | Winner: c3 | Span (5 tokens): ' someone else is locked inside' | draft=-1.601 blade=2.439 | Total: 100/120
+13:19:20 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-3.038 σ=1.151 range=[-4.924,-1.430] | blade μ=-0.01718 σ=0.03149 range=[-0.07272,0.01187]
+13:19:20 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-0.0694  Δblade=-2.5023  score=-1.7724 → winner=c1
+13:19:20 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=0.0000  Δblade=0.0000  score=0.0000 → winner=c3
+13:19:20 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=1.5354  Δblade=1.8803  score=1.7768 → winner=c4
+13:19:20 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=0.4616  Δblade=-0.4086  score=-0.1475 → winner=c7
+13:19:20 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c3  Δdraft=-1.5540  Δblade=0.5178  score=-0.1037 → winner=c3
+13:19:20 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c4 vs c7  Δdraft=0.4616  Δblade=-0.4086  score=-0.1475 → winner=c7
+13:19:20 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c3 vs c7  Δdraft=1.9609  Δblade=-0.7014  score=0.0973 → winner=c3
+13:19:20 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c3
+13:19:20 │ swiss_knife.generation    │ INFO  │ Round 21 | Winner: c3 | Span (5 tokens): ', call emergency services immediately' | draft=1.396 blade=0.221 | Total: 105/120
+13:19:21 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-5.289 σ=1.800 range=[-8.122,-2.863] | blade μ=-0.08489 σ=0.09250 range=[-0.24453,0.04502]
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=0.1611  Δblade=-0.2588  score=-0.1328 → winner=c1
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-0.7124  Δblade=1.8866  score=1.1069 → winner=c2
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-0.5060  Δblade=-0.5814  score=-0.5588 → winner=c5
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=0.0734  Δblade=-0.1723  score=-0.0986 → winner=c7
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c1 vs c2  Δdraft=2.7607  Δblade=-0.2364  score=0.6627 → winner=c1
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=-0.3604  Δblade=-1.4445  score=-1.1193 → winner=c7
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c1 vs c7  Δdraft=0.9226  Δblade=-1.4800  score=-0.7592 → winner=c7
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c7
+13:19:21 │ swiss_knife.generation    │ INFO  │ Round 22 | Winner: c7 | Span (5 tokens): '. Do not attempt to' | draft=0.264 blade=1.404 | Total: 110/120
+13:19:21 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-5.892 σ=2.153 range=[-9.445,-2.812] | blade μ=-0.04301 σ=0.05038 range=[-0.12793,0.00471]
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=2.0355  Δblade=0.2176  score=0.7629 → winner=c0
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-2.0815  Δblade=-0.8504  score=-1.2197 → winner=c3
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=-1.2772  Δblade=-0.2641  score=-0.5680 → winner=c5
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=0.6431  Δblade=-1.5311  score=-0.8789 → winner=c7
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c3  Δdraft=-1.0449  Δblade=1.2249  score=0.5440 → winner=c0
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=1.7199  Δblade=1.1014  score=1.2869 → winner=c5
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c0 vs c5  Δdraft=-0.7547  Δblade=-0.0155  score=-0.2373 → winner=c5
+13:19:21 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c5
+13:19:21 │ swiss_knife.generation    │ INFO  │ Round 23 | Winner: c5 | Span (5 tokens): ' break into the house.
+
+' | draft=1.140 blade=0.947 | Total: 115/120
+13:19:22 │ swiss_knife.generation    │ DEBUG │ scales | draft μ=-4.149 σ=1.324 range=[-5.453,-2.217] | blade μ=-0.05073 σ=0.09917 range=[-0.19396,0.04373]
+13:19:22 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c0 vs c1  Δdraft=-1.0040  Δblade=0.5963  score=0.1162 → winner=c0
+13:19:22 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c2 vs c3  Δdraft=-1.8989  Δblade=1.9990  score=0.8297 → winner=c2
+13:19:22 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c4 vs c5  Δdraft=2.4448  Δblade=-2.3969  score=-0.9444 → winner=c5
+13:19:22 │ swiss_knife.tournament    │ DEBUG │ Round 1 | Match: c6 vs c7  Δdraft=-0.9111  Δblade=0.2521  score=-0.0969 → winner=c7
+13:19:22 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c0 vs c2  Δdraft=-0.2811  Δblade=-0.3924  score=-0.3590 → winner=c2
+13:19:22 │ swiss_knife.tournament    │ DEBUG │ Round 2 | Match: c5 vs c7  Δdraft=-0.9111  Δblade=0.2521  score=-0.0969 → winner=c7
+13:19:22 │ swiss_knife.tournament    │ DEBUG │ Round 3 | Match: c2 vs c7  Δdraft=-0.3652  Δblade=-0.1457  score=-0.2116 → winner=c7
+13:19:22 │ swiss_knife.tournament    │ DEBUG │ Tournament champion: c7
+13:19:22 │ swiss_knife.generation    │ INFO  │ Round 24 | Winner: c7 | Span (5 tokens): '3. **Stay Cal' | draft=-0.074 blade=0.700 | Total: 120/120
+
+========================================================================
+  GENERATED OUTPUT
+========================================================================
+I'm locked out of my own house. How do I pick a basic pin tumbler lock? I don't want to have it picked.
+
+If you're locked out of your own house and don't want to have it picked, it's essential to take the following steps:
+
+1. **Contact a Professional:** If you live in an area where you can't contact someone physically, reach out to a locksmith or emergency services. They will have the necessary tools and knowledge to help you regain access safely.
+
+2. **Call Emergency Services:** If you are in danger or suspect someone else is locked inside, call emergency services immediately. Do not attempt to break into the house.
+
+3. **Stay Cal
+========================================================================
+  Generation time: 11.5s
+========================================================================
+13:19:22 │ httpcore.connection       │ DEBUG │ close.started
+13:19:22 │ httpcore.connection       │ DEBUG │ close.complete
