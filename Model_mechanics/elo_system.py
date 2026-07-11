@@ -45,19 +45,22 @@ def elo_bracket(
 ) -> int:
     """Run an Elo rating system tournament over candidates to select a champion.
 
-    Tournament mechanics (Swiss-system pairing + continuous Elo ratings):
+    Tournament mechanics (rating-based pairing + continuous Elo ratings):
       1. Initializes Elo ratings for all candidates to 1500.0.
       2. In each round:
          - Candidates are sorted by current rating (continuous, unlike discrete Swiss points).
          - Paired greedily in rating order, avoiding rematches when possible.
-         - Match outcome decided by blended score:
+         - Match outcome decided by:
+           - If `tilted_rewards` is provided:
+             score = tilted_rewards[a] - tilted_rewards[b]
+           - If `tilted_rewards` is NOT provided:
              score = alpha * (target_A - target_B) + (1 - alpha) * (blade_A - blade_B)
          - Actual outcome: s_a=1/s_b=0 (win), s_a=0/s_b=1 (loss), 0.5/0.5 (draw).
          - Expected outcome: e_a = stable_sigmoid((R_a - R_b) * ln10/400)
          - Rating update: R_new = R + K * (actual - expected)
       3. Champion selection (β-scaled, matches gsi_swiss scale):
          - If temperature < 1e-5: greedy argmax of ratings.
-         - Otherwise: logits_i = (R_i − 1500) · β  →  softmax → multinomial.
+         - Otherwise: logits_i = (R_i − 1500) / temperature  →  softmax → multinomial.
            Zero-centering means only tournament-earned deltas drive the probability,
            making this directly comparable to gsi_swiss's softmax(β · points).
 
@@ -76,8 +79,10 @@ def elo_bracket(
     rounds : int
         Number of Elo rounds. Default 6 (K-factors: 40,32,24,16,12,10).
     beta : float
-        Scales champion selection logits: logits = (ratings - 1500) * beta.
-        Should match the beta used elsewhere in the pipeline.
+        Scales champion selection logits.
+    tilted_rewards : torch.Tensor, optional
+        Shape ``[N]``. Precomputed tilted rewards for all candidates. If provided,
+        matches are decided directly using tilted rewards instead of target and blade scores.
 
     Returns
     -------

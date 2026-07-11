@@ -8,12 +8,20 @@ For each decoding loop iteration (until maximum new tokens or EOS is reached):
 1. Draft Candidate Generation:
    Sample n candidate reasoning steps from the drafter model (Qwen 2.5 3B).
 2. Tournament Selection:
-   Rank and select a champion candidate from the n draft steps using a simulated Elo bracket tournament.
+   Rank and select a champion candidate from the n draft steps using a simulated Elo tournament.
    By default, this runs for 6 rounds using a decaying schedule of K-factors:
      Round 1: K = 40, Round 2: K = 32, Round 3: K = 24, Round 4: K = 16, Round 5: K = 12, Round 6: K = 10.
-   Matchups are determined stochastically based on Bradley-Terry pairwise winning probabilities:
-     P(A wins over B) = sigmoid((Score_A - Score_B) / T)
-   where Score_i = draft_logprobs_i + alpha * r_blade_i, and T is the tournament temperature.
+   Match pairing is rating-based (candidates with similar ratings play each other, avoiding rematches).
+   Match winner determination:
+     - If `use_tilted_elo` is True: Winner of A vs B is decided directly by comparing their tilted rewards:
+       MATCH(A,B) = tilted_reward(A) - tilted_reward(B)
+       where tilted_reward = r_blade + (1/β)*(log π_verifier - log π_draft).
+     - If `use_tilted_elo` is False: Winner is decided using the blended match score:
+       MATCH(A,B) = α·Δlog_draft + (1-α)·Δblade.
+   Ratings are updated after each match using the standard Elo update rule based on actual win/loss
+   outcomes versus Bradley-Terry expected outcomes.
+   The final champion is selected stochastically by applying softmax over zero-centered Elo ratings scaled
+   by the tournament temperature.
 3. Verification (Tilted Reward):
    For the tournament champion step, evaluate its verifier log probability log(pi_verifier) and
    compute its tilted reward:
