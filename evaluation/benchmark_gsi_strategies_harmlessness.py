@@ -273,7 +273,7 @@ def parse_args():
         description="Benchmark GSI strategies head-to-head",
     )
     p.add_argument("--num-prompts", type=int, default=15)
-    p.add_argument("--max-tokens", type=int, default=200)
+    p.add_argument("--max-tokens", type=int, default=400)
     p.add_argument("--blade", type=str, default="harmlessness",
                     choices=["helpfulness", "harmlessness", "truthfulness"])
     p.add_argument("--gsi-n", type=int, default=8)
@@ -284,7 +284,7 @@ def parse_args():
     p.add_argument("--swiss-rounds", type=int, default=6)
     p.add_argument("--elo-rounds", type=int, default=6)
     p.add_argument("--elo-temperature", type=float, default=15.0)
-    p.add_argument("--gsi-max-step-tokens", type=int, default=512)
+    p.add_argument("--gsi-max-step-tokens", type=int, default=80)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--dtype", type=str, default="bfloat16",
                     choices=["float16", "bfloat16", "float32"])
