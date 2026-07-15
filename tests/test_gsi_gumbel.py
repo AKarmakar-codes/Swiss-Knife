@@ -15,8 +15,7 @@ from Model_mechanics.gsi_gumbel import GSIGumbelStats, GSIGumbelGenerator
 
 VOCAB_SIZE = 1000
 PROMPT_LEN = 10
-GAMMA = 4
-K = 4
+GSI_N = 4
 BETA = 0.1
 
 
@@ -30,6 +29,7 @@ def _make_mock_model(vocab_size: int = VOCAB_SIZE):
         return out
     mock.side_effect = _forward
     mock.__call__ = mock
+    mock.parameters = lambda: iter([torch.zeros(1)])
     return mock
 
 
@@ -49,24 +49,18 @@ def _make_mock_tokenizer(vocab_size: int = VOCAB_SIZE, eos_id: int = 2):
 
 def _make_generator():
     cfg = SwissKnifeConfig(
-        K=K,
-        gamma=GAMMA,
+        gsi_n=GSI_N,
         alpha=0.5,
         beta=BETA,
         generation_mode="gsi_gumbel",
         gsi_threshold=0.0,
         gsi_tau=1.0,
-        normalize_scores=True,
         max_new_tokens=12,
     )
     tok = _make_mock_tokenizer()
     drafter = _make_mock_model()
     verifier = _make_mock_model()
     blade_m = _make_mock_model()
-
-    # Make parameters() work on the mock model for device detection
-    drafter.parameters = lambda: iter([torch.zeros(1)])
-    verifier.parameters = lambda: iter([torch.zeros(1)])
 
     gen = GSIGumbelGenerator.__new__(GSIGumbelGenerator)
     gen.cfg = cfg
@@ -84,127 +78,123 @@ def _make_generator():
 def test_gsi_gumbel_stats():
     """Verify GSIGumbelStats fields and properties."""
     stats = GSIGumbelStats()
-    assert stats.total_rounds == 0
+    assert stats.total_steps == 0
     assert stats.acceptance_rate == 0.0
 
-    stats.total_rounds = 10
-    stats.full_accept_rounds = 6
-    stats.total_tokens_accepted = 35
+    stats.total_steps = 10
+    stats.accepted_steps = 6
+    stats.total_tokens = 50
     stats.total_time_s = 2.0
-    stats.fallback_rounds = 3
+    stats.rejected_steps = 4
 
     assert abs(stats.acceptance_rate - 0.6) < 1e-6
-    assert abs(stats.tokens_per_second - 17.5) < 1e-6
+    assert abs(stats.tokens_per_second - 25.0) < 1e-6
+    assert abs(stats.avg_step_tokens - 5.0) < 1e-6
 
     d = stats.to_dict()
     assert d["strategy"] == "gsi_gumbel"
-    assert d["total_rounds"] == 10
-    assert d["fallback_rounds"] == 3
+    assert d["total_steps"] == 10
+    assert d["accepted_steps"] == 6
     assert d["acceptance_rate"] == 0.6
-    assert d["tokens_per_second"] == 17.5
+    assert d["tokens_per_second"] == 25.0
     print("  ✓ GSIGumbelStats initialized and computed metrics correctly")
 
 
-def test_gumbel_topk_verifier_shape_and_range():
-    """_gumbel_topk_verifier must select correct winner indexes of shape [gamma]."""
+def test_gumbel_select():
+    """Verify _gumbel_select selects a valid index."""
     gen, _, _, _, _, _ = _make_generator()
+    rewards = torch.tensor([1.0, 2.0, 5.0, 0.5])
+    idx = gen._gumbel_select(rewards, beta=0.1, tau=1.0)
+    assert 0 <= idx < 4
+    print("  ✓ _gumbel_select selects a valid index")
 
-    target_logprobs = torch.randn(GAMMA, K)
-    blade_scores = torch.randn(GAMMA, K)
 
-    winners = gen._gumbel_topk_verifier(
-        target_logprobs=target_logprobs,
-        blade_scores=blade_scores,
-        alpha=0.5,
-        tau=1.0
+def test_sample_reasoning_steps():
+    """Verify _sample_reasoning_steps runs correctly with mocks."""
+    gen, _, tok, drafter, _, _ = _make_generator()
+    # Mock model.generate to return some token sequence
+    drafter.generate = MagicMock(return_value=torch.ones((GSI_N, 15), dtype=torch.long) * 5)
+    tok.decode = MagicMock(return_value="step 1 text\n\n")
+    
+    # Custom encode mock that returns a squeezeable tensor
+    mock_squeeze_tensor = MagicMock()
+    mock_squeeze_tensor.squeeze = MagicMock(return_value=torch.tensor([5, 6, 7]))
+    tok.encode = MagicMock(return_value=mock_squeeze_tensor)
+    
+    prefix_ids = torch.tensor([[1, 2, 3]])
+    
+    step_ids_list, step_texts = gen._sample_reasoning_steps(
+        drafter, tok, prefix_ids, n=GSI_N, device=torch.device("cpu")
     )
-
-    assert winners.shape == (GAMMA,), f"Expected shape ({GAMMA},), got {winners.shape}"
-    for val in winners:
-        assert 0 <= val.item() < K, f"Winner index out of range: {val.item()}"
-    print("  ✓ _gumbel_topk_verifier output shape and bounds are correct")
+    assert len(step_ids_list) == GSI_N
+    assert len(step_texts) == GSI_N
+    print("  ✓ _sample_reasoning_steps returned steps correctly")
 
 
-def test_gsi_gumbel_generator_draft_propose():
-    """_draft_propose must return candidate and logit matrices of shape [gamma, K]."""
-    gen, _, _, _, _, _ = _make_generator()
-    context_ids = torch.randint(3, VOCAB_SIZE, (1, PROMPT_LEN))
-
-    candidate_matrix, draft_topk_logits = gen._draft_propose(context_ids)
-
-    assert candidate_matrix.shape == (GAMMA, K)
-    assert draft_topk_logits.shape == (GAMMA, K)
-    print("  ✓ _draft_propose shapes are correct")
-
-
-def test_drafter_logprob_parallel():
-    """_drafter_logprob_parallel must return log-probabilities of shape [gamma, K]."""
-    gen, _, _, _, _, _ = _make_generator()
-    context_ids = torch.randint(3, VOCAB_SIZE, (1, PROMPT_LEN))
-    candidate_matrix = torch.randint(3, VOCAB_SIZE, (GAMMA, K))
-
-    log_probs = gen._drafter_logprob_parallel(context_ids, candidate_matrix)
-    assert log_probs.shape == (GAMMA, K)
-    print("  ✓ _drafter_logprob_parallel shapes are correct")
-
-
-def test_full_generate_loop_cheap_accepts():
-    """Verify that generate() works with mock models under cheap accept path (all pass threshold)."""
-    gen, _, _, _, _, _ = _make_generator()
-
+@patch("Model_mechanics.gsi_gumbel.compute_logprob")
+def test_full_generate_loop_cheap_accepts(mock_compute_lp):
+    """Verify generate() runs successfully with cheap accepts path."""
+    mock_compute_lp.return_value = -1.0
+    gen, cfg, tok, drafter, verifier, blade_m = _make_generator()
+    
     # Mock DPOBlade functions
     mock_blade = MagicMock()
-    # Ensure they return high reward/prob to pass threshold
-    mock_blade.score_parallel = lambda ctx, cand: torch.ones(GAMMA, K) * 5.0
-    mock_blade.target_logprob_parallel = lambda ctx, cand, model: torch.ones(GAMMA, K) * -0.1
+    mock_blade.score_reasoning_steps = lambda ctx, steps: torch.tensor([5.0])
     gen.blade = mock_blade
 
-    # Mock _drafter_logprob_parallel to return high logprob
-    gen._drafter_logprob_parallel = lambda ctx, cand: torch.ones(GAMMA, K) * -0.2
+    # Mock _sample_reasoning_steps
+    gen._sample_reasoning_steps = lambda model, tokenizer, prefix_ids, n, device: (
+        [torch.tensor([5, 6, 7])] * n,
+        ["step text\n\n"] * n
+    )
 
     # Set threshold very low so everything accepts easily
     gen.cfg.gsi_threshold = -100.0
 
-    output, stats = gen.generate("Test prompt.", max_new_tokens=8, return_stats=True)
+    output, stats = gen.generate("Test prompt.", max_new_tokens=10, return_stats=True)
     assert isinstance(output, str)
     assert isinstance(stats, GSIGumbelStats)
-    assert stats.total_rounds >= 1
-    assert stats.fallback_rounds == 0
+    assert stats.total_steps >= 1
+    assert stats.rejected_steps == 0
     print("  ✓ generate() runs successfully with cheap accepts path")
 
 
-def test_full_generate_loop_fallback():
-    """Verify that generate() falls back to target model when threshold is high."""
-    gen, _, _, _, _, _ = _make_generator()
-
+@patch("Model_mechanics.gsi_gumbel.compute_logprob")
+def test_full_generate_loop_fallback(mock_compute_lp):
+    """Verify generate() triggers fallback path when threshold is unmet."""
+    mock_compute_lp.return_value = -1.0
+    gen, cfg, tok, drafter, verifier, blade_m = _make_generator()
+    
+    # Mock DPOBlade functions
     mock_blade = MagicMock()
-    # Low blade scores to fail threshold check
-    mock_blade.score_parallel = lambda ctx, cand: torch.ones(cand.shape[0], cand.shape[1]) * -10.0
-    mock_blade.target_logprob_parallel = lambda ctx, cand, model: torch.ones(GAMMA, K) * -5.0
+    mock_blade.score_reasoning_steps = lambda ctx, steps: torch.tensor([-5.0])
     gen.blade = mock_blade
 
-    gen._drafter_logprob_parallel = lambda ctx, cand: torch.ones(GAMMA, K) * -0.1
+    # Mock _sample_reasoning_steps
+    gen._sample_reasoning_steps = lambda model, tokenizer, prefix_ids, n, device: (
+        [torch.tensor([5, 6, 7])] * n,
+        ["step text\n\n"] * n
+    )
 
     # High threshold to guarantee fallback triggers
     gen.cfg.gsi_threshold = 100.0
 
-    output, stats = gen.generate("Test prompt.", max_new_tokens=8, return_stats=True)
+    output, stats = gen.generate("Test prompt.", max_new_tokens=10, return_stats=True)
     assert isinstance(output, str)
     assert isinstance(stats, GSIGumbelStats)
-    assert stats.total_rounds >= 1
-    assert stats.fallback_rounds > 0
+    assert stats.total_steps >= 1
+    assert stats.rejected_steps > 0
     print("  ✓ generate() triggers fallback path correctly when threshold is unmet")
 
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  Swiss Knife — GSI Gumbel Generator Tests")
+    print("  Swiss Knife — GSI Gumbel Step-Level Generator Tests")
     print("=" * 60)
     print()
     test_gsi_gumbel_stats()
-    test_gumbel_topk_verifier_shape_and_range()
-    test_gsi_gumbel_generator_draft_propose()
-    test_drafter_logprob_parallel()
+    test_gumbel_select()
+    test_sample_reasoning_steps()
     test_full_generate_loop_cheap_accepts()
     test_full_generate_loop_fallback()
     print("=" * 60)

@@ -47,8 +47,10 @@ from Model_mechanics.config import SwissKnifeConfig
 from Model_mechanics.models import load_tokenizer, load_base_model, load_blade_model, load_drafter_model, load_drafter_tokenizer
 from Model_mechanics.blades import DPOBlade
 from Model_mechanics.gsi_softmax import GSISoftmaxGenerator
-from Model_mechanics.gsi_swiss import GSISwissGenerator
-from Model_mechanics.gsi_elo import GSIEloGenerator
+from Model_mechanics.swiss import SwissGenerator
+from Model_mechanics.elo_swiss import EloSwissGenerator
+from Model_mechanics.swiss_mode_b import SwissModeBGenerator
+from Model_mechanics.elo_swiss_mode_b import EloSwissModeBGenerator
 
 logging.basicConfig(
     level=logging.INFO,
@@ -245,9 +247,25 @@ def parse_args():
                     help="Use the tilted reward instead of the blended match score inside GSI-Elo.")
     p.add_argument(
         "--strategies", type=str, nargs="+",
-        default=["gsi_softmax", "gsi_swiss", "gsi_elo", "baseline_adapter"],
-        choices=["gsi_softmax", "gsi_swiss", "gsi_elo", "baseline_adapter"],
+        default=["gsi_softmax", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b", "baseline_adapter"],
+        choices=["gsi_softmax", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b", "baseline_adapter"],
         help="Which strategies to benchmark.",
+    )
+    # Phase 1 & 2 arguments
+    p.add_argument("--no-fallback", action="store_true", help="Disable verifier fallback, running in Mode B.")
+    p.add_argument("--sigma-mode", type=str, default="none", choices=["none", "mc_dropout", "log_ratio_proxy"])
+    p.add_argument("--sigma-mc-samples", type=int, default=10)
+    p.add_argument("--sigma-dropout-p", type=float, default=0.1)
+    p.add_argument("--w-tournament", type=float, default=1.0)
+    p.add_argument("--w-blade", type=float, default=1.0)
+    p.add_argument("--uwo-lambda", type=float, default=0.5)
+    p.add_argument("--adaptive-threshold", action="store_true")
+    p.add_argument("--threshold-percentile", type=float, default=10.0)
+    p.add_argument("--threshold-buffer-size", type=int, default=100)
+    p.add_argument("--hard-draw", action="store_true")
+    p.add_argument(
+        "--probabilistic", action="store_true",
+        help="Force Thurstonian CDF for all Elo matches (enables stochastic upsets).",
     )
     return p.parse_args()
 
@@ -301,6 +319,18 @@ def main():
         elo_temperature=args.elo_temperature,
         seed=args.seed,
         use_tilted_elo=args.use_tilted_elo,
+        with_fallback=not args.no_fallback,
+        sigma_mode=args.sigma_mode,
+        sigma_mc_samples=args.sigma_mc_samples,
+        sigma_dropout_p=args.sigma_dropout_p,
+        w_tournament=args.w_tournament,
+        w_blade=args.w_blade,
+        uwo_lambda=args.uwo_lambda,
+        adaptive_threshold=args.adaptive_threshold,
+        threshold_percentile=args.threshold_percentile,
+        threshold_buffer_size=args.threshold_buffer_size,
+        hard_draw=args.hard_draw,
+        probabilistic=args.probabilistic,
     )
 
     logger.info("Loading shared verifier base model (Qwen 2.5 7B) + blade...")
@@ -322,8 +352,10 @@ def main():
     # ── Run each strategy ─────────────────────────────────────────────
     strategy_generators = {
         "gsi_softmax": lambda cfg: GSISoftmaxGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
-        "gsi_swiss": lambda cfg: GSISwissGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
-        "gsi_elo": lambda cfg: GSIEloGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
+        "swiss": lambda cfg: SwissGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
+        "elo_swiss": lambda cfg: EloSwissGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
+        "swiss_mode_b": lambda cfg: SwissModeBGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
+        "elo_swiss_mode_b": lambda cfg: EloSwissModeBGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
         "baseline_adapter": lambda cfg: BaselineGreedyGenerator(tokenizer, blade_model, "baseline_adapter"),
     }
 
@@ -365,6 +397,18 @@ def main():
             elo_temperature=args.elo_temperature,
             seed=args.seed,
             use_tilted_elo=args.use_tilted_elo,
+            with_fallback=not args.no_fallback,
+            sigma_mode=args.sigma_mode,
+            sigma_mc_samples=args.sigma_mc_samples,
+            sigma_dropout_p=args.sigma_dropout_p,
+            w_tournament=args.w_tournament,
+            w_blade=args.w_blade,
+            uwo_lambda=args.uwo_lambda,
+            adaptive_threshold=args.adaptive_threshold,
+            threshold_percentile=args.threshold_percentile,
+            threshold_buffer_size=args.threshold_buffer_size,
+            hard_draw=args.hard_draw,
+            probabilistic=args.probabilistic,
         )
 
         generator = strategy_generators[strat_name](cfg)

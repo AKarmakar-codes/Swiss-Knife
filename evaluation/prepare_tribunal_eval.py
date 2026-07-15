@@ -92,6 +92,8 @@ _PRETTY_LABELS = {
     "gsi_pairwise":                 "GSI Pairwise",
     "gsi_swiss":                    "Swiss",
     "gsi_elo":                      "Swiss+Elo",
+    "swiss":                        "Swiss",
+    "elo_swiss":                    "Swiss+Elo",
     "gsi_gumbel":                   "GSI Gumbel",
 }
 

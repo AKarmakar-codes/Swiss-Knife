@@ -51,7 +51,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--generation-mode", type=str, default="option_a",
-        choices=["option_a", "option_b", "gsi_softmax", "gsi_pairwise", "gsi_swiss", "gsi_elo", "gsi_gumbel", "rrm_pool"],
+        choices=["option_a", "option_b", "gsi_softmax", "gsi_pairwise", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b", "gsi_gumbel", "rrm_pool"],
         help="Generation strategy (default: option_a).",
     )
     p.add_argument(
@@ -118,7 +118,7 @@ def parse_args() -> argparse.Namespace:
     )
 
     # ── GSI-specific arguments ──────────────────────────────────────────
-    gsi = p.add_argument_group("GSI Options (for gsi_softmax, gsi_pairwise, gsi_swiss)")
+    gsi = p.add_argument_group("GSI Options (for gsi_softmax, gsi_pairwise, swiss)")
     gsi.add_argument(
         "--gsi-n", type=int, default=8,
         help="Number of candidate reasoning steps per iteration (default: 8).",
@@ -142,6 +142,61 @@ def parse_args() -> argparse.Namespace:
     gsi.add_argument(
         "--stats-out", type=str, default="",
         help="Optional path to write JSON stats after generation.",
+    )
+
+    # ── Phase 1 & 2 Thurstonian / Uncertainty arguments ─────────────────
+    unc = p.add_argument_group("Phase 1 & 2 Thurstonian/Uncertainty Options")
+    unc.add_argument(
+        "--sigma-mode", type=str, default="none",
+        choices=["none", "mc_dropout", "log_ratio_proxy"],
+        help="Uncertainty mode (default: none)."
+    )
+    unc.add_argument(
+        "--sigma-mc-samples", type=int, default=5,
+        help="Number of MC dropout samples (default: 5)."
+    )
+    unc.add_argument(
+        "--sigma-dropout-p", type=float, default=None,
+        help="Test-time dropout override probability (default: None)."
+    )
+    unc.add_argument(
+        "--w-tournament", type=float, default=1.0,
+        help="Weight of tournament score in final choice logits (default: 1.0)."
+    )
+    unc.add_argument(
+        "--w-blade", type=float, default=1.0,
+        help="Weight of blade UWO score in final choice logits (default: 1.0)."
+    )
+    unc.add_argument(
+        "--uwo-lambda", type=float, default=0.5,
+        help="Uncertainty penalty lambda (default: 0.5)."
+    )
+    unc.add_argument(
+        "--adaptive-threshold", action="store_true",
+        help="Enable running percentile threshold calibration."
+    )
+    unc.add_argument(
+        "--threshold-percentile", type=float, default=10.0,
+        help="Percentile for threshold calibration (default: 10.0)."
+    )
+    unc.add_argument(
+        "--threshold-buffer-size", type=int, default=20,
+        help="Rolling buffer size for threshold calibration (default: 20)."
+    )
+    unc.add_argument(
+        "--no-fallback", dest="with_fallback", action="store_false",
+        default=True,
+        help="Disable verifier fallback, running in Mode B (accepting unconditionally)."
+    )
+    unc.add_argument(
+        "--hard-draw", action="store_true",
+        help="Use hard Bernoulli draws for matchups instead of soft probabilities."
+    )
+    unc.add_argument(
+        "--probabilistic", action="store_true",
+        help="Force Thurstonian CDF P(A beats B)=Φ(z) for every Elo match so the "
+             "weaker-scored candidate can still win.  Without this flag the default "
+             "Bradley-Terry sigmoid is used, which behaves like a soft sort."
     )
 
     p.add_argument(
@@ -183,6 +238,18 @@ def main():
         swiss_rounds=args.swiss_rounds,
         elo_temperature=args.elo_temperature,
         elo_rounds=args.elo_rounds,
+        sigma_mode=args.sigma_mode,
+        sigma_mc_samples=args.sigma_mc_samples,
+        sigma_dropout_p=args.sigma_dropout_p,
+        w_tournament=args.w_tournament,
+        w_blade=args.w_blade,
+        uwo_lambda=args.uwo_lambda,
+        adaptive_threshold=args.adaptive_threshold,
+        threshold_percentile=args.threshold_percentile,
+        threshold_buffer_size=args.threshold_buffer_size,
+        with_fallback=args.with_fallback,
+        hard_draw=args.hard_draw,
+        probabilistic=args.probabilistic,
     )
 
     # ── Reproducibility ────────────────────────────────────────────────
@@ -196,8 +263,8 @@ def main():
         "option_b": "Option B: Speculative-Decoding-Integrated Tournament",
         "gsi_softmax": "GSI Strategy 1: Softmax Selection",
         "gsi_pairwise": "GSI Strategy 2: Pairwise Bradley-Terry",
-        "gsi_swiss": "GSI Strategy 3: Swiss-System → Points → Softmax",
-        "gsi_elo": "GSI Strategy 4: Elo Tournament Selection",
+        "swiss": "GSI Strategy 3: Swiss-System → Points → Softmax",
+        "elo_swiss": "GSI Strategy 4: Elo Tournament Selection",
         "gsi_gumbel": "GSI Strategy 5: Speculative Gumbel-Top-k with Fallback",
     }
     print("=" * 72)
@@ -208,17 +275,20 @@ def main():
     print(f"  Blade      : {args.blade}")
     print(f"  α (mix)    : {cfg.alpha}")
     print(f"  β (DPO)    : {cfg.beta}")
-    if cfg.generation_mode.startswith("gsi_"):
+    if cfg.generation_mode.startswith("gsi_") or cfg.generation_mode in ("swiss", "elo_swiss"):
         print(f"  n (cands)  : {cfg.gsi_n}")
         print(f"  threshold  : {cfg.gsi_threshold}")
         print(f"  max step   : {cfg.gsi_max_step_tokens} tokens")
         if cfg.generation_mode == "gsi_pairwise":
             print(f"  τ (B-T)    : {cfg.gsi_tau}")
-        if cfg.generation_mode == "gsi_swiss":
+        if cfg.generation_mode == "swiss":
             print(f"  swiss rnds : {cfg.swiss_rounds or 'auto'}")
-        if cfg.generation_mode == "gsi_elo":
+        if cfg.generation_mode == "elo_swiss" or cfg.generation_mode == "elo_swiss_mode_b":
             print(f"  elo temp   : {cfg.elo_temperature}")
             print(f"  elo rounds : {cfg.elo_rounds}")
+            print(f"  probabilistic: {getattr(cfg, 'probabilistic', False)}")
+            print(f"  sigma mode : {cfg.sigma_mode}")
+            print(f"  uwo λ      : {cfg.uwo_lambda} (selection penalty, not rejection gate)")
     else:
         print(f"  K (cands)  : {cfg.K}")
         print(f"  L (span)   : {cfg.L}")
@@ -237,7 +307,7 @@ def main():
     # ── Load models ────────────────────────────────────────────────────
     print("⏳ Loading models...")
     t0 = time.time()
-    if cfg.generation_mode in ["gsi_softmax", "gsi_pairwise", "gsi_swiss", "gsi_elo", "gsi_gumbel", "rrm_pool"]:
+    if cfg.generation_mode in ["gsi_softmax", "gsi_pairwise", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b", "gsi_gumbel", "rrm_pool"]:
         from .models import (
             load_drafter_model,
             load_drafter_tokenizer,
@@ -326,9 +396,9 @@ def main():
         t_gen = time.time() - t0
         stats_dict = stats.to_dict()
 
-    elif cfg.generation_mode == "gsi_swiss":
-        from .gsi_swiss import GSISwissGenerator
-        generator = GSISwissGenerator(
+    elif cfg.generation_mode == "swiss":
+        from .swiss import SwissGenerator
+        generator = SwissGenerator(
             cfg=cfg,
             drafter_model=drafter_model,
             drafter_tokenizer=drafter_tokenizer,
@@ -344,9 +414,27 @@ def main():
         t_gen = time.time() - t0
         stats_dict = stats.to_dict()
 
-    elif cfg.generation_mode == "gsi_elo":
-        from .gsi_elo import GSIEloGenerator
-        generator = GSIEloGenerator(
+    elif cfg.generation_mode == "swiss_mode_b":
+        from .swiss_mode_b import SwissModeBGenerator
+        generator = SwissModeBGenerator(
+            cfg=cfg,
+            drafter_model=drafter_model,
+            drafter_tokenizer=drafter_tokenizer,
+            verifier_model=verifier_model,
+            verifier_tokenizer=verifier_tokenizer,
+            blade_model=blade_model,
+        )
+        print("⏳ Generating with GSI Strategy 3 Mode B (Swiss no fallback)...\n")
+        t0 = time.time()
+        output, stats = generator.generate(
+            prompt=args.prompt, verbose=args.verbose, return_stats=True,
+        )
+        t_gen = time.time() - t0
+        stats_dict = stats.to_dict()
+
+    elif cfg.generation_mode == "elo_swiss":
+        from .elo_swiss import EloSwissGenerator
+        generator = EloSwissGenerator(
             cfg=cfg,
             drafter_model=drafter_model,
             drafter_tokenizer=drafter_tokenizer,
@@ -355,6 +443,24 @@ def main():
             blade_model=blade_model,
         )
         print("⏳ Generating with GSI Strategy 4 (Elo Tournament Selection)...\n")
+        t0 = time.time()
+        output, stats = generator.generate(
+            prompt=args.prompt, verbose=args.verbose, return_stats=True,
+        )
+        t_gen = time.time() - t0
+        stats_dict = stats.to_dict()
+
+    elif cfg.generation_mode == "elo_swiss_mode_b":
+        from .elo_swiss_mode_b import EloSwissModeBGenerator
+        generator = EloSwissModeBGenerator(
+            cfg=cfg,
+            drafter_model=drafter_model,
+            drafter_tokenizer=drafter_tokenizer,
+            verifier_model=verifier_model,
+            verifier_tokenizer=verifier_tokenizer,
+            blade_model=blade_model,
+        )
+        print("⏳ Generating with GSI Strategy 4 Mode B (Elo no fallback)...\n")
         t0 = time.time()
         output, stats = generator.generate(
             prompt=args.prompt, verbose=args.verbose, return_stats=True,

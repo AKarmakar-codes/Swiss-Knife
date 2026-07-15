@@ -1,0 +1,1155 @@
+Uncertainty Estimation for Language Reward Models
+
+Adam Gleave1∗ Geoffrey Irving2
+
+arXiv:2203.07472v1 [cs.CL] 14 Mar 2022
+
+1
+
+UC Berkeley 2 DeepMind
+gleave@berkeley.edu
+
+Abstract
+Language models can learn a range of capabilities from unsupervised training on
+text corpora. However, to solve a particular problem (such as text summarization)
+it is typically necessary to fine-tune them on a task-specific dataset. It is often
+easier for humans to choose between options than to provide labeled data, and
+prior work has achieved state-of-the-art performance by training a reward model
+from such preference comparisons. However, collecting a large preference comparison dataset is still expensive—and the learned reward models are unreliable
+out-of-distribution. We seek to address these problems via uncertainty estimation,
+which can improve sample efficiency and robustness using active learning and
+risk-averse reinforcement learning (RL). Specifically, we use bootstrap aggregating
+(bagging) to train an ensemble of reward models differing in the initialization of
+their final layer. Ensembles have proved successful in prior applications of active
+learning [9, 3], but we find that in our setting ensemble active learning does not
+outperform random sampling. Further experiments show that while the aggregate
+predictions are well-calibrated, the ensemble’s estimated epistemic uncertainty is
+only weakly correlated with model error. We suspect this is because the ensemble
+members are fine-tuned from a single model and so are similar to one another.
+This suggests current pre-training methods will need to be modified to support
+uncertainty estimation, e.g. by training multiple language models.
+
+1
+
+Introduction
+
+The objective for many natural language tasks is subtle, and difficult or impossible to procedurally
+specify. For example, what makes a summary of an article “good”? It should be truthful, but must
+also omit some information to stay succinct. This requires a value judgement: what part of the article
+is most important to the reader? It is even more challenging to specify the objective for open-ended
+tasks such as conversational agents interacting with users.
+A common approach is to use supervised learning to mimic some reference text written by a
+human [36, 31, 22]. However, writing reference examples is slow and expensive. It is possible to
+reuse existing data sources, but they are often low quality or an imperfect match for the task.
+An alternative approach is to learn a reward model from human feedback that evaluates the quality
+of textual output. One can then use reinforcement learning (RL) to fine-tune a language model to
+generate output that scores highly under this reward model. This method has been applied to perform
+stylistic continuation [53] and summarize documents [43].
+There are usually multiple settings of the model parameters that make similar predictions on the
+(finite) training dataset, but may disagree on novel inputs. Prior work has ignored this and learned a
+single point-estimate for the parameters. But capturing this model uncertainty could improve sample
+efficiency via active learning, increase robustness of the RL training procedure, and aid in quality
+control. In this paper, we explore some initial approaches to estimate model uncertainty.
+∗
+
+Work conducted during an internship at DeepMind.
+
+Preprint. Under review.
+
+A key application of uncertainty estimation is active learning: choosing what textual output to elicit
+human preference comparisons or other feedback on. This is important as it is expensive to collect
+the large quantities of high-quality labeled data needed by current approaches. For example, Ziegler
+et al. [53] collected 60,000 comparisons between summaries of articles, but found the resulting model
+simply learned to copy the initial sentences. They attribute this to labellers under time pressure
+preferring copies as a fast heuristic for accuracy. Improved sample efficiency will enable us to collect
+smaller but higher quality datasets, decreasing the cost of data collection and improving reliability.
+Another commonly encountered problem is that RL fine-tuning learns to exploit the learned reward
+model. This results in a language model that generates gibberish (but high-reward) outputs [53, Table
+10]. Prior work has avoided this by adding a KL penalty relative to the pre-trained language model as
+an auxiliary reward. However, this regularization may limit task performance, especially for tasks
+that are very different from that seen during pre-training. Estimating reward model uncertainty allow
+us to instead perform risk-averse [45, 42] or risk-constrained [8] reinforcement learning.
+In this paper, we investigate whether an ensemble of fine-tuned language models can provide accurate
+estimates of uncertainty. Specifically, we randomly reinitialize the final layer of each ensemble
+member, and then fine-tune the entire network based on human preference comparisons. Although
+ensembles are not always the best performing method, they have worked reasonably well in a wide
+range of applications [9, 23, 3, 47, 30, 15]. Despite this prior track record, we find that ensembles
+perform poorly in our settings. In particular, we find no benefit from active learning using ensembles
+compared to randomly sampling data. Moreover, on a synthetic dataset the ensemble is only slightly
+more accurate on points with higher confidence (lower variance between ensemble members).
+We speculate this negative result is due to limited diversity between ensemble members when finetuning from a single pre-trained model. By contrast, most prior work on uncertainty estimation has
+focused on training a model from scratch, where this issue does not arise. But in our setting, it is
+both more computationally and sample efficient to fine-tune a pre-trained language model, leveraging
+the natural language representations it has already learned [32, 6, 33]. Unfortunately, pre-trained
+language models’ notion of uncertainty is for next-token prediction. Moreover, language models’
+uncertainty is unreliable out-of-domain [10, 21], and is poorly calibrated even in-domain for some
+tasks such as Q&A [20].
+Both active learning and fine-tuning a pre-trained model share the goal of improving sample efficiency.
+However, we conjecture there is a crucial tradeoff between them: we must stay close to the pre-trained
+model to benefit from fine-tuning, but this lack of diversity will hurt uncertainty estimation. This casts
+doubt on the dominant paradigm of developing a single large pre-trained model. We expect that, for
+the purpose of uncertainty estimation, it may be better to learn multiple distinct smaller pre-trained
+models, or otherwise introduce uncertainty into the pre-trained model (e.g. via dropout [12]).
+
+2
+
+Related Work
+
+Our work seeks to develop techniques for uncertainty estimation and active learning for fine-tuning
+pre-trained language models. Uncertainty estimation [13] and active learning [37] are both wellestablished fields, while fine-tuning language models is a new but popular area of research [5].
+However, to the best of our knowledge the only prior work for uncertainty in fine-tuned language
+models is limited to calibrating the total uncertainty of these models [10, 19, 21, 20].
+While calibrated total uncertainty is helpful, many applications (such as active learning) depend
+on separately estimating aleatoric (or data) uncertainty and epistemic (or model) uncertainty [18].
+Aleatoric uncertainty is due to irreducible randomness in the data generating process. By contrast,
+epistemic uncertainty is due to a lack of knowledge and could be reduced by seeing more data points.
+Uncertainty estimation for deep learning [13] seeks to provide well-calibrated estimates of epistemic
+and aleatoric uncertainty for neural networks. Ensembles are a simple and popular approach [23]:
+training multiple models, with their disagreement estimating model uncertainty. They have been
+found to be a strong baseline in a variety of applications [3, 47, 30, 15], although they have been
+criticized on both a theoretical [28] and empirical [29] basis. Hypermodels are a related approach [16,
+11], generating the weights of another network as a function of some noise variable, effectively
+simulating a very large ensemble. Bayesian neural networks are an alternative class of approaches
+that learn a distribution over the weights of a neural network [4, 12].
+2
+
+Active learning [37] seeks to achieve greater sample efficiency by having the algorithm select which
+data points to ask a human annotator to label. One effective heuristic selects the point with maximal
+epistemic uncertainty, i.e. the point the model is most unsure about, making active learning and
+uncertainty estimation intricately connected. This is related to the notion of query-by-committee [40]:
+selecting points where a “committee” of models most disagree, whether a literal ensemble of models
+or a generative model class such as a hypermodel or Bayesian neural network.
+It is, however, possible to perform active learning without any explicit notion of epistemic uncertainty.
+For example, uncertainty sampling [24] simply queries the point which a single model is least
+confident in the classification of, regardless of whether this is due to epistemic or aleatoric uncertainty.
+Moreover, there are also methods that select the points based on the expected change to the model,
+e.g. Settles, Craven, and Ray [39]), and those that seek to minimize the variance over model
+parameters, e.g. Zhang and Oles [52]).
+In this paper, we focus on learning reward functions from preference comparisons. This typically
+requires collecting de novo human preference comparisons for the task at hand – an expensive and
+time-consuming process. Prior work has therefore applied active learning to this setting to reduce the
+size of the dataset required. Christiano et al. [9] propose an ensemble-based method similar to our
+approach, finding it improves sample efficiency in around three quarters of the continuous control
+and Atari tasks tested. More sophisticated approaches have also been developed, but are difficult to
+scale and have only been demonstrated in low-dimensional environments [35, 1].
+An alternative way to boost sample efficiency is to use unsupervised learning to leverage vast
+unlabeled datasets [32, 6]. These foundation models can then be fine-tuned on labeled data to perform
+a particular task [5]. Crucially, the number of labels required for fine-tuning is far smaller than that of
+training a model from scratch.
+This fine-tuning approach has been successfully applied to learning natural language tasks from
+preference comparisons. Ziegler et al. [53] fine-tune language models to continue a prompt in a
+particular style, producing completions that users prefer to the original model 88% of the time after
+only 5,000 comparisons. They also train the model to summarize documents, but find it only learns
+naive copying behavior. Stiennon et al. [43] refine this work with improved data collection, producing
+summaries that outperform human reference summaries after less than 100,000 comparisons.
+This is a relatively small amount of data, and models can do tolerably well with an order of magnitude
+less data than this. The use of a foundation model therefore clearly massively improves sample
+efficiency. On the other hand, 100,000 comparisons is still substantial, representing over 4 years of
+full-time work!2 It is therefore tempting to combine active learning with the use of a foundation
+model, to improve sample efficiency beyond what either method can do alone. While prior work has
+attempted to leverage language models to automate part of the labeling process [48, 25], we are not
+aware of any work fine-tuning language models that has tried actively selecting points for human
+feedback. We seek to fill this gap in the literature in the remainder of the paper.
+
+3
+
+Uncertainty Estimation
+
+3.1
+
+Problem Formulation
+
+We seek to learn a distribution over reward models R given some human feedback dataset D, and
+pre-trained language model M . We assume the dataset D consists of preference comparisons between
+possible document completions, following Ziegler et al. [53] and Stiennon et al. [43]. The base
+model M (xk | x1 , · · · , xk−1 ) is trained on a large unsupervised dataset to predict the next token xk
+completing a sequence x1 , · · · , xk−1 .
+A key problem we face is that the human feedback dataset D is typically rather small. Certainly the
+feedback dataset D is far smaller than available unsupervised training corpora. Practical learning
+procedures must therefore make extensive use of the pre-trained model M , such as by using it as an
+initialization for R and then fine-tuning the parameters.
+
+2
+
+Assuming 5 minutes per comparison, and 40 hours a week for 52 weeks a year.
+
+3
+
+3.2
+
+Ensemble Models
+
+To approximate a distribution, we use an ensemble of n reward models {R1 , · · · , Rn }. We construct
+each model Ri by following a similar approach to Ziegler et al. [53] and Stiennon et al. [43].
+Specifically, we copy the weights of the pre-trained model M and replace the final layer with a
+randomly initialized linear layer that outputs a reward (a real number). The entire network Ri is then
+fine-tuned based on human preference comparisons, where the reward output is used as logits in a
+logistic regression model (i.e. higher reward documents are exponentially more likely to be chosen).
+Diversity between the ensemble members comes from two sources: initialization of the final layer,
+and bootstrap sampling of the dataset. The final layer of each ensemble member Ri is randomly
+initialized with a different random seed. Moreover, since we fine-tune the entire network, parameters
+at all layers will tend to differ between ensemble members at convergence.
+Additionally, the dataset of each ensemble member is constructed via bootstrap sampling. Specifically,
+for each data point and ensemble member, we independently sample a weight of 2 or 0 with 50%
+probability in the first epoch and reuse these weights in subsequent epochs. This is analogous to
+building a dataset for each ensemble member by independently sampling points (without replacement).
+3.3
+
+Active Learning
+
+We use the ensemble model for active learning in two ways. First, we use Thompson sampling [44]
+that picks an ensemble member uniformly at random, and then selects the data point which that
+ensemble member predicts the highest reward for. Second, we select points with maximal variance
+between the predictions of each ensemble member, an estimate of epistemic uncertainty. Specifically,
+since the comparisons are binary, we compute the variance over the ensemble members’ probabilities
+that the first summary will be selected over the second.
+
+4
+
+Experiments
+
+We evaluate the quality of our uncertainty estimates by using active learning on real human data.
+Active learning is a key application of reward model uncertainty, and is also widely used to evaluate
+uncertainty estimates [13, Table IV]. In contrast to prior work in other domains [9, 3], we find no
+significant improvement from using active learning with our ensemble model.
+We also evaluate on a synthetic dataset where we know the aleatoric uncertainty exactly. We find the
+estimated epistemic uncertainty is moderately predictive of model error, and the correlation increases
+in larger ensembles. However, the correlation is weak even in the best case scenario, likely explaining
+the failure of active learning. This suggests the need for further research to improve uncertainty
+estimates in this domain.
+We describe our experimental setup in the next section. Subsequently, we present the results on active
+learning, and finally evaluate the estimated epistemic uncertainty quality on the synthetic dataset.
+4.1
+
+Experimental Setup
+
+We train and evaluate reward models on a dataset of human preference comparisons between automatically generated summaries collected by Stiennon et al. [43]. The documents summarized are from
+the TL;DR dataset of Reddit posts [46] and the CNN/DM dataset of news articles [17]. The TL;DR
+comparisons are split into a training (92,858 comparisons), validation (33,083 comparisons) and test
+(50,719 comparisons) set. The 2,284 CNN/DM comparisons are used as an out-of-distribution test
+set to check the robustness of the reward model’s predictions and uncertainty estimates.
+Our pre-trained language model M is a small version of Gopher [33] trained on the C4 dataset [34].
+The model architecture is similar to GPT-2 [32], but uses root-mean-square layer normalization [51,
+RMSNorm] instead of layer normalization [2] and relative positional encoding [41] instead of absolute
+positions (see section A.2 for details). Our primary model has 417M parameters, but we also test
+117M and 1.3B parameter models in some experiments to evaluate dependence on model size.
+4
+
+Train
+
+Valid
+
+Test
+
+CNN/DM
+
+Ideal
+
+90
+
+100
+
+100
+
+Accuracy (%)
+
+90
+80
+70
+60
+50
+50
+
+60
+
+70
+80
+Confidence (%)
+
+Figure 1: The probability of one summary being preferred over another is well-calibrated for the
+417M parameter model trained on the full dataset. Figure 4 shows that calibration improves with
+model and dataset size. We compute summary selection probability over all points in the Training,
+Validation and Test TL;DR datasets and the out-of-distribution CNN/DM dataset. We then group
+predictions into 10 bins based on the model’s confidence (x-axis), i.e. the probability of the most
+likely class, and compute the mean accuracy (y-axis) within that bin relative to human labels. Lines
+closer to the Ideal black dashed line y = x indicate a better calibrated model, with points above or
+below y = x indicating the model is respectively under-confident or over-confident.
+
+4.2
+
+Active Learning
+
+We test our 417M parameter model in a pool-based active learning setup on the TL;DR training
+dataset. We give the algorithm access to the full unlabeled dataset, and allow it to choose a total
+of 4,096 data points to reveal the human feedback label for. Specifically, we sample 16 preference
+comparisons at random, and then choose the one estimated to be the most informative. Training in
+subsequent epochs replays shuffled data from the first epoch.
+This pool-based setup has the benefit of allowing methods to be evaluated purely offline, on realistic
+data. However, an important caveat is that it may underestimate the benefit of active learning. In
+particular, synthesizing novel pairs of summaries might produce more informative comparison pairs
+than those naturally present in the dataset.
+We use uncertainty sampling [24] as a baseline. That is, we query labels for the points where the
+model is the least confident about the class, i.e. the class probability is closest to uniform. While
+simple, this has been found to be a strong baseline [38, 49, 14]. Moreover, Figure 1 shows that these
+class probabilities are reasonably well calibrated. However, in Figure 2, we find that uncertainty
+sampling (Uncertainty) does not significantly outperform random (Random) selection.
+We conjecture that this is because uncertainty sampling favors points with the highest total uncertainty.
+However, points with high aleatoric uncertainty will tend to be less informative as the human feedback
+is itself highly stochastic. In many datasets, aleatoric uncertainty is comparable across points, in which
+case optimizing for total uncertainty is similar to optimizing for epistemic uncertainty. However, in
+our case, aleatoric uncertainty is highly variable between points (heteroscedastic) and often large
+enough to drown out epistemic uncertainty.
+Fortunately, use of an ensemble model lets us disentangle epistemic uncertainty, represented by
+disagreement between ensemble members, from aleatoric, estimated by the aggregate prediction of
+the ensemble. We leverage this using Thompson sampling (Thompson) and by selecting points with
+maximal variance (Variance), as described in Section 3.3. Perhaps surprisingly, we find in Figure 2
+that these more sophisticated methods also do not outperform Random sampling.
+5
+
+Random
+
+Uncertainty
+
+Thompson
+
+Variance
+
+Accuracy (%)
+
+60.0
+57.5
+55.0
+52.5
+50.0
+47.5
+
+0
+
+2
+
+4
+
+Epoch
+
+6
+
+8
+
+10
+
+Figure 2: Active learning methods do not significantly outperform Random. We report accuracy on
+the TL;DR Test dataset while training a 417M parameter model on 4,096 points from the TL;DR
+Train dataset. Shaded regions are 95% confidence intervals, computed via bootstrap over results
+from 5 random training seeds. Key: Random samples points randomly; Uncertainty chooses the
+point which the model is least confident about; Thompson picks an ensemble member uniformly at
+random and selects the point which that member predicts the highest reward for; Variance selects
+points with maximal variance between ensemble members.
+
+Notably Christiano et al. [9] reported positive results for active preference learning in simulated
+robotics and Atari games using a similar approach to Variance. However, they did find the performance was highly variable between environments. This is consistent with prior results showing that
+active learning performance is heavily dependent on the dataset [27].
+
+4.3
+
+Oracle Labeler
+
+In the previous section we found that active learning using a bootstrapped ensemble does not
+outperform random sampling. However, this negative result could be caused by several factors. For
+one, the estimate of epistemic uncertainty could be low quality, despite the total uncertainty being
+well-calibrated per Figure 1. But alternately, perhaps the acquisition function (how the uncertainty
+estimates are translated into a score for active learning) could be at fault. A further possibility is that
+different points in the dataset are similarly informative – in that case, no active learning method could
+substantially outperform random sampling.
+To directly evaluate our uncertainty estimates we test against an oracle labeler that was trained on the
+full human feedback dataset. We then train an ensemble model on a subset of this data, with labels
+sampled from predictions of the oracle. The oracle therefore gives us the ground-truth distribution
+over labels: in other words, the aleatoric uncertainty of the data is known exactly. We can use this to
+more precisely evaluate the quality of our epistemic uncertainty.
+In particular, we estimate epistemic uncertainty based on the variance in predictions between ensemble
+members, in the same way as for the “max variance” active learning approach in the previous section.
+For each data point, we compute the model error as measured by the KL divergence between the
+model’s predicted distribution and the oracle’s predicted distribution. We then compute the Spearman
+(rank) correlation between the model error and estimated epistemic uncertainty. The higher the
+correlation, the more the model “knows what it knows”: while it still often make mistakes, it is aware
+of the points where it is likely to do so. By contrast, with low correlation, the model is sometimes
+highly confident about a point that it makes an error on.
+6
+
+117M
+
+417M
+
+1347M
+
+10
+
+20
+30
+Ensemble Size
+
+40
+
+Spearman r
+
+0.15
+0.10
+0.05
+
+(a) TL;DR Test Dataset, with bootstrapping.
+
+117M
+
+417M
+
+1347M
+
+10
+
+20
+30
+Ensemble Size
+
+40
+
+Spearman r
+
+0.35
+0.30
+0.25
+0.20
+
+(b) Out-of-distribution CNN/DM Dataset, with bootstraping.
+
+No Bootstrap
+
+Bootstrap
+
+Spearman r
+
+0.15
+0.10
+0.05
+0.00
+
+3
+
+6
+
+9
+12
+Ensemble Size
+
+24
+
+42
+
+(c) 117M parameter model on the TL;DR Test dataset, with and without bootstrapping.
+
+Figure 3: We report the Spearman correlation between model error and estimated epistemic uncertainty (y-axis), against the number of ensemble members (x-axis). The best model has at most
+r = 0.36 correlation, indicating the uncertainty estimates are unreliable. (a), (b): The correlation
+increases modestly with the number of ensemble members and model parameter count. (c): The correlation tends to be higher with bootstrapping, but there is no significant difference as the confidence
+intervals (error bars) overlap. We measure model error by the KL divergence between the model’s
+predicted distribution, and the oracle distribution. We estimate epistemic uncertainty by the variance
+between ensemble members. See Figures 6, 7 and 8 for results on other models and datasets.
+
+7
+
+In Figures 3a and 3b, we report this Spearman correlation measuring epistemic uncertainty quality (yaxis) for ensembles with varying numbers of members (x-axis) and parameter count (line color). We
+find that the correlation is fairly low in all cases, reaching at most r = 0.36 in Figure 3b, explaining
+only r2 ≈ 0.13 of the variance. However, the correlation does increase with ensemble size, from
+r = 0.25 at the lower end with an ensemble size of 3 to r = 0.36 with an ensemble size of 42.
+Bootstrapping slightly improves mean uncertainty quality, but the difference is not statistically
+significant, and the size of the ensemble is more important. In Figure 3c we observe the uncertainty
+quality with bootstrapping (orange bars) are generally above the green bars (without bootstrapping)
+for the 117M parameter model, but that the 95% confidence intervals (error bars) are overlapping.
+We find similar results for the 417M and 1347M parameter models in Figure 7 in the appendix.
+Overall, these results indicate that the poor active learning performance of the bootstrapped ensemble
+in Section 4.2 is largely due to low quality uncertainty estimates. While it is possible that better
+performance could be obtained with an impoved acquisition function, the success of Variance in
+prior work [9] makes it unlikely that this choice alone explains the negative result. However, our
+results may be sensitive to the choice of dataset, which can affect both the uncertainty quality and the
+strength of random sampling. A promising direction for future work is to evaluate this approach in a
+broader range of natural language tasks in case the performance in summarization is unusually poor.
+
+5
+
+Discussion
+
+We investigated the use of ensembles and bagging to estimate uncertainty for pre-trained language
+models fine-tuned for summarization. Despite ensembles working well in a range of applications [23,
+3, 47, 30, 15], we find no benefit from active learning using ensembles in our setting. Moreover,
+evaluating against an oracle labeler we find that the uncertainty estimation – while better than random
+– is of low quality, explaining at most 13% of the variance in model error.
+There are two key limitations of this work. First, we have only investigated uncertainty estimation in
+a single task: learning to discriminate between good and bad summaries of documents. While the
+dataset does span a range of topics (e.g. business, sport, politics), the task is still relatively narrow
+compared to, for example, open-ended dialogue. Consequently, it may be that random sampling is
+a fairly strong baseline in this task. An interesting direction for future work would be to estimate
+an upper bound for active learning performance in this task, for example by greedily selecting data
+points that most improve accuracy on held-out data.
+Second, there are a variety of other methods for uncertainty estimation that we have not yet attempted.
+One approach we find particularly promising are linear hypermodels [11]: learning a linear mapping
+from a noise source to neural network parameters, that are then used for inference. Although our
+modestly sized ensembles did not achieve adequate uncertainty quality, extrapolating from Figure 3 it
+seems that ensembles of 1000s of models might be sufficient. Hypermodels provide a space-efficient
+way of approximating this. An alternative approach would be to fine-tune only the biases, similar to
+BitFit [50], enabling many more ensemble members to fit into limited memory.
+In recent years, machine learning has moved towards large, pre-trained foundation models [5]. Finetuning these models is often significantly more sample efficient than training from scratch. However,
+our work highlights this benefit does not come for free: staying close to the foundation model “prior”
+will cause a lack of diversity in ensemble members (or hypermodel samples), yielding poor quality
+uncertainty estimates. We believe it will either be necessary to modify foundation model training
+procedures to include uncertainty estimation, such as by training ensembles of foundation models, or
+develop new methods for uncertainty estimation that can tolerate this lack of diversity.
+
+8
+
+Acknowledgements
+Thanks to Vladimir Mikulik for running several of the experiments; to John Aslanides, Francis Song,
+Roman Ring and Nat McAleese for code-review and other technical assistance; and to Sebastian
+Farquhar for various helpful discussions.
+
+References
+[1]
+
+[2]
+[3]
+[4]
+[5]
+[6]
+[7]
+[8]
+[9]
+[10]
+[11]
+[12]
+[13]
+[14]
+[15]
+[16]
+[17]
+[18]
+[19]
+[20]
+[21]
+[22]
+[23]
+[24]
+[25]
+[26]
+
+Riad Akrour, Marc Schoenauer, and Michèle Sebag. “APRIL: Active Preference LearningBased Reinforcement Learning”. In: Machine Learning and Knowledge Discovery in
+Databases. 2012, pp. 116–131.
+Jimmy Lei Ba, Jamie Ryan Kiros, and Geoffrey E. Hinton. Layer Normalization. 2016. arXiv:
+1607.06450v1 [stat.ML].
+William H. Beluch et al. “The Power of Ensembles for Active Learning in Image Classification”.
+In: CVPR. 2018.
+Charles Blundell et al. “Weight Uncertainty in Neural Networks”. In: ICML. 2015.
+Rishi Bommasani et al. On the Opportunities and Risks of Foundation Models. 2021. arXiv:
+2108.07258 [cs.LG].
+Tom Brown et al. “Language Models are Few-Shot Learners”. In: NeurIPS. Vol. 33. 2020.
+Yaroslav Bulatov and Jeff Wu. Release raw lambada dataset. 2019. URL: https://github.
+com/openai/gpt-2/issues/131 (visited on 05/06/2021).
+Yinlam Chow et al. “Risk-Constrained Reinforcement Learning with Percentile Risk Criteria”.
+In: Journal of Machine Learning Research 18.167 (2018), pp. 1–51.
+Paul F Christiano et al. “Deep Reinforcement Learning from Human Preferences”. In: NeurIPS.
+2017.
+Shrey Desai and Greg Durrett. “Calibration of Pre-trained Transformers”. In: EMNLP. 2020.
+Vikranth Dwaracherla et al. “Hypermodels for Exploration”. In: ICLR. 2020.
+Yarin Gal and Zoubin Ghahramani. “Dropout as a Bayesian Approximation: Representing
+Model Uncertainty in Deep Learning”. In: ICML. 2016.
+Jakob Gawlikowski et al. A Survey of Uncertainty in Deep Neural Networks. 2022. arXiv:
+2107.03342 [cs.LG].
+Daniel Gissin and Shai Shalev-Shwartz. Discriminative Active Learning. 2019. arXiv: 1907.
+06347 [cs.LG].
+Fredrik K. Gustafsson, Martin Danelljan, and Thomas B. Schon. “Evaluating Scalable Bayesian
+Deep Learning Methods for Robust Computer Vision”. In: CVPR Workshops. 2020.
+David Ha, Andrew Dai, and Quoc Le. “HyperNetworks”. In: ICLR. 2016.
+Karl Moritz Hermann et al. “Teaching Machines to Read and Comprehend”. In: NeurIPS.
+2015.
+Eyke Hüllermeier and Willem Waegeman. “Aleatoric and epistemic uncertainty in machine
+learning: an introduction to concepts and methods”. In: Machine Learning (2021).
+Abhyuday Jagannatha and Hong Yu. “Calibrating Structured Output Predictors for Natural
+Language Processing”. In: ACL. 2020.
+Zhengbao Jiang et al. “How Can We Know When Language Models Know? On the Calibration
+of Language Models for Question Answering”. In: TACL 9 (Sept. 2021), pp. 962–977.
+Amita Kamath, Robin Jia, and Percy Liang. “Selective Question Answering under Domain
+Shift”. In: ACL. 2020.
+Urvashi Khandelwal et al. Sample Efficient Text Summarization Using a Single Pre-Trained
+Transformer. 2019. arXiv: 1905.08836 [cs.CL].
+Balaji Lakshminarayanan, Alexander Pritzel, and Charles Blundell. “Simple and Scalable
+Predictive Uncertainty Estimation Using Deep Ensembles”. In: NeurIPS. 2017.
+David D. Lewis and William A. Gale. “A Sequential Algorithm for Training Text Classifiers”.
+In: SIGIR. 1994.
+Alisa Liu et al. WANLI: Worker and AI Collaboration for Natural Language Inference Dataset
+Creation. 2022. arXiv: 2201.05955 [cs.CL].
+Stephen Merity et al. Pointer Sentinel Mixture Models. 2016. arXiv: 1609.07843 [cs.CL].
+9
+
+[27] Stephen Mussmann and Percy Liang. “On the Relationship between Data Efficiency and Error
+for Uncertainty Sampling”. In: ICML. 2018.
+[28] Ian Osband, John Aslanides, and Albin Cassirer. “Randomized Prior Functions for Deep
+Reinforcement Learning”. In: NeurIPS. 2018.
+[29] Ian Osband et al. The Neural Testbed: Evaluating Predictive Distributions. 2022. arXiv:
+2110.04629 [cs.LG].
+[30] Yaniv Ovadia et al. “Can you trust your model’s uncertainty? Evaluating predictive uncertainty
+under dataset shift”. In: NeurIPS. 2019.
+[31] Romain Paulus, Caiming Xiong, and Richard Socher. “A Deep Reinforced Model for Abstractive Summarization”. In: ICLR. 2018.
+[32] Alec Radford et al. Language Models are Unsupervised Multitask Learners. Tech. rep. OpenAI,
+2019.
+[33] Jack W. Rae et al. Scaling Language Models: Methods, Analysis & Insights from Training
+Gopher. 2021. arXiv: 2112.11446 [cs.CL].
+[34] Colin Raffel et al. “Exploring the Limits of Transfer Learning with a Unified Text-to-Text
+Transformer”. In: Journal of Machine Learning Research 21.140 (2020), pp. 1–67.
+[35] Dorsa Sadigh et al. “Active Preference-Based Learning of Reward Functions”. In: RSS. 2017.
+[36] Abigail See, Peter J. Liu, and Christopher D. Manning. “Get To The Point: Summarization
+with Pointer-Generator Networks”. In: ACL. 2017.
+[37] Burr Settles. Active Learning Literature Survey. Computer Sciences Technical Report 1648.
+University of Wisconsin–Madison, 2009.
+[38] Burr Settles and Mark Craven. “An Analysis of Active Learning Strategies for Sequence
+Labeling Tasks”. In: EMNLP. 2008.
+[39] Burr Settles, Mark Craven, and Soumya Ray. “Multiple-Instance Active Learning”. In:
+NeurIPS. 2008.
+[40] H. S. Seung, M. Opper, and H. Sompolinsky. “Query by Committee”. In: COLT. 1992.
+[41] Peter Shaw, Jakob Uszkoreit, and Ashish Vaswani. “Self-Attention with Relative Position
+Representations”. In: NAACL. 2018.
+[42] Rahul Singh, Qinsheng Zhang, and Yongxin Chen. “Improving Robustness via Risk Averse
+Distributional Reinforcement Learning”. In: Learning for Dynamics and Control. 2020.
+[43] Nisan Stiennon et al. Learning to summarize from human feedback. 2020. arXiv: 2009 .
+01325v2 [cs.CL].
+[44] William R Thompson. “On the likelihood that one unknown probability exceeds another in
+view of the evidence of two samples”. In: Biometrika 25.3/4 (1933), pp. 285–294.
+[45] Núria Armengol Urpí, Sebastian Curi, and Andreas Krause. “Risk-Averse Offline Reinforcement Learning”. In: ICLR. 2021.
+[46] Michael Völske et al. “TL;DR: Mining Reddit to Learn Automatic Summarization”. In:
+Workshop on New Frontiers in Summarization. 2017.
+[47] Apoorv Vyas et al. “Out-of-Distribution Detection Using an Ensemble of Self Supervised
+Leave-out Classifiers”. In: ECCV. 2018.
+[48] Shuohang Wang et al. “Want To Reduce Labeling Cost? GPT-3 Can Help”. In: EMNLP. 2021.
+[49] Yazhou Yang and Marco Loog. “A benchmark and comparison of active learning for logistic
+regression”. In: Pattern Recognition 83 (2018), pp. 401–415.
+[50] Elad Ben Zaken, Shauli Ravfogel, and Yoav Goldberg. BitFit: Simple Parameter-efficient
+Fine-tuning for Transformer-based Masked Language-models. 2021. arXiv: 2106.10199
+[cs.LG].
+[51] Biao Zhang and Rico Sennrich. “Root Mean Square Layer Normalization”. In: NeurIPS. 2019.
+[52] Tony Zhang and Frank J. Oles. “A Probability Analysis on the Value of Unlabeled Data for
+Classification Problems”. In: ICML. 2000.
+[53] Daniel M Ziegler et al. Fine-Tuning Language Models from Human Preferences. 2019. arXiv:
+1909.08593v2 [cs.LG].
+
+10
+
+Model
+Source
+
+Parameter
+Count
+
+LAMBADA
+Accuracy (%)
+
+WikiText 103
+Perplexity
+
+Ours
+Ours
+Ours
+
+117M
+417M
+1374M
+
+34.3
+42.7
+54.1
+
+33.03
+23.90
+17.053
+
+GPT-2 117M
+45.99
+37.50
+GPT-2 345M
+55.48
+26.37
+GPT-2 1542M
+63.24
+18.34
+Table 1: Our pre-trained language models achieve similar performance to comparably sized GPT2 models on WikiText 103 [26]. They perform around 8-13% worse on LAMBADA accuracy
+than reported for GPT-2, however we believe this is due to GPT-2 using a stop word filter and an
+unprocessed version of LAMBADA; see section A.2.
+
+A
+
+Supplementary Material
+
+A.1
+
+Comparison to Prior Work
+
+We find that our language and reward models successfully replicate prior work [32, 43]. Although
+there are some minor implementation differences, discussed below, these do not seem to significantly
+change the overall language modelling perplexity or reward modelling accuracy. Accordingly, we
+expect our results to be applicable to other pre-trained language models and preference comparison
+algorithm implementations.
+A.2
+
+Pre-trained Language Models
+
+Our experiments use small models from the Gopher family [33] trained on the “Colossal Clean
+Crawled Corpus” (C4) [34], derived from the Common Crawl3 . In common with Gopher, our model
+architecture is similar to GPT-2 [32], with the following differences:
+• The models use root-mean-square layer normalization [51, RMSNorm] instead of layer
+normalization [2, LayerNorm].
+• The models use relative positional encodings [41] instead of absolute positions.
+Our pre-trained models achieve a similar performance level as comparably sized GPT-2 models,
+summarized in Table 1. In particular, our models achieve lower (better) perplexity on WikiText 103
+than GPT-2 models. However, our models have an 8-13% lower (worse) LAMBADA accuracy than
+reported for GPT-2. We believe this difference is largely due to GPT-2 models using a stop word filter,
+which increased accuracy by around 11% [32, section 3.3]. Another confounder is that GPT-2 was
+evaluated on a raw (unprocessed) version of LAMBADA [7], whereas we evaluate on the standard
+dataset.
+A.2.1
+
+Reward Models
+
+In Table 2 we report the accuracy of reward models trained on the full human feedback dataset from
+Stiennon et al. [43], observing comparable accuracy to their models. Although the focus of our
+work is on introducing uncertainty estimation and active learning, and not improving on accuracy in
+existing settings, it is pleasing that we were able to easily replicate prior work. This both validates
+our training pipeline, and provides additional confirmation of the results in Stiennon et al. [43].
+Unfortunately we were unable to make a head-to-head comparison due to a lack of information as to
+the subset of the dataset that Stiennon et al. [43] report on. However, our accuracy seems comparable
+to theirs across a range of dataset slices.
+3
+
+https://commoncrawl.org
+
+11
+
+Model
+Source
+
+Parameter
+Count
+
+Evaluation
+Dataset
+
+Labeler
+Agreement (%)
+
+Ours
+Ours
+Ours
+Ours
+Ours
+Ours
+
+117M
+117M
+417M
+417M
+1347M
+1347M
+
+TL;DR Test
+CNN/DM Test
+TL;DR Test
+CNN/DM Test
+TL;DR Test
+CNN/DM Test
+
+60.71% ± 2.11%
+58.68% ± 3.56%
+61.84% ± 3.00%
+61.37% ± 4.99%
+64.84% ± 1.63%
+65.90% ± 3.27%
+
+Stiennon et al. [43] 1.3B
+1.3B supervised 65.8% ± 2.0%
+Stiennon et al. [43] 1.3B
+6.7B supervised 67.5% ± 1.1%
+Stiennon et al. [43] 1.3B
+6.7B feedback
+57.4% ± 2.0%
+Stiennon et al. [43] 6.7B
+1.3B supervised 70.8% ± 1.8%
+Stiennon et al. [43] 6.7B
+6.7B supervised 69.7% ± 1.1%
+Stiennon et al. [43] 6.7B
+6.7B feedback
+62.3% ± 2.1%
+Table 2: Our reward models fine-tuned on the human feedback dataset from Stiennon et al. [43]
+achieve similar accuracy (agreement with human labels) as their models. Unfortunately we cannot
+perform a direct comparison as Stiennon et al. [43] only report on labeler agreement for subsets of the
+data that we are unable to reproduce. However, we find that our 1347M model achieves an accuracy
+of 64.84% ± 1.63% that is well above the worst figure, 57.4% ± 2.0%, reported by Stiennon et al.
+[43, Table 20] for their 1.3B model, but somewhat below the best figure, 67.5% ± 1.1%. For each
+model, we evaluate the checkpoint with the highest validation accuracy. We report 95% confidence
+intervals computed using a t-distribution based on the mean and standard deviation across 5 seeds.
+
+A.3
+
+Model Calibration
+
+In Figure 4, we test the degree to which our models are calibrated by plotting how often the model
+was correct (y-axis) against its predicted probability (x-axis). We find that overall the models tend
+to be well-calibrated, with lines close to the ideal y = x. Calibration is better in models with larger
+parameter counts, and those that were trained with more data.
+A.4
+
+Active Learning
+
+In Figure 5, we evaluate the accuracy of different active learning methods (colored lines) trained with
+different dataset sizes (columns) and evaluated on different test datasets (rows). In the first epoch,
+each data point is actively selected; in subsequent epochs, the first epoch is shuffled and replayed. We
+find that no method is significantly better than random selection in this setting.
+A.5
+
+Oracle Labeler
+
+To directly evaluate our uncertainty estimates, we tested their predictions against an oracle labeler as
+described in Section 4.3. This lets us determine if the poor active learning performance is attributable
+to issues with the uncertainty estimates, or is caused by another factor. In Figures 6, 7 and 8, we
+report the Spearman r correlation coefficient between model error (KL divergence between model
+and oracle predictions) and estimated epistemic uncertainty (variance between ensemble members)
+across the TL;DR Validation and Test datasets, and the out-of-distribution CNN/DM dataset. A
+higher correlation indicates the model is better calibrated about what it knows: while it still makes
+mistakes, it can predict the points where it is likely to do so.
+
+12
+
+Test
+Train Set Size = 16384
+
+CNN/DM
+Ideal
+Train Set Size = All
+Params = 117M
+
+Accuracy (%)
+
+100
+
+Train
+Valid
+Train Set Size = 1024
+
+80
+60
+40
+
+Params = 417M
+
+Accuracy (%)
+
+100
+80
+60
+40
+Params = 1347M
+
+Accuracy (%)
+
+100
+80
+60
+40
+60
+80
+100
+Confidence (%)
+
+60
+80
+100
+Confidence (%)
+
+60
+80
+100
+Confidence (%)
+
+Figure 4: The models’ probabilities of one summary being preferred over another are well-calibrated,
+and calibration improves with dataset and model size. We compute summary selection probability
+for each model (rows) and training dataset size (columns) over all points in the Training, Validation
+and Test TL;DR datasets and the out-of-distribution CNN/DM dataset. We then group predictions
+into 10 bins based on the model’s confidence (x-axis), i.e. the probability of the most likely class,
+and compute the mean accuracy (y-axis) within that bin relative to human labels. Lines closer to the
+Ideal black dashed line y = x indicate a better calibrated model, with points above or below y = x
+indicating the model is respectively under-confident or over-confident.
+
+13
+
+Random
+
+Class
+
+Thompson
+
+Dataset Size = 4096
+Dataset = Valid
+
+60
+55
+50
+
+Dataset = Test
+
+60
+55
+50
+60
+
+Dataset = CNN/DM
+
+Accuracy (%)
+
+Accuracy (%)
+
+Accuracy (%)
+
+Dataset Size = 1024
+
+Variance
+
+55
+50
+0.0
+
+2.5
+
+5.0
+Epoch
+
+7.5
+
+10.0
+
+0.0
+
+2.5
+
+5.0
+Epoch
+
+7.5
+
+10.0
+
+Figure 5: We report accuracy for models trained with active learning on 1,024 (left) or 4,096
+(right) data points. The models are trained on a single dataset, but evaluated on three different
+datasets: TL;DR Valid (top), Test (middle) and out-of-distribution CNN/DM (bottom). No method
+significantly outperforms Random sampling. Shaded regions are 95% confidence intervals, computed
+via bootstrap over results from 5 random training seeds. Key: Random samples points randomly;
+Uncertainty chooses the point which the model is least confident about; Thompson picks an
+ensemble member uniformly at random and selects the point which that member predicts the highest
+reward for; Variance selects points with maximal variance between ensemble members.
+
+14
+
+No Bootstrap
+
+Bootstrap
+Model Size = 117M
+
+Spearman r
+
+0.075
+0.050
+0.025
+0.000
+0.025
+3
+
+6
+
+9
+12
+Ensemble Size
+
+24
+
+42
+
+Model Size = 417M
+
+Spearman r
+
+0.075
+0.050
+0.025
+0.000
+0.025
+3
+
+6
+
+9
+Ensemble Size
+
+12
+
+15
+
+Model Size = 1347M
+
+Spearman r
+
+0.075
+0.050
+0.025
+0.000
+0.025
+3
+
+5
+Ensemble Size
+
+7
+
+Figure 6: We report the Spearman correlation between model error and estimated epistemic uncertainty (y-axis), against the number of ensemble members (x-axis) with and without bootstrapping on
+the TL;DR Validation dataset. We measure model error by the KL divergence between the model’s
+predicted distribution, and the oracle distribution. We estimate epistemic uncertainty by the variance
+between ensemble members.
+
+15
+
+No Bootstrap
+
+Bootstrap
+Model Size = 117M
+
+Spearman r
+
+0.15
+0.10
+0.05
+0.00
+3
+
+6
+
+9
+12
+Ensemble Size
+
+24
+
+42
+
+Model Size = 417M
+
+Spearman r
+
+0.15
+0.10
+0.05
+0.00
+3
+
+6
+
+9
+Ensemble Size
+
+12
+
+15
+
+Model Size = 1347M
+
+Spearman r
+
+0.15
+0.10
+0.05
+0.00
+3
+
+5
+Ensemble Size
+
+7
+
+Figure 7: We report the Spearman correlation between model error and estimated epistemic uncertainty (y-axis), against the number of ensemble members (x-axis) with and without bootstrapping
+on the TL;DR Test dataset. We measure model error by the KL divergence between the model’s
+predicted distribution, and the oracle distribution. We estimate epistemic uncertainty by the variance
+between ensemble members.
+
+16
+
+No Bootstrap
+
+Bootstrap
+Model Size = 117M
+
+0.4
+Spearman r
+
+0.3
+0.2
+0.1
+0.0
+
+3
+
+6
+
+9
+12
+Ensemble Size
+
+42
+
+Model Size = 417M
+
+0.4
+
+24
+
+Spearman r
+
+0.3
+0.2
+0.1
+0.0
+
+3
+
+6
+
+12
+
+15
+
+Model Size = 1347M
+
+0.4
+
+9
+Ensemble Size
+
+Spearman r
+
+0.3
+0.2
+0.1
+0.0
+
+3
+
+5
+Ensemble Size
+
+7
+
+Figure 8: We report the Spearman correlation between model error and estimated epistemic uncertainty (y-axis), against the number of ensemble members (x-axis) with and without bootstrapping
+on the CNN/DM Test dataset. We measure model error by the KL divergence between the model’s
+predicted distribution, and the oracle distribution. We estimate epistemic uncertainty by the variance
+between ensemble members.
+
+17
+
+

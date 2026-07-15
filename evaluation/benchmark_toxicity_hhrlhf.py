@@ -17,7 +17,7 @@ Strategies:
     2. baseline_adapter     — Greedy Qwen 2.5 7B, harmlessness adapter
     3. gsi_softmax          — softmax(β·r̃) selection
     4. gsi_pairwise         — Bradley-Terry: P(A wins) = σ(MATCH(A,B)/τ)
-    5. gsi_swiss            — Swiss-system → points table → softmax
+    5. swiss                — Swiss-system → points table → softmax
 
 Toxicity scale (both 0-1, LOWER is better):
     toxicity_geval     — DeepEval GEval rubric (normalized 0-1).
@@ -30,7 +30,7 @@ is loaded so peak VRAM is max(gen, judge), not gen + judge:
 
 Run:
     python evaluation/benchmark_toxicity_hhrlhf.py \
-        --strategies baseline_base_model baseline_adapter gsi_softmax gsi_pairwise gsi_swiss \
+        --strategies baseline_base_model baseline_adapter gsi_softmax gsi_pairwise swiss \
         --num-prompts 100 \
         --gsi-n 8 --beta 0.1 --max-tokens 200 \
         --judge-model Qwen/Qwen2.5-7B-Instruct \
@@ -75,7 +75,7 @@ from Model_mechanics.config import SwissKnifeConfig
 from Model_mechanics.models import load_tokenizer, load_base_model, load_blade_model
 from Model_mechanics.gsi_softmax import GSISoftmaxGenerator
 from Model_mechanics.gsi_pairwise import GSIPairwiseGenerator
-from Model_mechanics.gsi_swiss import GSISwissGenerator
+from Model_mechanics.swiss import SwissGenerator
 
 from evaluation.benchmark_gsi_strategies_helpfulness import (
     BaselineGreedyGenerator,
@@ -307,8 +307,8 @@ def build_generator(strat_name, cfg, tokenizer, base_model, blade_model,
         return GSISoftmaxGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model)
     if strat_name == "gsi_pairwise":
         return GSIPairwiseGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model)
-    if strat_name == "gsi_swiss":
-        return GSISwissGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model)
+    if strat_name == "swiss":
+        return SwissGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model)
     raise ValueError(f"Unknown strategy: {strat_name}")
 
 
@@ -319,8 +319,8 @@ def build_generator(strat_name, cfg, tokenizer, base_model, blade_model,
 def parse_args():
     p = argparse.ArgumentParser(description="GSI toxicity benchmark on HH-RLHF harmless-base (DeepEval rubric)")
     p.add_argument("--strategies", type=str, nargs="+",
-                   default=["baseline_base_model", "baseline_adapter", "gsi_softmax", "gsi_pairwise", "gsi_swiss"],
-                   choices=["baseline_base_model", "baseline_adapter", "gsi_softmax", "gsi_pairwise", "gsi_swiss"])
+                   default=["baseline_base_model", "baseline_adapter", "gsi_softmax", "gsi_pairwise", "swiss"],
+                   choices=["baseline_base_model", "baseline_adapter", "gsi_softmax", "gsi_pairwise", "swiss"])
     p.add_argument("--num-prompts", type=int, default=100)
     p.add_argument("--max-tokens", type=int, default=200)
     p.add_argument("--blade", type=str, default="harmlessness",

@@ -42,6 +42,12 @@ def elo_bracket(
     rounds: int = 6,
     beta: float = 1.0,
     tilted_rewards: Optional[torch.Tensor] = None,
+    sigmas: Optional[torch.Tensor] = None,
+    hard_draw: bool = False,
+    w_tournament: float = 1.0,
+    w_blade: float = 0.0,
+    uwo_lambda: float = 0.5,
+    probabilistic: bool = False,
 ) -> int:
     """Run an Elo rating system tournament over candidates to select a champion.
 
@@ -50,19 +56,23 @@ def elo_bracket(
       2. In each round:
          - Candidates are sorted by current rating (continuous, unlike discrete Swiss points).
          - Paired greedily in rating order, avoiding rematches when possible.
-         - Match outcome decided by:
-           - If `tilted_rewards` is provided:
-             score = tilted_rewards[a] - tilted_rewards[b]
-           - If `tilted_rewards` is NOT provided:
-             score = alpha * (target_A - target_B) + (1 - alpha) * (blade_A - blade_B)
-         - Actual outcome: s_a=1/s_b=0 (win), s_a=0/s_b=1 (loss), 0.5/0.5 (draw).
+         - Match outcome decided by one of two mechanisms:
+
+           (a) Thurstonian CDF — enabled by ``probabilistic=True`` OR when ``sigmas`` are
+               provided.  P(A beats B) = Φ((μ_A − μ_B) / √(σ_A² + σ_B² + ε)).  This gives
+               every candidate a non-zero chance of winning, even the weaker one.
+
+           (b) Bradley-Terry sigmoid — used when ``probabilistic=False`` and no ``sigmas``
+               are supplied.  P(A beats B) = σ(score_A − score_B).  Deterministic in the
+               limit and equivalent to a soft sorting mechanism.
+
+         - Actual outcome: s_a = P, s_b = 1 - P (soft), or Bernoulli draw (hard).
          - Expected outcome: e_a = stable_sigmoid((R_a - R_b) * ln10/400)
          - Rating update: R_new = R + K * (actual - expected)
-      3. Champion selection (β-scaled, matches gsi_swiss scale):
+      3. Champion selection (β-scaled, matches swiss scale):
          - If temperature < 1e-5: greedy argmax of ratings.
-         - Otherwise: logits_i = (R_i − 1500) / temperature  →  softmax → multinomial.
-           Zero-centering means only tournament-earned deltas drive the probability,
-           making this directly comparable to gsi_swiss's softmax(β · points).
+         - Otherwise: combined logits from tournament rating + UWO blade signal
+           → softmax → multinomial.
 
     Parameters
     ----------
@@ -81,8 +91,26 @@ def elo_bracket(
     beta : float
         Scales champion selection logits.
     tilted_rewards : torch.Tensor, optional
-        Shape ``[N]``. Precomputed tilted rewards for all candidates. If provided,
-        matches are decided directly using tilted rewards instead of target and blade scores.
+        Shape ``[N]``. Precomputed tilted rewards for all candidates.
+    sigmas : torch.Tensor, optional
+        Shape ``[N]``. Standard deviation of the blade rewards (uncertainty).
+    hard_draw : bool
+        If True, sample actual outcome from Bernoulli(P). If False, use continuous P.
+    w_tournament : float
+        Weight for tournament score in champion selection.
+    w_blade : float
+        Weight for UWO score (mu - uwo_lambda*sigma) in champion selection.
+    uwo_lambda : float
+        Uncertainty penalty factor λ for the UWO blade term in champion selection.
+        Does NOT gate/reject candidates; penalises high-uncertainty candidates at
+        the *softmax selection* stage only.
+    probabilistic : bool
+        If True, forces Thurstonian CDF P(A beats B) = Φ(z) for every match,
+        even when sigmas are all zero (degenerates to a step-function CDF but
+        keeps the same code path).  This means a lower-scoring candidate always
+        has a positive probability of winning any given match.
+        If False (default), Bradley-Terry sigmoid is used unless sigmas are
+        explicitly provided.
 
     Returns
     -------
@@ -91,6 +119,7 @@ def elo_bracket(
     """
     N = target_scores.shape[0]
     assert blade_scores.shape[0] == N, "Score tensor shapes must match"
+    import random
 
     # Z-score normalization
     if normalize:
@@ -101,10 +130,26 @@ def elo_bracket(
             if std < 1e-8:
                 return t - t.mean()
             return (t - t.mean()) / (std + 1e-6)
+        
+        # Calculate standard deviations before normalization
+        std_target = target_scores.std().item() if target_scores.numel() > 1 else 1.0
+        std_blade = blade_scores.std().item() if blade_scores.numel() > 1 else 1.0
+        std_tilted = tilted_rewards.std().item() if (tilted_rewards is not None and tilted_rewards.numel() > 1) else 1.0
+        
         target_scores = _znorm(target_scores)
         blade_scores  = _znorm(blade_scores)
         if tilted_rewards is not None:
             tilted_rewards = _znorm(tilted_rewards)
+            
+        if sigmas is not None:
+            if tilted_rewards is not None:
+                sigmas_normed = sigmas / (std_tilted + 1e-8)
+            else:
+                sigmas_normed = sigmas / (std_blade + 1e-8)
+        else:
+            sigmas_normed = None
+    else:
+        sigmas_normed = sigmas
 
     # Initialize ratings
     ratings = [1500.0] * N
@@ -158,23 +203,45 @@ def elo_bracket(
 
         # Execute matches and update ratings
         for a, b in pairs:
+            # Determine the raw score difference for this match
             if tilted_rewards is not None:
-                score = tilted_rewards[a] - tilted_rewards[b]
+                diff = tilted_rewards[a] - tilted_rewards[b]
             else:
-                delta_target = target_scores[a] - target_scores[b]
-                delta_blade  = blade_scores[a]  - blade_scores[b]
-                score = alpha * delta_target + (1.0 - alpha) * delta_blade
+                diff = (alpha * (target_scores[a] - target_scores[b]) +
+                        (1.0 - alpha) * (blade_scores[a] - blade_scores[b]))
+
+            if probabilistic or sigmas_normed is not None:
+                # ── Thurstonian Case-V match ──────────────────────────────
+                # P(A beats B) = Φ((μ_A − μ_B) / √(σ_A² + σ_B² + ε))
+                # When probabilistic=True and sigmas_normed is None, sigma is treated
+                # as 0, so the denominator is √ε ≈ 0.0032 — gives a very sharp CDF
+                # (essentially deterministic) but remains in the Thurstonian code path.
+                if sigmas_normed is not None:
+                    if tilted_rewards is not None:
+                        var_match = sigmas_normed[a]**2 + sigmas_normed[b]**2
+                    else:
+                        var_match = ((1.0 - alpha) ** 2) * (sigmas_normed[a]**2 + sigmas_normed[b]**2)
+                else:
+                    var_match = torch.tensor(0.0, dtype=diff.dtype, device=diff.device)
+                denom = torch.sqrt(var_match + 1e-8)
+                P_A_beats_B = 0.5 * (1.0 + torch.erf((diff / denom) / math.sqrt(2.0))).item()
+            else:
+                # ── Bradley-Terry sigmoid match ───────────────────────────
+                # P(A beats B) = σ(score_A − score_B)
+                # The higher scorer always has P > 0.5, effectively a soft sort.
+                P_A_beats_B = torch.sigmoid(diff).item()
 
             # Determine actual outcome
-            if score > 1e-6:
-                sa, sb = 1.0, 0.0
-                winner = a
-            elif score < -1e-6:
-                sa, sb = 0.0, 1.0
-                winner = b
+            if hard_draw:
+                if random.random() < P_A_beats_B:
+                    sa, sb = 1.0, 0.0
+                    winner = a
+                else:
+                    sa, sb = 0.0, 1.0
+                    winner = b
             else:
-                sa, sb = 0.5, 0.5
-                winner = None
+                sa, sb = P_A_beats_B, 1.0 - P_A_beats_B
+                winner = a if P_A_beats_B > 0.5 else b
 
             # Calculate expected outcomes using stable sigmoid
             diff_ratings = (ratings[a] - ratings[b]) * math.log(10.0) / 400.0
@@ -186,28 +253,30 @@ def elo_bracket(
             ratings[b] += k_factor * (sb - eb)
 
             logger.debug(
-                "Elo Round %d (K=%d) | c%d (rating=%.1f) vs c%d (rating=%.1f) → winner=%s | new_ratings: c%d=%.1f, c%d=%.1f",
+                "Elo Round %d (K=%d) | c%d (rating=%.1f) vs c%d (rating=%.1f) → winner=%s (prob=%.3f) | new_ratings: c%d=%.1f, c%d=%.1f",
                 round_idx + 1, k_factor, a, ratings[a] - k_factor * (sa - ea),
                 b, ratings[b] - k_factor * (sb - eb),
-                f"c{winner}" if winner is not None else "draw",
+                f"c{winner}" if sa != sb else "draw", P_A_beats_B,
                 a, ratings[a], b, ratings[b]
             )
 
-    # Determine champion based on temperature
+    # Determine champion using combined ratings and UWO term
+    ratings_tensor = torch.tensor(ratings, dtype=torch.float, device=target_scores.device)
+    
+    if sigmas_normed is not None:
+        uwo_term = blade_scores - uwo_lambda * sigmas_normed
+    else:
+        uwo_term = blade_scores
+
     if temperature < 1e-5:
-        tie_breaker = tilted_rewards if tilted_rewards is not None else target_scores
-        champion = max(
-            indices,
-            key=lambda i: (ratings[i], tie_breaker[i].item()),
-        )
+        scores = w_tournament * (ratings_tensor - 1500.0) + w_blade * uwo_term
+        champion = int(torch.argmax(scores).item())
         logger.debug(
             "Elo champion (Greedy, T=0): c%d (rating=%.1f)", champion, ratings[champion]
         )
     else:
-        # Zero-center ratings then scale by temperature.
-        # logits_i = (R_i - 1500) / temperature
-        ratings_tensor = torch.tensor(ratings, dtype=torch.float, device=target_scores.device)
-        logits = (ratings_tensor - 1500.0) / temperature
+        # Zero-center ratings then scale by temperature, combining with UWO term
+        logits = (w_tournament * (ratings_tensor - 1500.0) + w_blade * uwo_term) / temperature
         logits = logits - torch.max(logits)  # numerical stability
         probs = torch.softmax(logits, dim=0)
         champion = int(torch.multinomial(probs, num_samples=1).item())

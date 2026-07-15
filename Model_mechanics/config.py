@@ -31,7 +31,7 @@ NOTE ON BLADES:
 """
 
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, Optional
 
 
 @dataclass
@@ -118,8 +118,8 @@ class SwissKnifeConfig:
     'option_b' — speculative-decoding-integrated verifier (speculative_generator.py).
     'gsi_softmax'  — GSI with softmax selection over reasoning steps.
     'gsi_pairwise' — GSI with pairwise Bradley-Terry selection.
-    'gsi_swiss'    — GSI with Swiss-system matches → points → softmax.
-    'gsi_elo'      — GSI with Elo-system tournament selection.
+    'swiss'        — GSI with Swiss-system matches → points → softmax.
+    'elo_swiss'    — GSI with Elo-system tournament selection.
     'gsi_gumbel'   — GSI with speculative Gumbel-Top-k selection."""
 
     # ── GSI hyperparameters ─────────────────────────────────────────────
@@ -250,6 +250,50 @@ class SwissKnifeConfig:
     blade score vectors and the winner index. Used by make_plots.py to
     visualise the score-scale mismatch."""
 
+    # ── Phase 1 & 2 Thurstonian / Uncertainty Hyperparameters ───────────
+    sigma_mode: str = "none"
+    """Uncertainty estimation mode: 'none', 'mc_dropout', or 'log_ratio_proxy'."""
+
+    sigma_mc_samples: int = 5
+    """Number of forward passes to run for mc_dropout."""
+
+    sigma_dropout_p: Optional[float] = None
+    """Override dropout probability during test-time MC dropout. If None, uses training dropout."""
+
+    w_tournament: float = 1.0
+    """Weight of tournament score in final champion selection logits."""
+
+    w_blade: float = 1.0
+    """Weight of blade reward / UWO score in final champion selection logits."""
+
+    uwo_lambda: float = 0.5
+    """Uncertainty penalty coefficient lambda in (mu - lambda * sigma)."""
+
+    adaptive_threshold: bool = False
+    """If True, calibrates the threshold dynamically using a rolling percentile."""
+
+    threshold_percentile: float = 10.0
+    """Percentile (e.g. 10th percentile) to use for the adaptive threshold."""
+
+    threshold_buffer_size: int = 20
+    """Size of the rolling window for threshold percentile calibration."""
+
+    with_fallback: bool = True
+    """If False, disables the verifier fallback loop (runs in Mode B, accepting unconditionally)."""
+
+    hard_draw: bool = False
+    """If True, uses hard Bernoulli draws instead of soft outcomes for Thurstonian matchups."""
+
+    probabilistic: bool = False
+    """If True, forces Thurstonian CDF win-probability for every Elo match, making it possible
+    for a lower-scoring candidate to beat a higher-scoring one.  When False (default), the match
+    uses the Bradley-Terry sigmoid unless sigmas are explicitly provided via sigma_mode.
+    Enabling this together with sigma_mode='log_ratio_proxy' or 'mc_dropout' gives the full
+    Thurstonian Case-V probabilistic tournament described in the research proposal."""
+
+    rrm_n_candidates: int = 4
+    """Number of parallel GSI candidates generated in rrm_pool mode."""
+
     def __post_init__(self):
         assert 0.0 <= self.alpha <= 1.0, f"α must be in [0,1], got {self.alpha}"
         assert self.K >= 2, f"K must be ≥ 2, got {self.K}"
@@ -266,13 +310,14 @@ class SwissKnifeConfig:
         assert self.elo_rounds >= 1, f"elo_rounds must be ≥ 1, got {self.elo_rounds}"
         _valid_gen_modes = (
             "option_a", "option_b",
-            "gsi_softmax", "gsi_pairwise", "gsi_swiss", "gsi_elo", "gsi_gumbel",
+            "gsi_softmax", "gsi_pairwise", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b", "gsi_gumbel",
+            "rrm_pool",
         )
         assert self.generation_mode in _valid_gen_modes, \
             f"generation_mode must be one of {_valid_gen_modes}, got '{self.generation_mode}'"
 
         # GSI-specific validation
-        if self.generation_mode.startswith("gsi_"):
+        if self.generation_mode.startswith("gsi_") or self.generation_mode in ("swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b"):
             assert self.gsi_n >= 2, f"gsi_n must be ≥ 2, got {self.gsi_n}"
             assert self.gsi_max_step_tokens >= 1, \
                 f"gsi_max_step_tokens must be ≥ 1, got {self.gsi_max_step_tokens}"

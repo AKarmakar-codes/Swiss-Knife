@@ -32,7 +32,7 @@ from Model_mechanics.models import (
     load_drafter_tokenizer,
 )
 from Model_mechanics.blades import DPOBlade
-from Model_mechanics.gsi_elo import GSIEloGenerator
+from Model_mechanics.elo_swiss import EloSwissGenerator
 from evaluation.benchmark_gsi_strategies_harmlessness import detect_refusal, compute_response_blade_reward, extract_prompt
 
 logging.basicConfig(
@@ -100,7 +100,7 @@ def main():
         max_new_tokens=args.max_tokens,
         dtype=args.dtype,
         device=device,
-        generation_mode="gsi_elo",
+        generation_mode="elo_swiss",
         gsi_n=args.gsi_n,
         gsi_threshold=args.gsi_threshold,
         seed=args.seed,
@@ -125,7 +125,7 @@ def main():
         
         # Configure generator
         base_cfg.elo_temperature = temp
-        gen = GSIEloGenerator(
+        gen = EloSwissGenerator(
             base_cfg,
             drafter_model,
             drafter_tokenizer,
