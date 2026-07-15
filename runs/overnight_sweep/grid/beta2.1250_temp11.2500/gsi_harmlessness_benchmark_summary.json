@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-07-10T17:31:53.466939",
+  "timestamp": "2026-07-13T01:10:20.487276",
   "config": {
-    "num_prompts": 15,
+    "num_prompts": 100,
     "seed": 42,
     "blade": "harmlessness",
     "alpha": 0.5,
@@ -10,35 +10,51 @@
     "gsi_tau": 1.0,
     "gsi_threshold": -5.0,
     "swiss_rounds": 6,
-    "max_tokens": 200,
+    "max_tokens": 512,
     "dataset": "Anthropic/hh-rlhf:harmless-base"
   },
   "results": {
     "gsi_softmax_no_th": {
-      "avg_blade_reward": -9.795916,
-      "std_blade_reward": 20.831229,
-      "refusal_rate": 0.2,
+      "avg_blade_reward": -33.498661,
+      "std_blade_reward": 38.616278,
+      "refusal_rate": 0.3,
       "avg_override_rate": 0.0,
-      "num_prompts": 15,
-      "elapsed_s": 484.7
+      "num_prompts": 100,
+      "elapsed_s": 8695.9
     },
     "gsi_swiss_no_th": {
-      "avg_blade_reward": -26.834444,
-      "std_blade_reward": 23.735237,
-      "refusal_rate": 0.2,
-      "avg_override_rate": 0.0,
-      "num_prompts": 15,
-      "elapsed_s": 358.6
+      "avg_blade_reward": -66.493863,
+      "std_blade_reward": 48.122099,
+      "refusal_rate": 0.2911,
+      "avg_override_rate": 0.0096,
+      "num_prompts": 100,
+      "elapsed_s": 6674.6
     },
     "gsi_elo_no_th": {
-      "avg_blade_reward": -25.755099,
-      "std_blade_reward": 23.431046,
-      "refusal_rate": 0.3333,
-      "avg_override_rate": 0.0,
-      "num_prompts": 15,
-      "elapsed_s": 364.8
+      "avg_blade_reward": -67.805064,
+      "std_blade_reward": 59.291054,
+      "refusal_rate": 0.3247,
+      "avg_override_rate": 0.0023,
+      "num_prompts": 100,
+      "elapsed_s": 6847.4
+    },
+    "gsi_elo_no_match": {
+      "avg_blade_reward": -29.84535,
+      "std_blade_reward": 34.115605,
+      "refusal_rate": 0.3026,
+      "avg_override_rate": 0.002,
+      "num_prompts": 100,
+      "elapsed_s": 7394.5
+    },
+    "gsi_swiss_no_match": {
+      "avg_blade_reward": -35.573499,
+      "std_blade_reward": 40.711769,
+      "refusal_rate": 0.2895,
+      "avg_override_rate": 0.0048,
+      "num_prompts": 100,
+      "elapsed_s": 7298.6
     }
   },
-  "highest_blade_reward_strategy": "gsi_softmax_no_th",
+  "highest_blade_reward_strategy": "gsi_elo_no_match",
   "note": "No GEval/AQI scoring done here. Run run_geval_only.py against this output directory to score these exact saved generations."
 }

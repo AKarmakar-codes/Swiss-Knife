@@ -5,14 +5,15 @@ Swiss Knife — Overnight β × elo_temperature Sweep
 Runs the full pipeline you described end-to-end, unattended:
 
   1. For every (beta, elo_temperature) pair in a 5x5 grid (25 configs),
-     runs benchmark_gsi_strategies_harmlessness_no_th.py for all 3
-     strategies (gsi_softmax_no_th, gsi_swiss_no_th, gsi_elo_no_th),
-     15 prompts each -> 75 *_results.json files total.
+     runs benchmark_gsi_strategies_harmlessness_no_th.py for all 5
+     strategies (gsi_softmax_no_th, gsi_swiss_no_th, gsi_elo_no_th,
+     gsi_swiss_no_match, gsi_elo_no_match),
+     15 prompts each -> 125 *_results.json files total.
      Up to 6 configs run concurrently, one per GPU (GPUs 1-6; GPU 0 is
      left alone because your vLLM tribunal judge server is on it).
-  2. Converts all 75 *_results.json -> *.jsonl for the tribunal.
+  2. Converts all 125 *_results.json -> *.jsonl for the tribunal.
   3. Runs the tribunal (tribunal/tribunal/run_eval.py) once, pointed at
-     the folder of all 75 jsonl files (tribunal is linear/single-process
+     the folder of all 125 jsonl files (tribunal is linear/single-process
      and expects to be pointed at a folder, per config.py/run_eval.py).
   4. Reads tribunal/eval_results overnight/model_summary.csv and reports
      the best (beta, elo_temperature) pair per strategy and overall,
@@ -23,32 +24,38 @@ Runs the full pipeline you described end-to-end, unattended:
       better and we subtract them).
   5. Plots graphs from that same model_summary.csv:
        - ONE bar chart per (beta, temperature) config (25 total), each
-         showing all 3 strategies side-by-side across the 6 tribunal
+         showing all 5 strategies side-by-side across the 6 tribunal
          rubrics, saved to runs/overnight_sweep/plots/grid/ with a
          filename tied to that config's own tag (never overwrites another
          config's plot).
        - TWO unified overview plots covering the whole sweep at once:
          a per-strategy heatmap of composite_score over the full
          (beta, temperature) grid, and a safety-vs-quality scatter of all
-         75 points colored by strategy. Saved to
+         125 points colored by strategy. Saved to
          runs/overnight_sweep/plots/ under their own fixed names, which
          is safe because they're written exactly once per sweep run and
          live in a different location than the 25 per-config files.
 
 IMPORTANT CAVEATS -- please read before trusting the "best config" output:
-  - elo_temperature ONLY affects the gsi_elo_no_th strategy (confirmed by
-    grep: Model_mechanics/config.py, gsi_elo_no_th.py, speculative_generator.py).
+  - elo_temperature ONLY affects the gsi_elo_no_th and gsi_elo_no_match
+    strategies (confirmed by grep: Model_mechanics/config.py,
+    gsi_elo_no_th.py, gsi_elo_no_match.py, speculative_generator.py).
     gsi_softmax_no_th and gsi_swiss_no_th do not consume elo_temperature at
     all, so their 5 "temperature" repeats per beta are exact repeats of the
     same generation call modulo whatever randomness --seed doesn't pin down.
+    gsi_swiss_no_match is a Swiss-system tournament, not an Elo one, so it
+    also does not consume elo_temperature -- its "temperature" repeats are
+    exact repeats too, same caveat as gsi_swiss_no_th.
     This is expected and NOT a bug in this script -- it mirrors how the
     underlying benchmark script itself splits temperature usage. The
-    per-strategy "best config" numbers for softmax/swiss are really just
-    reporting beta sensitivity; only the gsi_elo_no_th numbers reflect a
-    genuine 2D sweep. The same is true of their heatmap rows in the unified
-    overview plot: expect near-identical values across the temperature axis
-    for softmax/swiss, and only real variation for elo.
-  - 15 prompts x 25 configs x 3 strategies is a small sample per cell.
+    per-strategy "best config" numbers for softmax/swiss/swiss_no_match are
+    really just reporting beta sensitivity; only the gsi_elo_no_th and
+    gsi_elo_no_match numbers reflect a genuine 2D sweep. The same is true
+    of their heatmap rows in the unified overview plot: expect
+    near-identical values across the temperature axis for
+    softmax/swiss/swiss_no_match, and only real variation for the two elo
+    strategies.
+  - 15 prompts x 25 configs x 5 strategies is a small sample per cell.
     Treat "best" as a point estimate, not a statistically significant
     winner -- especially for cells that differ by a few thousandths.
   - This script assumes each GPU has enough VRAM to hold one full copy of
@@ -96,7 +103,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-STRATEGIES = ["gsi_softmax_no_th", "gsi_swiss_no_th", "gsi_elo_no_th"]
+STRATEGIES = ["gsi_softmax_no_th", "gsi_swiss_no_th", "gsi_elo_no_th", "gsi_elo_no_match", "gsi_swiss_no_match"]
 
 # Fixed strategy -> color mapping so a given strategy is always the same
 # color across all 25 per-config plots and the unified overview.
@@ -104,11 +111,15 @@ STRATEGY_COLORS = {
     "gsi_softmax_no_th": "#4C72B0",
     "gsi_swiss_no_th": "#DD8452",
     "gsi_elo_no_th": "#C44E52",
+    "gsi_swiss_no_match": "#8172B2",
+    "gsi_elo_no_match": "#55A868",
 }
 STRATEGY_LABELS = {
     "gsi_softmax_no_th": "Softmax",
     "gsi_swiss_no_th": "Swiss",
     "gsi_elo_no_th": "Elo",
+    "gsi_swiss_no_match": "Swiss (no-match)",
+    "gsi_elo_no_match": "Elo (no-match)",
 }
 
 logging.basicConfig(
@@ -169,7 +180,7 @@ def run_one_config(
     Run benchmark_gsi_strategies_harmlessness_no_th.py for ALL strategies at
     this (beta, temp) pair, pinned to one physical GPU via CUDA_VISIBLE_DEVICES.
     Writes results into output_root/<tag>/ (one dir per config, containing
-    the 3 *_results.json files for that config, named by strategy as the
+    the 5 *_results.json files for that config, named by strategy as the
     script itself names them).
     """
     tag = cfg_tag(beta, temp)
@@ -294,7 +305,7 @@ def convert_all_to_jsonl(grid_root: str, jsonl_root: str) -> int:
     Walks grid_root/<cfg_tag>/<strategy>_results.json and writes
     jsonl_root/<strategy>__<cfg_tag>.jsonl  (unique per strategy+config,
     so the tribunal -- which uses the .jsonl STEM as the model name --
-    can distinguish all 75 files).
+    can distinguish all 125 files).
     Returns number of jsonl files written.
     """
     os.makedirs(jsonl_root, exist_ok=True)
@@ -459,8 +470,9 @@ def analyze_results(tribunal_output_dir: str, report_path: str):
     )
     lines.append(
         "\n**Read the caveats at the top of run_overnight_sweep.py before trusting this** "
-        "— elo_temperature only affects gsi_elo_no_th; softmax/swiss rows only really tell "
-        "you about beta sensitivity, and n=15 prompts/cell is a small sample.\n"
+        "— elo_temperature only affects gsi_elo_no_th and gsi_elo_no_match; softmax/swiss/"
+        "swiss_no_match rows only really tell you about beta sensitivity, and n=15 "
+        "prompts/cell is a small sample.\n"
     )
 
     lines.append("\n## Best (beta, temperature) per strategy\n")
@@ -492,7 +504,7 @@ def analyze_results(tribunal_output_dir: str, report_path: str):
 
     lines.append(
         "\n## Plots\n\n"
-        "- Per-config comparisons (all 3 strategies, all 6 rubrics), one file per "
+        "- Per-config comparisons (all 5 strategies, all 6 rubrics), one file per "
         "(beta, temperature) cell: `plots/grid/beta{B:.4f}_temp{T:.4f}.png`\n"
         "- Unified overview across the whole sweep: "
         "`plots/unified_composite_heatmap.png` and `plots/unified_safety_vs_quality.png`\n"
@@ -523,7 +535,7 @@ def plot_per_config_grid(df, plots_root: str):
     """
     One bar chart PER (beta, temperature) config (25 total with the default
     grid): x-axis = the 6 tribunal rubrics, one colored bar per strategy per
-    rubric, so you can see all 3 strategies side-by-side for that exact
+    rubric, so you can see all 5 strategies side-by-side for that exact
     config. Filenames are keyed off (beta, temperature) so each config's
     plot lands in its own file and never overwrites another config's.
     """
@@ -590,19 +602,20 @@ def plot_per_config_grid(df, plots_root: str):
 
 def plot_unified_overview(df, plots_root: str):
     """
-    Two plots that summarize the ENTIRE sweep at once (all 25 configs x 3
+    Two plots that summarize the ENTIRE sweep at once (all 25 configs x 5
     strategies), each written to its own fixed filename under plots_root
     (not plots_root/grid, so they can never collide with the 25 per-config
     files above):
 
       1. unified_composite_heatmap.png — one heatmap per strategy, beta on
          the y-axis, elo_temperature on the x-axis, cell = composite_score.
-         For gsi_softmax_no_th / gsi_swiss_no_th expect near-identical rows
-         across temperature (they don't consume elo_temperature — see the
-         caveats at the top of this script); gsi_elo_no_th's heatmap is the
-         only one reflecting a genuine 2D sweep.
+         For gsi_softmax_no_th / gsi_swiss_no_th / gsi_swiss_no_match expect
+         near-identical rows across temperature (they don't consume
+         elo_temperature — see the caveats at the top of this script);
+         gsi_elo_no_th's and gsi_elo_no_match's heatmaps are the only ones
+         reflecting a genuine 2D sweep.
       2. unified_safety_vs_quality.png — scatter of quality_mean (x) vs
-         safety_bad_mean (y, lower/left is better/safer) for all 75 points,
+         safety_bad_mean (y, lower/left is better/safer) for all 125 points,
          colored by strategy, so you can see the whole sweep's
          quality/safety trade-off frontier in one view.
     """
@@ -660,7 +673,7 @@ def plot_unified_overview(df, plots_root: str):
     plt.close(fig)
     logger.info("Wrote unified heatmap to %s", heatmap_path)
 
-    # ── 2. Safety-vs-quality scatter, all 75 points, colored by strategy ────
+    # ── 2. Safety-vs-quality scatter, all 125 points, colored by strategy ────
     fig, ax = plt.subplots(figsize=(7, 6))
     for strat in strategies:
         sub = df[df["strategy"] == strat]
@@ -704,10 +717,10 @@ def parse_args():
     p.add_argument("--temp-min", type=float, default=10.0)
     p.add_argument("--temp-max", type=float, default=15.0)
     p.add_argument("--temp-steps", type=int, default=5)
-    p.add_argument("--gpus", type=int, nargs="+", default=[1, 2, 3, 4, 5, 6],
+    p.add_argument("--gpus", type=int, nargs="+", default=[1, 2, 3, 4, 5, 6,7],
                    help="Physical GPU ids to use for generation (GPU 0 is left for the tribunal judge server).")
-    p.add_argument("--num-prompts", type=int, default=15)
-    p.add_argument("--max-tokens", type=int, default=200)
+    p.add_argument("--num-prompts", type=int, default=100)
+    p.add_argument("--max-tokens", type=int, default=512)
     p.add_argument("--gsi-n", type=int, default=8)
     p.add_argument("--python-bin", type=str, default=sys.executable)
     p.add_argument("--judge-url", type=str, default=None,
