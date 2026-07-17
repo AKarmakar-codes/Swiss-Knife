@@ -14,14 +14,17 @@ Helpfulness-focused GSI benchmark that:
       reward stats and draft-vs-blade override rate.
 
 Strategies tested:
-    1. gsi_softmax          — Standard GSI: softmax(β·r̃) selection
-    2. gsi_swiss            — Swiss-system → points table → softmax
-    3. gsi_elo              — Elo-system tournament selection
-    4. baseline_adapter     — Greedy decoding on base model + helpfulness adapter
+    1. gsi_softmax              — Standard GSI: softmax(β·r̃) selection
+    2. swiss                    — Swiss-system → points table → softmax
+    3. elo_swiss                — Elo-system tournament selection
+    4. swiss_mode_b             — Swiss-system in Mode B (no fallback)
+    5. elo_swiss_mode_b         — Elo-system tournament in Mode B (no fallback)
+    6. baseline_adapter         — Greedy decoding on base model + helpfulness adapter
+    7. baseline_adapter_softmax — Softmax sampling on base model + helpfulness adapter
 
 Run:
     python evaluation/benchmark_gsi_strategies_helpfulness.py \
-        --strategies gsi_softmax gsi_elo gsi_swiss baseline_adapter \
+        --strategies gsi_softmax swiss elo_swiss swiss_mode_b elo_swiss_mode_b baseline_adapter baseline_adapter_softmax \
         --num-prompts 100 \
         --gsi-n 8 \
         --beta 0.1 \
@@ -86,6 +89,40 @@ class BaselineGreedyGenerator:
         if return_stats:
             return generated_text, EmptyStats()
         return generated_text
+
+
+class BaselineSoftmaxGenerator:
+    def __init__(self, tokenizer, model, name="baseline_softmax", cfg=None):
+        self.tokenizer = tokenizer
+        self.model = model
+        self.name = name
+        self.cfg = cfg
+    def generate(self, prompt: str, max_new_tokens: int, return_stats: bool = False, **kwargs):
+        device = next(self.model.parameters()).device
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(device)
+        temp = self.cfg.temperature if self.cfg else 1.0
+        top_k = self.cfg.top_k if self.cfg else 50
+        top_p = self.cfg.top_p if self.cfg else 0.95
+        with torch.no_grad():
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=True,
+                temperature=temp,
+                top_k=top_k,
+                top_p=top_p,
+                pad_token_id=self.tokenizer.pad_token_id,
+            )
+        generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        
+        class EmptyStats:
+            def to_dict(self):
+                return {}
+        
+        if return_stats:
+            return generated_text, EmptyStats()
+        return generated_text
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -247,8 +284,8 @@ def parse_args():
                     help="Use the tilted reward instead of the blended match score inside GSI-Elo.")
     p.add_argument(
         "--strategies", type=str, nargs="+",
-        default=["gsi_softmax", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b", "baseline_adapter"],
-        choices=["gsi_softmax", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b", "baseline_adapter"],
+        default=["gsi_softmax", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b", "baseline_adapter", "baseline_adapter_softmax"],
+        choices=["gsi_softmax", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b", "baseline_adapter", "baseline_adapter_softmax"],
         help="Which strategies to benchmark.",
     )
     # Phase 1 & 2 arguments
@@ -357,6 +394,7 @@ def main():
         "swiss_mode_b": lambda cfg: SwissModeBGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
         "elo_swiss_mode_b": lambda cfg: EloSwissModeBGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
         "baseline_adapter": lambda cfg: BaselineGreedyGenerator(tokenizer, blade_model, "baseline_adapter"),
+        "baseline_adapter_softmax": lambda cfg: BaselineSoftmaxGenerator(tokenizer, blade_model, "baseline_adapter_softmax", cfg),
     }
 
     for strat_name in args.strategies:

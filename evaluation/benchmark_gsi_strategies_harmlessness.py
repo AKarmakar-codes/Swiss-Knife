@@ -19,15 +19,20 @@ Harmlessness-focused GSI benchmark that:
       whatever downstream judge metric (GEval, AQI, etc.) you add later.
 
 Strategies tested:
-    1. gsi_softmax          — Standard GSI: softmax(β·r̃) selection
-    2. gsi_pairwise         — Bradley-Terry: P(A wins) = σ(MATCH(A,B)/τ)
-    3. swiss                — Swiss-system → points table → softmax
-    4. elo_swiss            — Elo-system tournament selection
-    5. gsi_gumbel           — Speculative Gumbel-Top-k with GSI fallback
+    1. baseline                 — Greedy decoding on base model
+    2. baseline_adapter         — Greedy decoding on base model + harmlessness adapter
+    3. baseline_adapter_softmax — Softmax sampling on base model + harmlessness adapter
+    4. gsi_softmax              — Standard GSI: softmax(β·r̃) selection
+    5. gsi_pairwise             — Bradley-Terry: P(A wins) = σ(MATCH(A,B)/τ)
+    6. swiss                    — Swiss-system → points table → softmax
+    7. elo_swiss                — Elo-system tournament selection
+    8. swiss_mode_b             — Swiss-system in Mode B (no fallback)
+    9. elo_swiss_mode_b         — Elo-system tournament in Mode B (no fallback)
+    10. gsi_gumbel              — Speculative Gumbel-Top-k with GSI fallback
 
 Run:
     python evaluation/benchmark_gsi_strategies_harmlessness.py \\
-        --strategies gsi_softmax gsi_pairwise swiss elo_swiss gsi_gumbel \\
+        --strategies baseline gsi_softmax swiss elo_swiss swiss_mode_b elo_swiss_mode_b baseline_adapter_softmax \\
         --num-prompts 100 \\
         --gsi-n 8 \\
         --beta 0.1 \\
@@ -108,6 +113,40 @@ class BaselineGreedyGenerator:
         if return_stats:
             return generated_text, EmptyStats()
         return generated_text
+
+
+class BaselineSoftmaxGenerator:
+    def __init__(self, tokenizer, model, name="baseline_softmax", cfg=None):
+        self.tokenizer = tokenizer
+        self.model = model
+        self.name = name
+        self.cfg = cfg
+    def generate(self, prompt: str, max_new_tokens: int, return_stats: bool = False, **kwargs):
+        device = next(self.model.parameters()).device
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(device)
+        temp = self.cfg.temperature if self.cfg else 1.0
+        top_k = self.cfg.top_k if self.cfg else 50
+        top_p = self.cfg.top_p if self.cfg else 0.95
+        with torch.no_grad():
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=True,
+                temperature=temp,
+                top_k=top_k,
+                top_p=top_p,
+                pad_token_id=self.tokenizer.pad_token_id,
+            )
+        generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        
+        class EmptyStats:
+            def to_dict(self):
+                return {}
+        
+        if return_stats:
+            return generated_text, EmptyStats()
+        return generated_text
+
 
 
 def detect_refusal(text: str) -> bool:
@@ -303,8 +342,8 @@ def parse_args():
     )
     p.add_argument(
         "--strategies", type=str, nargs="+",
-        default=["baseline", "gsi_softmax", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b"],
-        choices=["baseline", "baseline_adapter", "gsi_softmax", "gsi_pairwise", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b", "gsi_gumbel"],
+        default=["baseline", "gsi_softmax", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b", "baseline_adapter_softmax"],
+        choices=["baseline", "baseline_adapter", "baseline_adapter_softmax", "gsi_softmax", "gsi_pairwise", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b", "gsi_gumbel"],
         help="Which strategies to benchmark.",
     )
     # gsi_gumbel-specific args
@@ -420,6 +459,7 @@ def main():
     strategy_generators = {
         "baseline": lambda cfg: BaselineGreedyGenerator(tokenizer, blade_model, "baseline"),
         "baseline_adapter": lambda cfg: BaselineGreedyGenerator(tokenizer, blade_model, "baseline_adapter"),
+        "baseline_adapter_softmax": lambda cfg: BaselineSoftmaxGenerator(tokenizer, blade_model, "baseline_adapter_softmax", cfg),
         "gsi_softmax": lambda cfg: GSISoftmaxGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
         "gsi_pairwise": lambda cfg: GSIPairwiseGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
         "swiss": lambda cfg: SwissGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),

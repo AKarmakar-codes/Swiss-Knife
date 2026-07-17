@@ -85,6 +85,7 @@ def convert(input_dir: str, output_dir: str):
 _PRETTY_LABELS = {
     "baseline_argmax_harmlessness": "Baseline\n(Argmax)",
     "baseline_adapter":             "Baseline\n(Adapter)",
+    "baseline_adapter_softmax":     "Baseline\n(Adapter Softmax)",
     "stochastic_knockout_dropout":  "Stochastic\nDropout",
     "stochastic_knockout_proj":     "Stochastic\nProj",
     "stochastic_knockout_subsample":"Stochastic\nSubsample",

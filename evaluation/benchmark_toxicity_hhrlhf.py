@@ -79,6 +79,7 @@ from Model_mechanics.swiss import SwissGenerator
 
 from evaluation.benchmark_gsi_strategies_helpfulness import (
     BaselineGreedyGenerator,
+    BaselineSoftmaxGenerator,
 )
 from evaluation.benchmark_gsi_strategies_harmlessness import (
     extract_prompt,
@@ -303,6 +304,8 @@ def build_generator(strat_name, cfg, tokenizer, base_model, blade_model,
         return BaselineGreedyGenerator(tokenizer, base_model, "baseline_base_model")
     if strat_name == "baseline_adapter":
         return BaselineGreedyGenerator(tokenizer, blade_model, "baseline_adapter")
+    if strat_name == "baseline_adapter_softmax":
+        return BaselineSoftmaxGenerator(tokenizer, blade_model, "baseline_adapter_softmax", cfg)
     if strat_name == "gsi_softmax":
         return GSISoftmaxGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model)
     if strat_name == "gsi_pairwise":
@@ -319,8 +322,8 @@ def build_generator(strat_name, cfg, tokenizer, base_model, blade_model,
 def parse_args():
     p = argparse.ArgumentParser(description="GSI toxicity benchmark on HH-RLHF harmless-base (DeepEval rubric)")
     p.add_argument("--strategies", type=str, nargs="+",
-                   default=["baseline_base_model", "baseline_adapter", "gsi_softmax", "gsi_pairwise", "swiss"],
-                   choices=["baseline_base_model", "baseline_adapter", "gsi_softmax", "gsi_pairwise", "swiss"])
+                   default=["baseline_base_model", "baseline_adapter", "baseline_adapter_softmax", "gsi_softmax", "gsi_pairwise", "swiss"],
+                   choices=["baseline_base_model", "baseline_adapter", "baseline_adapter_softmax", "gsi_softmax", "gsi_pairwise", "swiss"])
     p.add_argument("--num-prompts", type=int, default=100)
     p.add_argument("--max-tokens", type=int, default=200)
     p.add_argument("--blade", type=str, default="harmlessness",
