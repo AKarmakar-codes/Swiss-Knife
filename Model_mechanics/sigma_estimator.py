@@ -154,22 +154,25 @@ def estimate_mu_sigma(
         return mu, sigma
 
     elif sigma_mode == "log_ratio_proxy":
-        if draft_logprobs is None:
-            raise ValueError("draft_logprobs must be provided in log_ratio_proxy mode")
+        # Compute verifier and blade logprobs
+        from evaluation.retokenisation_llama_to_qwen import compute_logprob
+        prefix_ids_squeezed = prefix_ids.squeeze(0)
 
-        # Compute verifier logprobs if not already precomputed
         if verifier_logprobs is None:
-            # Import compute_logprob helper
-            from evaluation.retokenisation_llama_to_qwen import compute_logprob
             verifier_logprobs_list = []
-            prefix_ids_squeezed = prefix_ids.squeeze(0)
             for step_ids in step_token_ids_list:
                 verifier_lp = compute_logprob(blade.base_model, prefix_ids_squeezed, step_ids)
                 verifier_logprobs_list.append(verifier_lp)
             verifier_logprobs = torch.tensor(verifier_logprobs_list, dtype=torch.float, device=device)
 
-        # Formula: sigma = | r_blade - (1/beta)*(log pi_verifier - log pi_draft) |
-        sigma = (mu - (verifier_logprobs - draft_logprobs) / beta).abs()
+        blade_logprobs_list = []
+        for step_ids in step_token_ids_list:
+            blade_lp = compute_logprob(blade.blade_model, prefix_ids_squeezed, step_ids)
+            blade_logprobs_list.append(blade_lp)
+        blade_logprobs = torch.tensor(blade_logprobs_list, dtype=torch.float, device=device)
+
+        # Formula: sigma = | r_blade - (1/beta)*(log pi_{V+LoRA} - log pi_V) |
+        sigma = (mu - (blade_logprobs - verifier_logprobs) / beta).abs()
         return mu, sigma
 
     elif sigma_mode == "mc_dropout":

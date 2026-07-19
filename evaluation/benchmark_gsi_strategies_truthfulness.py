@@ -367,6 +367,9 @@ def parse_args():
     )
     p.add_argument("--num-prompts", type=int, default=15)
     p.add_argument("--max-tokens", type=int, default=80)
+    p.add_argument("--temperature", type=float, default=1.0)
+    p.add_argument("--top-p", type=float, default=0.95)
+    p.add_argument("--top-k", type=int, default=50)
     p.add_argument("--blade", type=str, default="truthfulness",
                     choices=["helpfulness", "harmlessness", "truthfulness"])
     p.add_argument("--gsi-n", type=int, default=8)
@@ -456,7 +459,17 @@ def main():
 
     # ── Load dataset ──────────────────────────────────────────────────
     logger.info("Loading TruthfulQA dataset (generation split)...")
-    dataset = load_dataset("truthfulqa/truthful_qa", "generation", split="validation")
+    try:
+        dataset = load_dataset("truthfulqa/truthful_qa", "generation", split="validation")
+    except Exception as e:
+        logger.warning("Failed to load dataset online (%s). Retrying with local cached files...", e)
+        from datasets import DownloadConfig
+        dataset = load_dataset(
+            "truthfulqa/truthful_qa",
+            "generation",
+            split="validation",
+            download_config=DownloadConfig(local_files_only=True),
+        )
     questions = dataset.select(
         range(min(args.num_prompts, len(dataset)))
     )
@@ -493,6 +506,9 @@ def main():
         hard_draw=args.hard_draw,
         probabilistic=args.probabilistic,
         normalize_scores=args.normalize_scores,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        top_k=args.top_k,
     )
 
     logger.info("Loading shared verifier base model (Qwen 2.5 7B) + blade...")
@@ -586,6 +602,9 @@ def main():
             hard_draw=args.hard_draw,
             probabilistic=args.probabilistic,
             normalize_scores=args.normalize_scores,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            top_k=args.top_k,
             **gumbel_kwargs,
         )
 

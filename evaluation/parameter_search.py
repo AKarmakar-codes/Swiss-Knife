@@ -320,7 +320,11 @@ def convert_json_to_jsonl(results_dir: str, tribunal_inputs_dir: str, model_name
 def start_judge_server(gpu_id: int, port: int, repo_root: str, log_dir: str,
                         judge_model: str, gpu_mem_util: float = 0.90) -> subprocess.Popen:
     cmd = [
-        sys.executable, "-m", "vllm.entrypoints.openai.api_server",
+        sys.executable, "-c",
+        "import transformers; "
+        "transformers.tokenization_utils_base.PreTrainedTokenizerBase.all_special_tokens_extended = "
+        "property(lambda self: self.all_special_tokens); "
+        "import runpy; runpy.run_module('vllm.entrypoints.openai.api_server', run_name='__main__')",
         "--model", judge_model,
         "--quantization", "bitsandbytes",
         "--load-format", "bitsandbytes",

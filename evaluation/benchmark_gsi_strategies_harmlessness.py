@@ -313,6 +313,9 @@ def parse_args():
     )
     p.add_argument("--num-prompts", type=int, default=15)
     p.add_argument("--max-tokens", type=int, default=400)
+    p.add_argument("--temperature", type=float, default=1.0)
+    p.add_argument("--top-p", type=float, default=0.95)
+    p.add_argument("--top-k", type=int, default=50)
     p.add_argument("--blade", type=str, default="harmlessness",
                     choices=["helpfulness", "harmlessness", "truthfulness"])
     p.add_argument("--gsi-n", type=int, default=8)
@@ -397,15 +400,52 @@ def main():
 
     device = "auto" if torch.cuda.is_available() else "cpu"
 
-    # ── Load dataset ──────────────────────────────────────────────────
-    logger.info("Loading HH-RLHF harmless-base dataset...")
-    dataset = load_dataset("Anthropic/hh-rlhf", data_dir="harmless-base", split="test")
+    # ── Load dataset (harmless-base ONLY) ────────────────────────────
+    logger.info("Loading HH-RLHF harmless-base dataset (seed=%d)...", args.seed)
+    dataset = None
+
+    # Stage 1: Attempt to load online (will cache locally if successful)
+    try:
+        dataset = load_dataset("Anthropic/hh-rlhf", data_dir="harmless-base", split="test")
+        logger.info("Dataset loaded online (harmless-base, %d rows).", len(dataset))
+    except Exception as e:
+        logger.warning("Online load failed: %s", e)
+
+    # Stage 2: Attempt to load from local cache with the correct config
+    if dataset is None:
+        try:
+            from datasets import DownloadConfig
+            dataset = load_dataset(
+                "Anthropic/hh-rlhf", data_dir="harmless-base", split="test",
+                download_config=DownloadConfig(local_files_only=True),
+            )
+            logger.info("Dataset loaded from local cache (harmless-base, %d rows).", len(dataset))
+        except Exception as e:
+            logger.warning("Local cache load failed: %s", e)
+
+    if dataset is None:
+        raise RuntimeError(
+            "\n\n"
+            "════════════════════════════════════════════════════════════════\n"
+            "  Cannot load Anthropic/hh-rlhf harmless-base split.\n"
+            "  The local cache contains the full merged dataset (helpful +\n"
+            "  harmless) but NOT the standalone harmless-base config.\n\n"
+            "  Run this ONCE while connected to the internet to cache it:\n\n"
+            "    python3 -c \"\n"
+            "    from datasets import load_dataset\n"
+            "    load_dataset('Anthropic/hh-rlhf', data_dir='harmless-base', split='test')\n"
+            "    print('Done — harmless-base now cached.')\n"
+            "    \"\n\n"
+            "  Then re-run the search.  No internet needed after that.\n"
+            "════════════════════════════════════════════════════════════════\n"
+        )
+
     dataset = dataset.shuffle(seed=args.seed).select(
         range(min(args.num_prompts, len(dataset)))
     )
 
     test_prompts = [extract_prompt(row["chosen"]) for row in dataset]
-    logger.info(f"Sampled {len(test_prompts)} prompts.")
+    logger.info("Sampled %d harmless-base prompts (seed=%d).", len(test_prompts), args.seed)
 
     # ── Load base model + blade (shared) ──────────────────────────────
     base_cfg = SwissKnifeConfig(
@@ -437,6 +477,9 @@ def main():
         threshold_buffer_size=args.threshold_buffer_size,
         hard_draw=args.hard_draw,
         probabilistic=args.probabilistic,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        top_k=args.top_k,
     )
 
     logger.info("Loading shared verifier base model (Qwen 2.5 7B) + blade...")
@@ -529,6 +572,9 @@ def main():
             threshold_buffer_size=args.threshold_buffer_size,
             hard_draw=args.hard_draw,
             probabilistic=args.probabilistic,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            top_k=args.top_k,
             **gumbel_kwargs,
         )
 

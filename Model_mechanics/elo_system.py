@@ -120,16 +120,18 @@ def elo_bracket(
     N = target_scores.shape[0]
     assert blade_scores.shape[0] == N, "Score tensor shapes must match"
     import random
+    raw_blade_scores = blade_scores.clone() if isinstance(blade_scores, torch.Tensor) else torch.tensor(blade_scores)
+
+    def _znorm(t: torch.Tensor) -> torch.Tensor:
+        if t.numel() <= 1:
+            return torch.zeros_like(t)
+        std = t.std()
+        if std < 1e-8:
+            return t - t.mean()
+        return (t - t.mean()) / (std + 1e-6)
 
     # Z-score normalization
     if normalize:
-        def _znorm(t: torch.Tensor) -> torch.Tensor:
-            if t.numel() <= 1:
-                return torch.zeros_like(t)
-            std = t.std()
-            if std < 1e-8:
-                return t - t.mean()
-            return (t - t.mean()) / (std + 1e-6)
         
         # Calculate standard deviations before normalization
         std_target = target_scores.std().item() if target_scores.numel() > 1 else 1.0
@@ -260,24 +262,49 @@ def elo_bracket(
                 a, ratings[a], b, ratings[b]
             )
 
-    # Determine champion using combined ratings and UWO term
+    # ── Step C: Uncertainty-Weighted Objective (UWO) Logit ──────────────────
+    # Formula: logit_i = w_tournament * znorm((R_i-1500)/T) + w_blade * znorm(μ_i - λ·σ_i)
+    #
+    # WHY Z-normalize each term:
+    #   The tournament term (R_i-1500)/T can be very large when T is small (e.g.
+    #   T≈1.36 gives ±50 point Elo swings of ±37 units) while the blade UWO term
+    #   μ_i - λσ_i lives in a narrow range (typically ±0.5 for DPO rewards).
+    #   Without normalisation w_tournament completely dominates regardless of its
+    #   set value.  Z-normalising each COMPLETE term independently across the N
+    #   candidates (zero mean, unit std) makes w_tournament and w_blade genuinely
+    #   comparable weights.  The relative ranking inside each term is preserved.
     ratings_tensor = torch.tensor(ratings, dtype=torch.float, device=target_scores.device)
-    
-    if sigmas_normed is not None:
-        uwo_term = blade_scores - uwo_lambda * sigmas_normed
+
+    if sigmas is not None:
+        if not isinstance(sigmas, torch.Tensor):
+            sigmas_tensor = torch.tensor(sigmas, dtype=torch.float, device=target_scores.device)
+        else:
+            sigmas_tensor = sigmas.to(target_scores.device)
+        uwo_term = raw_blade_scores - uwo_lambda * sigmas_tensor
     else:
-        uwo_term = blade_scores
+        uwo_term = raw_blade_scores
+
+    def _znorm_term(t: torch.Tensor) -> torch.Tensor:
+        """Z-normalize a 1-D tensor across candidates; returns zeros if constant."""
+        if t.numel() <= 1:
+            return torch.zeros_like(t)
+        std = t.std()
+        if std < 1e-8:
+            return t - t.mean()   # zero-center but don't divide by near-zero std
+        return (t - t.mean()) / (std + 1e-6)
 
     if temperature < 1e-5:
-        scores = w_tournament * (ratings_tensor - 1500.0) + w_blade * uwo_term
+        # Greedy (T→0): use raw tournament rank (argmax doesn't need normalised logits)
+        tournament_term = (ratings_tensor - 1500.0) / (temperature + 1e-8)
+        scores = w_tournament * _znorm_term(tournament_term) + w_blade * _znorm_term(uwo_term)
         champion = int(torch.argmax(scores).item())
         logger.debug(
             "Elo champion (Greedy, T=0): c%d (rating=%.1f)", champion, ratings[champion]
         )
     else:
-        # Zero-center ratings then scale by temperature, combining with UWO term
-        logits = (w_tournament * (ratings_tensor - 1500.0) + w_blade * uwo_term) / temperature
-        logits = logits - torch.max(logits)  # numerical stability
+        tournament_term = (ratings_tensor - 1500.0) / temperature
+        logits = w_tournament * _znorm_term(tournament_term) + w_blade * _znorm_term(uwo_term)
+        logits = logits - torch.max(logits)   # numerical stability before softmax
         probs = torch.softmax(logits, dim=0)
         champion = int(torch.multinomial(probs, num_samples=1).item())
         logger.debug(
