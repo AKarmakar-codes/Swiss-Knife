@@ -83,7 +83,7 @@ from transformers import PreTrainedModel, PreTrainedTokenizer
 from Model_mechanics.config import SwissKnifeConfig
 from Model_mechanics.blades import DPOBlade
 from Model_mechanics.stochastic_auditor import StochasticAuditor, StochasticAuditorConfig
-from evaluation.retokenisation_llama_to_qwen import compute_logprob, retokenize_step
+from evaluation.logprob_utilities import compute_logprob, retokenize_step
 
 logger = logging.getLogger(__name__)
 

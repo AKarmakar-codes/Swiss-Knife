@@ -294,6 +294,9 @@ class SwissKnifeConfig:
     rrm_n_candidates: int = 4
     """Number of parallel GSI candidates generated in rrm_pool mode."""
 
+    rrm_model_id: str = "divyajot5005/ndna"
+    """HuggingFace repository ID for the RRM judge model (e.g. 'divyajot5005/ndna' or 'Reward-Reasoning/RRM-7B')."""
+
     def __post_init__(self):
         assert 0.0 <= self.alpha <= 1.0, f"α must be in [0,1], got {self.alpha}"
         assert self.K >= 2, f"K must be ≥ 2, got {self.K}"

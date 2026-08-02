@@ -6,15 +6,11 @@ Single-GPU sequential search. Designed for a single NVIDIA DGX GPU with 128 GB
 unified memory where generation and judging MUST NOT overlap in VRAM.
 
 ─────────────────────────────────────────────────────────────────────────────
-HYPERPARAMETERS BEING SEARCHED
+HYPERPARAMETERS BEING SEARCHED  (6-dimensional search space)
 ─────────────────────────────────────────────────────────────────────────────
   elo_temperature  [1.0,  40.0]  Temperature T in the UWO logit: (R_i-1500)/T.
                                  Higher T → flatter probability distribution
                                  over candidates (more exploration).
-  beta             [0.01, 1.0]   DPO regularization strength. Scales the
-                                 KL-divergence penalty between the blade policy
-                                 and the base verifier. Small β → blade diverges
-                                 freely; large β → stays close to base verifier.
   w_tournament     [0.0,  3.0]   Weight for the Elo rating term in Step C UWO
                                  logit. Controls how much the Swiss tournament
                                  result influences final champion selection.
@@ -27,6 +23,13 @@ HYPERPARAMETERS BEING SEARCHED
                                  Swiss tournament bracket.
   gsi_n            [3,    16]    Number of candidate steps sampled from the
                                  Drafter per decoding step.
+
+  NOTE — beta (DPO regularization strength) is FIXED at 0.1 and NOT searched.
+  Rationale: (1) β should match the value used during blade training for
+  principled KL-penalty calibration. (2) The blade reward is Z-normalized
+  before entering the UWO logit, so any multiplicative constant (including β)
+  cancels out — its effect is entirely subsumed by w_blade. Sweeping β would
+  add a redundant 7th dimension without any discriminative power.
 
 ─────────────────────────────────────────────────────────────────────────────
 ALGORITHMIC NOTES  (what this script DOES to the GP, not what elo_system.py
@@ -71,8 +74,9 @@ EXECUTION FLOW
       d. Run tribunal.run_eval against the judge server.
       e. Kill the judge server.  Sleep 5 s.
       f. Read model_summary.csv, compute the scalar objective:
-           objective = 0.25*(helpfulness+relevance+response_quality+refusal)
-                     - 0.50*(toxicity+harmfulness)
+           quality = mean(response_quality, relevance)
+           safety  = 1 - mean(toxicity, harmfulness)
+           objective = (2 * quality * safety) / (quality + safety)
       g. Append the record and IMMEDIATELY write both search_state.json
          (full state, resumable) and all_observations.csv (for inspection).
          Optionally push to Hugging Face Hub as an offsite backup.
@@ -166,7 +170,6 @@ logger = logging.getLogger("bayes_search_opt")
 
 SEARCH_SPACE: Dict[str, Tuple[str, float, float, str, float]] = {
     "elo_temperature": ("--elo-temperature", 1.0,  40.0, "float", 15.0),
-    "beta":            ("--beta",            0.01, 1.0,  "float", 0.1),
     "w_tournament":    ("--w-tournament",     0.0,  3.0,  "float", 1.0),
     "w_blade":         ("--w-blade",          0.0,  3.0,  "float", 1.0),
     "uwo_lambda":      ("--uwo-lambda",       0.0,  1.0,  "float", 0.5),
@@ -180,18 +183,16 @@ FIXED_FLAGS = [
     "--probabilistic",
     "--sigma-mode", "log_ratio_proxy",
     "--gsi-max-step-tokens", "80",
+    # beta is fixed to the blade's training value; sweeping it is redundant
+    # because the blade reward is Z-normalized before entering the UWO logit,
+    # so any multiplicative scaling by beta cancels out (subsumed by w_blade).
+    "--beta", "0.1",
 ]
 
 STRATEGY_NAME = "elo_swiss_mode_b"
 
-OBJECTIVE_WEIGHTS = {
-    "helpfulness": 0.25,
-    "relevance": 0.25,
-    "response_quality": 0.25,
-    "refusal": 0.25,
-    "toxicity": -0.5,
-    "harmfulness": -0.5,
-}
+_QUALITY_METRICS = ["response_quality", "relevance"]
+_SAFETY_METRICS = ["toxicity", "harmfulness"]
 
 JUDGE_API_KEY = "EMPTY"
 
@@ -372,7 +373,29 @@ def read_metrics(results_dir: str, model_label: str) -> Optional[Dict[str, float
 
 
 def scalar_objective(metrics: Dict[str, float]) -> float:
-    return sum(OBJECTIVE_WEIGHTS[m] * metrics[m] for m in OBJECTIVE_WEIGHTS if m in metrics)
+    """
+    Harmonic mean (F1-style) of Quality axis and Safety axis.
+
+    quality = mean(response_quality, relevance)
+    safety  = 1 - mean(toxicity, harmfulness)
+
+    Helpfulness and refusal are intentionally excluded:
+      - Helpfulness penalises safe refusals on sensitive/adversarial prompts and duplicates quality/relevance.
+      - Refusal is a diagnostic metric, not an optimization target.
+    """
+    q_vals = [metrics[m] for m in _QUALITY_METRICS if m in metrics]
+    s_vals = [metrics[m] for m in _SAFETY_METRICS if m in metrics]
+
+    if not q_vals or not s_vals:
+        return 0.0
+
+    quality = sum(q_vals) / len(q_vals)
+    safety = 1.0 - (sum(s_vals) / len(s_vals))
+
+    quality = max(quality, 1e-6)
+    safety = max(safety, 1e-6)
+
+    return (2.0 * quality * safety) / (quality + safety)
 
 
 def _normalize(X: np.ndarray) -> np.ndarray:
@@ -711,8 +734,8 @@ def make_plots(records: List[dict], plot_dir: str, surrogate=None):
     fig.savefig(os.path.join(plot_dir, "hp_effects.png"), dpi=150, bbox_inches="tight")
     plt.close(fig)
 
-    if all(m in df.columns for m in ["helpfulness", "relevance", "response_quality", "toxicity", "harmfulness", "refusal"]):
-        df["quality_axis"] = df[["response_quality", "relevance", "helpfulness"]].mean(axis=1)
+    if all(m in df.columns for m in ["relevance", "response_quality", "toxicity", "harmfulness"]):
+        df["quality_axis"] = df[["response_quality", "relevance"]].mean(axis=1)
         df["safety_axis"] = 1 - df[["toxicity", "harmfulness"]].mean(axis=1)
 
         pts = df[["quality_axis", "safety_axis"]].values
@@ -737,7 +760,7 @@ def make_plots(records: List[dict], plot_dir: str, surrogate=None):
         for _, row in df.iterrows():
             ax.annotate(row["cfg_label"], (row["quality_axis"], row["safety_axis"]),
                         fontsize=6, textcoords="offset points", xytext=(4, 3))
-        ax.set_xlabel("Quality axis (mean of quality, relevance, helpfulness)")
+        ax.set_xlabel("Quality axis (mean of response_quality, relevance)")
         ax.set_ylabel("Safety axis (1 - mean of toxicity, harmfulness)")
         ax.set_title("Pareto Frontier — Quality vs Safety")
         ax.legend()

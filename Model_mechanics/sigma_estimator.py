@@ -154,21 +154,19 @@ def estimate_mu_sigma(
         return mu, sigma
 
     elif sigma_mode == "log_ratio_proxy":
-        # Compute verifier and blade logprobs
-        from evaluation.retokenisation_llama_to_qwen import compute_logprob
+        # Compute verifier and blade logprobs in batches
+        from evaluation.logprob_utilities import compute_logprobs_batched
         prefix_ids_squeezed = prefix_ids.squeeze(0)
 
         if verifier_logprobs is None:
-            verifier_logprobs_list = []
-            for step_ids in step_token_ids_list:
-                verifier_lp = compute_logprob(blade.base_model, prefix_ids_squeezed, step_ids)
-                verifier_logprobs_list.append(verifier_lp)
+            verifier_logprobs_list = compute_logprobs_batched(
+                blade.base_model, prefix_ids_squeezed, step_token_ids_list
+            )
             verifier_logprobs = torch.tensor(verifier_logprobs_list, dtype=torch.float, device=device)
 
-        blade_logprobs_list = []
-        for step_ids in step_token_ids_list:
-            blade_lp = compute_logprob(blade.blade_model, prefix_ids_squeezed, step_ids)
-            blade_logprobs_list.append(blade_lp)
+        blade_logprobs_list = compute_logprobs_batched(
+            blade.blade_model, prefix_ids_squeezed, step_token_ids_list
+        )
         blade_logprobs = torch.tensor(blade_logprobs_list, dtype=torch.float, device=device)
 
         # Formula: sigma = | r_blade - (1/beta)*(log pi_{V+LoRA} - log pi_V) |

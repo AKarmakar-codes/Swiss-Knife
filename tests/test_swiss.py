@@ -77,7 +77,7 @@ def test_swiss_generator():
     verifier_tokenizer = _make_mock_tokenizer()
     blade_model = _make_mock_model()
     
-    # Mock compute_logprob from evaluation.retokenisation_llama_to_qwen
+    # Mock compute_logprob from evaluation.logprob_utilities
     with patch("Model_mechanics.swiss.compute_logprob", return_value=0.5) as mock_compute:
         generator = SwissGenerator(
             cfg=cfg,
@@ -125,7 +125,7 @@ def test_swiss_generator_tilted():
     verifier_tokenizer = _make_mock_tokenizer()
     blade_model = _make_mock_model()
     
-    # Mock compute_logprob from evaluation.retokenisation_llama_to_qwen
+    # Mock compute_logprob from evaluation.logprob_utilities
     with patch("Model_mechanics.swiss.compute_logprob", return_value=0.5) as mock_compute:
         generator = SwissGenerator(
             cfg=cfg,

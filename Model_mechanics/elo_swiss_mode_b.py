@@ -126,7 +126,7 @@ from .config import SwissKnifeConfig
 from .elo_swiss import EloSwissGenerator, EloSwissStats
 from .elo_system import elo_bracket
 from .sigma_estimator import estimate_mu_sigma
-from evaluation.retokenisation_llama_to_qwen import compute_logprob
+from evaluation.logprob_utilities import compute_logprob, compute_logprobs_batched
 
 logger = logging.getLogger(__name__)
 
@@ -233,15 +233,10 @@ class EloSwissModeBGenerator(EloSwissGenerator):
             n_actual = len(step_texts)
 
             # ── Drafter log-probabilities ────────────────────────────────────
-            draft_logprobs_list = []
-            verifier_step_ids_list = []
-            for i in range(n_actual):
-                draft_step_ids = draft_step_ids_list[i]
-                draft_lp = compute_logprob(
-                    self.drafter_model, prefix_ids_drafter, draft_step_ids
-                )
-                draft_logprobs_list.append(draft_lp)
-                verifier_step_ids_list.append(draft_step_ids.to(self.verifier_device))
+            draft_logprobs_list = compute_logprobs_batched(
+                self.drafter_model, prefix_ids_drafter, draft_step_ids_list
+            )
+            verifier_step_ids_list = [ids.to(self.verifier_device) for ids in draft_step_ids_list]
 
             if not draft_logprobs_list:
                 logger.info("All candidate steps empty after logprob computation. Stopping.")
@@ -254,12 +249,9 @@ class EloSwissModeBGenerator(EloSwissGenerator):
             # ── Verifier log-probabilities (if needed) ───────────────────────
             # Needed for: tilted reward computation OR log_ratio_proxy sigma estimation.
             if active_use_tilted_elo or self.cfg.sigma_mode == "log_ratio_proxy":
-                verifier_logprobs_list = [
-                    compute_logprob(
-                        self.verifier_model, prefix_ids_verifier, step_ids
-                    )
-                    for step_ids in verifier_step_ids_list
-                ]
+                verifier_logprobs_list = compute_logprobs_batched(
+                    self.verifier_model, prefix_ids_verifier, verifier_step_ids_list
+                )
                 verifier_logprobs = torch.tensor(
                     verifier_logprobs_list, dtype=torch.float, device=self.verifier_device
                 )

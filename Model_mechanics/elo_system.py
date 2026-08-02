@@ -122,6 +122,16 @@ def elo_bracket(
     import random
     raw_blade_scores = blade_scores.clone() if isinstance(blade_scores, torch.Tensor) else torch.tensor(blade_scores)
 
+    # ── Fast path: Pure Softmax Baseline on raw blade points (recentered to 0 and divided by temp) ──
+    if w_tournament == 0.0 and not probabilistic and uwo_lambda == 0.0:
+        if temperature < 1e-5:
+            return int(torch.argmax(raw_blade_scores).item())
+        recentered_mus = raw_blade_scores - raw_blade_scores.mean()
+        det_logits = recentered_mus / temperature
+        det_logits = det_logits - torch.max(det_logits)
+        det_probs = torch.softmax(det_logits, dim=0)
+        return int(torch.multinomial(det_probs, num_samples=1).item())
+
     def _znorm(t: torch.Tensor) -> torch.Tensor:
         if t.numel() <= 1:
             return torch.zeros_like(t)
@@ -158,13 +168,16 @@ def elo_bracket(
     paired_before = set()
     indices = list(range(N))
 
-    # Decaying K-factors for each of the rounds
-    if rounds == 3:
-        k_factors = [40.0, 20.0, 10.0]
-    elif rounds == 6:
-        k_factors = [40.0, 32.0, 24.0, 16.0, 12.0, 10.0]
-    else:
-        k_factors = [40.0 * (0.5 ** i) for i in range(rounds)]
+    # Decaying K-factors: geometric interpolation from K_max=40 down to K_min=10
+    # across all R rounds. K_i = 40 * (10/40)^(i/(R-1)), giving K_0=40 and
+    # K_{R-1}=10 always, with every round contributing a meaningful update.
+    # Eliminates the old special cases for R=3 and R=6 in favour of one
+    # consistent formula valid for any R in the search range [2, 10].
+    _K_MAX, _K_MIN = 40.0, 10.0
+    k_factors = [
+        _K_MAX * (_K_MIN / _K_MAX) ** (i / max(rounds - 1, 1))
+        for i in range(rounds)
+    ]
 
     for round_idx in range(rounds):
         k_factor = k_factors[round_idx]
@@ -338,12 +351,12 @@ def stochastic_elo_bracket(
     paired_before = set()
     indices = list(range(N))
 
-    if rounds == 3:
-        k_factors = [40.0, 20.0, 10.0]
-    elif rounds == 6:
-        k_factors = [40.0, 32.0, 24.0, 16.0, 12.0, 10.0]
-    else:
-        k_factors = [40.0 * (0.5 ** i) for i in range(rounds)]
+    # Geometric K-factor schedule: K_i = 40*(10/40)^(i/(R-1)), K_0=40, K_{R-1}=10.
+    _K_MAX, _K_MIN = 40.0, 10.0
+    k_factors = [
+        _K_MAX * (_K_MIN / _K_MAX) ** (i / max(rounds - 1, 1))
+        for i in range(rounds)
+    ]
 
     for round_idx in range(rounds):
         k_factor = k_factors[round_idx]
@@ -466,12 +479,12 @@ def elo_score_summary(
     paired_before = set()
     indices = list(range(N))
 
-    if rounds == 3:
-        k_factors = [40.0, 20.0, 10.0]
-    elif rounds == 6:
-        k_factors = [40.0, 32.0, 24.0, 16.0, 12.0, 10.0]
-    else:
-        k_factors = [40.0 * (0.5 ** i) for i in range(rounds)]
+    # Geometric K-factor schedule: K_i = 40*(10/40)^(i/(R-1)), K_0=40, K_{R-1}=10.
+    _K_MAX, _K_MIN = 40.0, 10.0
+    k_factors = [
+        _K_MAX * (_K_MIN / _K_MAX) ** (i / max(rounds - 1, 1))
+        for i in range(rounds)
+    ]
 
     for round_idx in range(rounds):
         k_factor = k_factors[round_idx]

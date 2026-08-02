@@ -103,7 +103,7 @@ from .blades import DPOBlade
 from .elo_system import elo_bracket
 
 # Import utilities from evaluation
-from evaluation.retokenisation_llama_to_qwen import compute_logprob
+from evaluation.logprob_utilities import compute_logprob
 
 logger = logging.getLogger(__name__)
 

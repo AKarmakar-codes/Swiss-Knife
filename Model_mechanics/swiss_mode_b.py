@@ -19,7 +19,7 @@ from peft import PeftModel
 from .config import SwissKnifeConfig
 from .swiss import SwissGenerator, SwissStats, swiss_system_points_table
 from .sigma_estimator import estimate_mu_sigma
-from evaluation.retokenisation_llama_to_qwen import compute_logprob
+from evaluation.logprob_utilities import compute_logprob
 
 logger = logging.getLogger(__name__)
 

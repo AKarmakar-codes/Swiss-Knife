@@ -40,7 +40,7 @@ from .config import SwissKnifeConfig
 from .blades import DPOBlade
 
 # Import retokenisation utilities from evaluation
-from evaluation.retokenisation_llama_to_qwen import compute_logprob, retokenize_step
+from evaluation.logprob_utilities import compute_logprob, retokenize_step
 
 logger = logging.getLogger(__name__)
 

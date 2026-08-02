@@ -32,3 +32,16 @@ Reference:
 """
 
 __version__ = "0.3.0"
+
+from .mode_b_logit_mixing import (
+    compute_dual_blade_mode_b_step,
+    compute_multi_blade_mode_b_step,
+    MultiBladeModeBGenerator,
+)
+
+__all__ = [
+    "compute_dual_blade_mode_b_step",
+    "compute_multi_blade_mode_b_step",
+    "MultiBladeModeBGenerator",
+]
+

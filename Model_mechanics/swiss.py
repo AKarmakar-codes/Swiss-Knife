@@ -45,7 +45,7 @@ from .config import SwissKnifeConfig
 from .blades import DPOBlade
 
 # Import logprob utility (shared tokenizer — no retokenisation needed)
-from evaluation.retokenisation_llama_to_qwen import compute_logprob
+from evaluation.logprob_utilities import compute_logprob
 
 logger = logging.getLogger(__name__)
 
