@@ -1,0 +1,22 @@
+2026-08-04 02:02:43,449 [INFO] ================================================================================
+2026-08-04 02:02:43,449 [INFO] DPO Training — Swiss-Knife [HUMOUR BLADE]
+2026-08-04 02:02:43,449 [INFO] Started: 2026-08-04 02:02:43
+2026-08-04 02:02:43,449 [INFO] ================================================================================
+2026-08-04 02:02:43,449 [INFO] PyTorch: 2.11.0+cu130  |  CUDA: True
+2026-08-04 02:02:43,449 [INFO] GPU: NVIDIA GB10  |  VRAM: 128.5 GB  |  BF16: True
+2026-08-04 02:02:43,449 [INFO] Found checkpoint: ./dpo_out/humour/checkpoint-635
+2026-08-04 02:02:43,449 [INFO] Local path '/root/ndna/SFT/Qwen_SFT_merged' not found. Downloading from HF dataset repo 'divyajot5005/ndna'...
+2026-08-04 02:02:43,694 [INFO] HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/revision/main "HTTP/1.1 200 OK"
+2026-08-04 02:02:43,820 [INFO] HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-08-04 02:02:43,966 [INFO] HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D "HTTP/1.1 200 OK"
+2026-08-04 02:02:43,983 [INFO] SFT model downloaded to: /home/soumyajit_spark/.cache/huggingface/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+2026-08-04 02:02:43,983 [INFO] Loading tokenizer from SFT model path (/home/soumyajit_spark/.cache/huggingface/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged) …
+2026-08-04 02:02:44,266 [INFO] Loading train: ./dpo_datasets/humour_train.jsonl
+2026-08-04 02:02:44,266 [INFO] Loading eval:  ./dpo_datasets/humour_eval.jsonl
+2026-08-04 02:02:44,310 [INFO]   Train samples: 10,153
+2026-08-04 02:02:44,310 [INFO]   Eval  samples: 534
+2026-08-04 02:02:44,310 [INFO] Training already complete — loading checkpoint for inference.
+2026-08-04 02:02:44,311 [INFO] Sample prompt   (200 chars): '<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nTell me a funny joke about: call british<|im_end|>\n<|im_start|>assistant\n'
+2026-08-04 02:02:44,311 [INFO] Sample chosen   (200 chars): 'During WW II, a man was arrested in London for calling Winston Churchill a fool.\n\nThe next day in the House of Commons, the opposition members were ready to roast the government for this. "Are we livi'
+2026-08-04 02:02:44,311 [INFO] Sample rejected (200 chars): 'Sue Arthur Conan Boyle.'
+2026-08-04 02:02:46,422 [INFO] Loaded adapter from ./dpo_out/humour/final_adapter

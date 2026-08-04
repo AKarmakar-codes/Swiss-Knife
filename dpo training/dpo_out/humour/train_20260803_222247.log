@@ -1,0 +1,76 @@
+2026-08-03 22:22:47,709 [INFO] ================================================================================
+2026-08-03 22:22:47,709 [INFO] DPO Training — Swiss-Knife [HUMOUR BLADE]
+2026-08-03 22:22:47,709 [INFO] Started: 2026-08-03 22:22:47
+2026-08-03 22:22:47,709 [INFO] ================================================================================
+2026-08-03 22:22:47,709 [INFO] PyTorch: 2.11.0+cu130  |  CUDA: True
+2026-08-03 22:22:47,709 [INFO] GPU: NVIDIA GB10  |  VRAM: 128.5 GB  |  BF16: True
+2026-08-03 22:22:47,709 [INFO] Found checkpoint: ./dpo_out/humour/checkpoint-64
+2026-08-03 22:22:47,709 [INFO] Local path '/root/ndna/SFT/Qwen_SFT_merged' not found. Downloading from HF dataset repo 'divyajot5005/ndna'...
+2026-08-03 22:22:47,899 [INFO] HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/revision/main "HTTP/1.1 200 OK"
+2026-08-03 22:22:48,037 [INFO] HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-08-03 22:22:48,191 [INFO] HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D "HTTP/1.1 200 OK"
+2026-08-03 22:22:48,208 [INFO] SFT model downloaded to: /home/soumyajit_spark/.cache/huggingface/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+2026-08-03 22:22:48,208 [INFO] Loading tokenizer from SFT model path (/home/soumyajit_spark/.cache/huggingface/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged) …
+2026-08-03 22:22:48,513 [INFO] Loading train: ./dpo_datasets/humour_train.jsonl
+2026-08-03 22:22:48,513 [INFO] Loading eval:  ./dpo_datasets/humour_eval.jsonl
+2026-08-03 22:22:48,557 [INFO]   Train samples: 10,153
+2026-08-03 22:22:48,557 [INFO]   Eval  samples: 534
+2026-08-03 22:22:48,557 [INFO] Sample prompt   (200 chars): '<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nTell me a funny joke about: call british<|im_end|>\n<|im_start|>assistant\n'
+2026-08-03 22:22:48,557 [INFO] Sample chosen   (200 chars): 'During WW II, a man was arrested in London for calling Winston Churchill a fool.\n\nThe next day in the House of Commons, the opposition members were ready to roast the government for this. "Are we livi'
+2026-08-03 22:22:48,557 [INFO] Sample rejected (200 chars): 'Sue Arthur Conan Boyle.'
+2026-08-03 22:22:48,557 [INFO] Loading model from /home/soumyajit_spark/.cache/huggingface/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged …
+2026-08-03 22:22:48,557 [INFO] GPU Memory before model load: 0.0GB alloc, 0.0GB reserved, 128.5GB total
+2026-08-03 22:22:49,211 [INFO] Model loaded — type: Qwen2ForCausalLM, dtype: torch.bfloat16
+2026-08-03 22:22:49,211 [INFO] GPU Memory after model load: 0.0GB alloc, 0.0GB reserved, 128.5GB total
+2026-08-03 22:22:49,393 [INFO] TensorBoard logs: ./dpo_out/humour/tb_logs/DPO_humour_20260803_222249
+2026-08-03 22:22:49,393 [INFO] DPO config: lr=5e-06, beta=0.2, max_length=1536
+2026-08-03 22:22:49,393 [INFO] LoRA config: r=32, alpha=64, dropout=0.05
+2026-08-03 22:22:49,393 [INFO] Total steps: 634
+2026-08-03 22:22:56,403 [INFO] GPU Memory before training: 15.6GB alloc, 15.6GB reserved, 128.5GB total
+2026-08-04 01:19:03,646 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:03,647 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:03,650 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:03,650 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:03,651 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:03,651 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:03,652 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:03,653 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:04,707 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:04,707 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:04,711 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:04,712 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:04,712 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:04,712 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:04,713 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:04,713 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:06,063 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:06,063 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:06,068 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:06,069 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:06,070 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:06,070 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:06,070 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:06,070 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:07,342 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:07,342 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:07,345 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:07,346 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:07,346 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:07,347 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:07,347 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:07,347 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:08,320 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:08,320 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:08,323 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:08,323 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:08,323 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:08,324 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:08,325 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:19:08,325 [INFO] [RANK 0] The used dataset had no length, returning gathered tensors. You should drop the remainder yourself.
+2026-08-04 01:21:15,588 [INFO] GPU Memory after training: 16.2GB alloc, 24.1GB reserved, 128.5GB total
+2026-08-04 01:21:15,588 [INFO] Training complete!
+2026-08-04 01:21:16,136 [INFO] LoRA adapter saved → ./dpo_out/humour/final_adapter
+2026-08-04 01:21:16,138 [INFO] Training history → ./dpo_out/humour/training_history.json
+2026-08-04 01:21:16,138 [INFO] Best eval loss:  0.6470
+2026-08-04 01:21:16,138 [INFO] Final train loss:0.6466
+2026-08-04 01:21:16,168 [ERROR] Error during training: 
