@@ -41,8 +41,8 @@ import torch
 from datasets import load_dataset
 
 from Model_mechanics.config import SwissKnifeConfig
-from Model_mechanics.models import load_tokenizer, load_base_model, load_blade_model
-from Model_mechanics.speculative_generator import SwissKnifeSpeculativeGenerator
+from Model_mechanics.models import load_tokenizer, load_base_model, load_blade_model, load_drafter_model, load_drafter_tokenizer
+from Model_mechanics.elo_swiss_mode_b import EloSwissModeBGenerator
 
 logging.basicConfig(
     level=logging.INFO,
@@ -235,10 +235,15 @@ def run_benchmark(args: argparse.Namespace):
             alpha=cond["alpha"],
         )
 
-        generator = SwissKnifeSpeculativeGenerator(
+        drafter_tokenizer = load_drafter_tokenizer(cfg)
+        drafter_model = load_drafter_model(cfg)
+
+        generator = EloSwissModeBGenerator(
             cfg=cfg,
-            tokenizer=tokenizer,
-            base_model=base_model,
+            drafter_model=drafter_model,
+            drafter_tokenizer=drafter_tokenizer,
+            verifier_model=base_model,
+            verifier_tokenizer=tokenizer,
             blade_model=blade_model,
         )
 

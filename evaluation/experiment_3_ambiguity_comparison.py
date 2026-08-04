@@ -117,7 +117,7 @@ def run_diagnostic_step_tournament(
         probabilistic=True,
     )
 
-    # 2. Champion selection via Deterministic Softmax (T = 28.57587)
+    # 2. Champion selection via Deterministic Elo (T = 28.57587)
     deterministic_28_champion = elo_bracket(
         target_scores=target_scores,
         blade_scores=blade_scores,
@@ -129,13 +129,13 @@ def run_diagnostic_step_tournament(
         tilted_rewards=None,
         sigmas=None,
         hard_draw=False,
-        w_tournament=0.0,
-        w_blade=1.0,
+        w_tournament=1.0,
+        w_blade=0.0,
         uwo_lambda=0.0,
         probabilistic=False,
     )
 
-    # 3. Champion selection via Deterministic Softmax (T = 12.50000)
+    # 3. Champion selection via Deterministic Elo (T = 12.50000)
     deterministic_12_champion = elo_bracket(
         target_scores=target_scores,
         blade_scores=blade_scores,
@@ -147,8 +147,8 @@ def run_diagnostic_step_tournament(
         tilted_rewards=None,
         sigmas=None,
         hard_draw=False,
-        w_tournament=0.0,
-        w_blade=1.0,
+        w_tournament=1.0,
+        w_blade=0.0,
         uwo_lambda=0.0,
         probabilistic=False,
     )
@@ -235,13 +235,13 @@ def run_experiment_3_generation(
         blade_model=blade_model,
     )
 
-    # 2. Config for Deterministic Softmax (T=28.57587)
+    # 2. Config for Deterministic Elo (T=28.57587)
     cfg_d28 = SwissKnifeConfig()
     cfg_d28.gsi_n = gsi_n
     cfg_d28.elo_rounds = elo_rounds
     cfg_d28.elo_temperature = elo_temp
-    cfg_d28.w_tournament = 0.0
-    cfg_d28.w_blade = 1.0
+    cfg_d28.w_tournament = 1.0
+    cfg_d28.w_blade = 0.0
     cfg_d28.uwo_lambda = 0.0
     cfg_d28.max_new_tokens = max_new_tokens
     cfg_d28.sigma_mode = "none"
@@ -257,13 +257,13 @@ def run_experiment_3_generation(
         blade_model=blade_model,
     )
 
-    # 3. Config for Deterministic Softmax (T=12.5)
+    # 3. Config for Deterministic Elo (T=12.5)
     cfg_d12 = SwissKnifeConfig()
     cfg_d12.gsi_n = gsi_n
     cfg_d12.elo_rounds = elo_rounds
     cfg_d12.elo_temperature = 12.5
-    cfg_d12.w_tournament = 0.0
-    cfg_d12.w_blade = 1.0
+    cfg_d12.w_tournament = 1.0
+    cfg_d12.w_blade = 0.0
     cfg_d12.uwo_lambda = 0.0
     cfg_d12.max_new_tokens = max_new_tokens
     cfg_d12.sigma_mode = "none"

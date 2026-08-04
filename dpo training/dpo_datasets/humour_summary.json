@@ -1,0 +1,35 @@
+{
+  "blade": "humour",
+  "tokenizer": "Qwen/Qwen2.5-7B-Instruct",
+  "seed": 42,
+  "sources": {
+    "reddit_jokes": {
+      "hf_dataset": "SocialGrep/one-million-reddit-jokes",
+      "academic_refs": [
+        "Mihalcea & Strapparava 2005",
+        "Weller & Seppi 2019",
+        "Hossain et al. 2020 (SemEval-2020 Task 7)"
+      ],
+      "signal": "upvote score \u2014 high score = chosen",
+      "min_score_gap": 50,
+      "pairs_before_cap": 30000,
+      "pairs_kept": 30000
+    },
+    "nycc": {
+      "hf_dataset": "jmhessel/newyorker_caption_contest",
+      "academic_refs": [
+        "Hessel et al. 2023 \u2014 Do Androids Laugh at Electric Sheep?",
+        "Radev et al. 2015 \u2014 Humor in Collective Discourse"
+      ],
+      "signal": "contest ranking \u2014 winner = chosen, worst = rejected",
+      "pairs_kept": 9576
+    }
+  },
+  "total_after_dedup": 10687,
+  "train": 10153,
+  "eval": 534,
+  "paths": {
+    "train": "./dpo_datasets/humour_train.jsonl",
+    "eval": "./dpo_datasets/humour_eval.jsonl"
+  }
+}

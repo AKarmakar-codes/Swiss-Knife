@@ -49,10 +49,7 @@ from datasets import load_dataset
 from Model_mechanics.config import SwissKnifeConfig
 from Model_mechanics.models import load_tokenizer, load_base_model, load_blade_model, load_drafter_model, load_drafter_tokenizer
 from Model_mechanics.blades import DPOBlade
-from Model_mechanics.gsi_softmax import GSISoftmaxGenerator
-from Model_mechanics.swiss import SwissGenerator
 from Model_mechanics.elo_swiss import EloSwissGenerator
-from Model_mechanics.swiss_mode_b import SwissModeBGenerator
 from Model_mechanics.elo_swiss_mode_b import EloSwissModeBGenerator
 
 logging.basicConfig(

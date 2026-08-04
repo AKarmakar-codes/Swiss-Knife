@@ -1,47 +1,28 @@
 """
-Swiss Knife — Decode-Time Alignment via Tournament Sampling
+Swiss-Knife — Decode-Time Alignment via Elo Tournament Selection
 
-Option A (Non-Speculative Best-of-K Tournament):
-    Sample K independent spans → tournament selects best → commit → repeat.
-    See: Model_mechanics/generation.py, Model_mechanics/tournament.py
+Step-level guided inference using a probabilistic Elo tournament to select
+the best candidate reasoning step from a fast Drafter model.
 
-Option B (Speculative-Decoding-Integrated Tournament Verifier):
-    Draft proposes γ tokens → top-K per position → [γ, K] candidate tensor.
-    Target + Blade: ONE forward pass each → [γ, K] scores.
-    Per-position tournament → acceptance propagation (discard tail on rejection).
-    See: Model_mechanics/speculative_generator.py, Model_mechanics/swiss_system.py
+Core strategy (Mode B — unconditional acceptance):
+    Sample n reasoning steps → Blade reward scoring + uncertainty estimation
+    → Thurstonian Elo tournament → softmax champion selection → commit unconditionally.
 
-GSI Strategies (Step-Level Guided Speculative Inference with Blades):
-    Sample n reasoning steps → blade reward scoring → strategy-specific selection.
-    Strategy 1 (gsi_softmax):  softmax(β·r̃) over blade rewards.
-    Strategy 2 (gsi_pairwise): Bradley-Terry pairwise P(A wins) = σ(MATCH/τ).
-    Strategy 3 (gsi_swiss):    Swiss-system matches → points table → softmax.
-    Strategy 4 (gsi_elo):      Elo-system tournament selection.
-    Strategy 5 (gsi_gumbel):   Speculative Gumbel-Top-k with GSI fallback.
-    See: Model_mechanics/gsi_softmax.py, gsi_pairwise.py, gsi_swiss.py, gsi_elo.py, gsi_gumbel.py
+For Mode A (with Verifier acceptance gate), see: elo_swiss.py
+For tournament mechanics, see: elo_system.py
+For uncertainty estimation, see: sigma_estimator.py
 
 Architecture:
     Base/Draft Model   : Qwen2.5 SFT-merged (frozen)
     Alignment Blades   : DPO LoRA adapters (helpfulness, harmlessness, truthfulness)
-    Tournament Formats : Knockout bracket or Swiss-system schedule
-    Hot-swap           : BladeRack pointer swap, O(1), no retraining
+    Blade Registry     : BladeRack pointer swap, O(1), no retraining
+    Tournament Format  : Elo-rating system (Thurstonian Case-V or Bradley-Terry)
 
 Reference:
-    Swiss Knife Analysis — Pragya Lab, BITS Pilani Goa (2026)
-    Section 5 (Option A / Algorithm 1) and Section 6 (Option B / Algorithm 2)
+    Swiss-Knife: Elo Tournament Selection for Decoding-Time Alignment
+    AAAI 2027 (Anonymous Submission)
 """
 
 __version__ = "0.3.0"
 
-from .mode_b_logit_mixing import (
-    compute_dual_blade_mode_b_step,
-    compute_multi_blade_mode_b_step,
-    MultiBladeModeBGenerator,
-)
-
-__all__ = [
-    "compute_dual_blade_mode_b_step",
-    "compute_multi_blade_mode_b_step",
-    "MultiBladeModeBGenerator",
-]
-
+__all__ = []

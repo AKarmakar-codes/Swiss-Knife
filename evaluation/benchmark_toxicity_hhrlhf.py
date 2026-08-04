@@ -73,22 +73,16 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from Model_mechanics.config import SwissKnifeConfig
 from Model_mechanics.models import load_tokenizer, load_base_model, load_blade_model
-from Model_mechanics.gsi_softmax import GSISoftmaxGenerator
-from Model_mechanics.gsi_pairwise import GSIPairwiseGenerator
-from Model_mechanics.swiss import SwissGenerator
+from Model_mechanics.elo_swiss import EloSwissGenerator
+from Model_mechanics.elo_swiss_mode_b import EloSwissModeBGenerator
 
 from evaluation.benchmark_gsi_strategies_helpfulness import (
     BaselineGreedyGenerator,
     BaselineSoftmaxGenerator,
 )
-from evaluation.benchmark_gsi_strategies_harmlessness import (
+from evaluation.benchmark_HH_harmlessness import (
     extract_prompt,
 )
-
-# Reuse the no-vLLM local judge backend so judge behaviour stays identical
-# to run_geval_only.py (it subclasses DeepEvalBaseLLM, which deepeval
-# isinstance-checks, so we cannot just duck-type our own).
-from run_geval_only import LocalHFJudge, OpenAICompatJudge
 
 logging.basicConfig(
     level=logging.INFO,

@@ -122,16 +122,6 @@ def elo_bracket(
     import random
     raw_blade_scores = blade_scores.clone() if isinstance(blade_scores, torch.Tensor) else torch.tensor(blade_scores)
 
-    # ── Fast path: Pure Softmax Baseline on raw blade points (recentered to 0 and divided by temp) ──
-    if w_tournament == 0.0 and not probabilistic and uwo_lambda == 0.0:
-        if temperature < 1e-5:
-            return int(torch.argmax(raw_blade_scores).item())
-        recentered_mus = raw_blade_scores - raw_blade_scores.mean()
-        det_logits = recentered_mus / temperature
-        det_logits = det_logits - torch.max(det_logits)
-        det_probs = torch.softmax(det_logits, dim=0)
-        return int(torch.multinomial(det_probs, num_samples=1).item())
-
     def _znorm(t: torch.Tensor) -> torch.Tensor:
         if t.numel() <= 1:
             return torch.zeros_like(t)
@@ -309,15 +299,21 @@ def elo_bracket(
     if temperature < 1e-5:
         # Greedy (T→0): use raw tournament rank (argmax doesn't need normalised logits)
         tournament_term = (ratings_tensor - 1500.0) / (temperature + 1e-8)
-        scores = w_tournament * _znorm_term(tournament_term) + w_blade * _znorm_term(uwo_term)
+        if normalize:
+            scores = w_tournament * _znorm_term(tournament_term) + w_blade * _znorm_term(uwo_term)
+        else:
+            scores = w_tournament * tournament_term + w_blade * uwo_term
         champion = int(torch.argmax(scores).item())
         logger.debug(
             "Elo champion (Greedy, T=0): c%d (rating=%.1f)", champion, ratings[champion]
         )
     else:
         tournament_term = (ratings_tensor - 1500.0) / temperature
-        logits = w_tournament * _znorm_term(tournament_term) + w_blade * _znorm_term(uwo_term)
-        logits = logits - torch.max(logits)   # numerical stability before softmax
+        if normalize:
+            logits = w_tournament * _znorm_term(tournament_term) + w_blade * _znorm_term(uwo_term)
+        else:
+            logits = w_tournament * tournament_term + w_blade * uwo_term
+        logits = logits
         probs = torch.softmax(logits, dim=0)
         champion = int(torch.multinomial(probs, num_samples=1).item())
         logger.debug(
@@ -440,7 +436,6 @@ def stochastic_elo_bracket(
     else:
         ratings_tensor = torch.tensor(ratings, dtype=torch.float, device=target_scores.device)
         logits = (ratings_tensor - 1500.0) / temperature
-        logits = logits - torch.max(logits)
         probs = torch.softmax(logits, dim=0)
         champion = int(torch.multinomial(probs, num_samples=1).item())
 
