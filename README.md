@@ -155,7 +155,7 @@ The full decoding pipeline for a single step:
 | **Swiss-Knife Mode B** (ours) | Thurstonian Elo tournament, unconditional acceptance |
 | **Swiss-Knife Mode A** | Mode B + Verifier acceptance gate (threshold-based fallback) |
 | **MOD** | Multi-Objective Decoding — token-level logit blending |
-| **DeAL** | Decoding-time Alignment via speculative sampling |
+| **DeAL** | Decoding-time Alignment for Large Language Models (Confirm if we are comparing this ?) |
 | **Best-of-N** | Sample N full responses, pick highest-reward |
 | **RRM** | Reward Reasoning Model with CoT judge |
 
