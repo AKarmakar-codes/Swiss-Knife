@@ -65,6 +65,14 @@ class SwissKnifeConfig:
             "repo_type":  "model",
             "subfolder":  "dpo_out/truthfulness/final_adapter",
         },
+        "humour": {
+            # Locally-trained DPO adapter (2 epochs, 39.5k Reddit+NYCC samples).
+            # repo_type='local' bypasses the HF Hub entirely — path is resolved
+            # relative to the project root at load time.
+            "repo_id":    "dpo training/dpo_out/humour/final_adapter",
+            "repo_type":  "local",
+            "subfolder":  "",
+        },
     })
     """Per-blade source descriptor: (repo_id, repo_type, subfolder).
     repo_type ∈ {"model", "dataset"} — controls which Hub API is used."""
@@ -220,13 +228,12 @@ class SwissKnifeConfig:
     stochastic_num_layers_to_mask: int = 2
     """Number of final transformer layers to mask attention heads in head_subsample mode."""
 
-    dtype: str = "float32"
+    dtype: str = "bfloat16"
     """Compute dtype: 'float16', 'bfloat16', or 'float32'.
-    float32 is the safe default for CPU.  Use float16/bfloat16 on GPU only.
-    Memory budget (Qwen2.5-3B):
-        float32  → ~13 GB  (2× copies needed: draft + blade = ~26 GB)
-        float16  → ~6.5 GB (needs GPU; 2× = ~13 GB VRAM)
-        bfloat16 → ~6.5 GB (safer than float16 on CPU, but still large)"""
+    bfloat16 is the standard GPU-accelerated default for modern hardware (Ampere/Hopper/Blackwell).
+    Memory budget (Qwen2.5-7B + 3B):
+        bfloat16 → ~15 GB total (fits comfortably in modern GPUs with 5-8x inference speedup)
+        float32  → ~30 GB total (CPU fallback only)"""
 
     seed: int = 42
     """Random seed for reproducibility."""

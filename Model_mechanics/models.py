@@ -260,10 +260,21 @@ def load_blade_model(
             adapter_path,
             torch_dtype=dtype,
         )
+    elif repo_type == "local":
+        # repo_id is treated as a direct local filesystem path to the adapter directory.
+        # No HuggingFace Hub download needed — used for locally-trained adapters
+        # (e.g. the Humour Blade at dpo_out/humour/final_adapter/).
+        adapter_path = repo_id if os.path.isabs(repo_id) else os.path.abspath(repo_id)
+        logger.info("Attaching LoRA adapter from local filesystem path: %s", adapter_path)
+        blade_model = PeftModel.from_pretrained(
+            base_for_blade,
+            adapter_path,
+            torch_dtype=dtype,
+        )
     else:
         raise ValueError(
             f"Unknown repo_type '{repo_type}' for blade '{blade_name}'. "
-            f"Expected 'model' or 'dataset'."
+            f"Expected 'model', 'dataset', or 'local'."
         )
 
     blade_model.eval()
