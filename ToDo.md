@@ -93,30 +93,32 @@ python evaluation/run_hh_experiments.py \
     --mode analyze
 ```
 - Reads `tribunal/outputs/sigma_validity/` CSVs and `runs/sigma_validity/step_sigma_stats.json`.
-- Stratifies prompts into **Low / Medium / High σ tiers** and prints win rates + quality deltas for real σ vs. shuffled and vs. zero.
+- Computes composite **Scalar Objective Score** (matching `scalar_objective` in `parameter_search_optimized.py`: harmonic mean of Quality & Safety) and reports all 6 individual Tribunal rubrics: `response_quality`, `relevance`, `helpfulness`, `toxicity`, `harmfulness`, `refusal`.
+- Stratifies prompts into **Low / Medium / High σ tiers** and prints win rates + objective deltas for real σ vs. shuffled and vs. zero.
 - Saves summary tables and plots to `runs/tribunal_plots/sigma_validity/`.
 
 > **Key numbers to record for the paper:**
 >
-> *Tribunal outcome stats (primary — ground-truth claim):*
-> - ΔQuality (real σ − shuffled σ) overall and per σ-tier
+> *Tribunal outcome stats & Objective Function (primary ground-truth claims):*
+> - Composite ΔScalar Objective & ΔQuality (real σ − shuffled σ, real σ − zero σ) overall and per σ-tier
+> - All individual Tribunal rubric scores (`response_quality`, `relevance`, `helpfulness`, `toxicity`, `harmfulness`, `refusal`) reported separately for real σ, shuffled σ, and zero σ.
 > - ΔSafety = Δ(1 − mean(toxicity, harmfulness)) — is the gain quality-driven or safety-driven?
 > - `refusal_delta` (Tribunal refusal score: real σ − shuffled σ) — are we winning by refusing less, or by being genuinely better?
 >
 > *Behavioural bridge stats (pre-outcome; explain when σ actually activated):*
-> - `upset_rate` — fraction of steps where real-σ champion ≠ argmax(μ). **If near zero, UWO never fired and ΔQuality is noise.**
+> - `upset_rate` — fraction of steps where real-σ champion ≠ argmax(μ). **If near zero, UWO never fired and ΔObjective is noise.**
 > - `mean_champion_sigma_rank` — σ-rank (0=lowest σ) of the champion chosen by real-σ. If UWO works, this should be below pool average.
 > - `mean_sigma_spread` — std(σ) across candidates per step. Low spread = UWO ranking is near-random regardless of real vs. shuffled.
 >
-> *Compositional/cascade stats (explain why final quality differs):*
+> *Compositional/cascade stats (explain why final response quality differs):*
 > - `first_divergence_step` — which step real-σ and zero-σ first diverge. Early divergence cascades into very different responses.
 > - `total_divergence_steps` — absolute count of diverging steps (not just rate).
-> - `response_length_delta` — token length difference. Tribunal judges often inflate scores for longer responses; must control for this.
+> - `response_length_delta` — token length difference. Must control for length bias.
 >
 > *Subset-defining conditional checks (pre-outcome, for Opus 5 hypothesis):*
-> - ΔQuality conditional on `upset_rate > 0` vs. `== 0` — does σ only help when UWO actually changed the pick?
-> - ΔQuality conditional on `first_divergence_step < 5` vs. late — does early cascade matter?
-> - ΔQuality conditional on `mean_sigma_spread > threshold` — is σ discriminative enough to matter?
+> - Composite ΔObjective conditional on `upset_rate > 0` vs. `== 0` — does σ only help when UWO actually changed the pick?
+> - Composite ΔObjective conditional on `first_divergence_step < 5` vs. late — does early cascade matter?
+> - Composite ΔObjective conditional on `mean_sigma_spread > threshold` — is σ discriminative enough to matter?
 
 ---
 
