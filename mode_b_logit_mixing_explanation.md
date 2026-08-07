@@ -17,23 +17,27 @@
 The logit mixing in Swiss-Knife Mode B occurs at the **candidate step selection stage**. Given a prompt prefix `x`:
 
 #### Step A: Draft Candidate Generation
-The base model `pi_draft` samples `N` candidate reasoning steps: `S_1, S_2, ..., S_N`.
+The draft model `pi_draft` samples `N` candidate reasoning steps: `S_1, S_2, ..., S_N`.
 
 #### Step B: Multi-Blade Scoring & Uncertainty Estimation
-For each candidate step `S_i`, scores are computed using both the **Helpfulness Blade** and **Harmlessness Blade**:
+For each candidate step `S_i`, scores are computed using both the **Helpfulness Blade** and **Harmlessness Blade** (both sharing the base verifier model `pi_verifier`):
 
-1. **Helpfulness Blade**:
+1. **Helpfulness Blade** (`pi_help` = `pi_verifier` + Help LoRA):
    - Reward: `mu_help_i = r_help(x, S_i)`
-   - Uncertainty: `sigma_help_i = abs(mu_help_i - (1 / beta) * (log pi_help(S_i) - log pi_draft(S_i)))`
+   - Uncertainty (Log-Ratio Proxy): `sigma_help_i = abs(mu_help_i - (1 / beta) * (log pi_help(S_i) - log pi_verifier(S_i)))`
 
-2. **Harmlessness Blade**:
+2. **Harmlessness Blade** (`pi_harm` = `pi_verifier` + Harm LoRA):
    - Reward: `mu_harm_i = r_harm(x, S_i)`
-   - Uncertainty: `sigma_harm_i = abs(mu_harm_i - (1 / beta) * (log pi_harm(S_i) - log pi_draft(S_i)))`
+   - Uncertainty (Log-Ratio Proxy): `sigma_harm_i = abs(mu_harm_i - (1 / beta) * (log pi_harm(S_i) - log pi_verifier(S_i)))`
 
-3. **Composite Multi-Blade Reward & Uncertainty**:
-   Given objective Pareto weight `gamma_help` in range `[0, 1]` and `gamma_harm = 1.0 - gamma_help`:
-   - Composite Reward: `mu_composite_i = gamma_help * mu_help_i + gamma_harm * mu_harm_i`
-   - Composite Uncertainty: `sigma_composite_i = gamma_help * sigma_help_i + gamma_harm * sigma_harm_i`
+3. **Composite Multi-Blade Reward & Uncertainty (Candidate-Batch Normalized)**:
+   To prevent miscalibration between blades (e.g., Harmlessness having a larger absolute variance than Helpfulness), we Z-normalize both `mu` and `sigma` across the $N$ candidates before mixing. Given objective Pareto weight `gamma_help` in range `[0, 1]` and `gamma_harm = 1.0 - gamma_help`:
+   - `mu_help_norm = (mu_help - mean(mu_help)) / std(mu_help)`
+   - `sigma_help_norm = sigma_help / std(mu_help)` *(Note: sigma is scaled by standard deviation, not zero-centered)*
+   - `mu_harm_norm = (mu_harm - mean(mu_harm)) / std(mu_harm)`
+   - `sigma_harm_norm = sigma_harm / std(mu_harm)`
+   - Composite Reward: `mu_composite = gamma_help * mu_help_norm + gamma_harm * mu_harm_norm`
+   - Composite Uncertainty: `sigma_composite = gamma_help * sigma_help_norm + gamma_harm * sigma_harm_norm`
 
 ---
 
@@ -80,6 +84,7 @@ def compute_dual_blade_mode_b_step(
     prefix_ids: torch.Tensor,
     candidate_step_ids: list,
     draft_logprobs: torch.Tensor,
+    verifier_logprobs: torch.Tensor,
     helpfulness_blade,
     harmlessness_blade,
     gamma_help: float = 0.5,
@@ -98,6 +103,7 @@ def compute_dual_blade_mode_b_step(
         blade=helpfulness_blade,
         sigma_mode=cfg.sigma_mode,
         draft_logprobs=draft_logprobs,
+        verifier_logprobs=verifier_logprobs,
         beta=beta,
     )
 
@@ -108,12 +114,22 @@ def compute_dual_blade_mode_b_step(
         blade=harmlessness_blade,
         sigma_mode=cfg.sigma_mode,
         draft_logprobs=draft_logprobs,
+        verifier_logprobs=verifier_logprobs,
         beta=beta,
     )
 
-    # 3. Composite Multi-Blade Reward & Uncertainty
-    mu_composite = gamma_help * mu_help + gamma_harm * mu_harm
-    sigma_composite = gamma_help * sigma_help + gamma_harm * sigma_harm
+    # 3. Composite Multi-Blade Reward & Uncertainty (Candidate-Batch Normalized)
+    std_help = mu_help.std() + 1e-6
+    std_harm = mu_harm.std() + 1e-6
+
+    mu_help_norm = (mu_help - mu_help.mean()) / std_help
+    mu_harm_norm = (mu_harm - mu_harm.mean()) / std_harm
+
+    sigma_help_norm = sigma_help / std_help
+    sigma_harm_norm = sigma_harm / std_harm
+
+    mu_composite = gamma_help * mu_help_norm + gamma_harm * mu_harm_norm
+    sigma_composite = gamma_help * sigma_help_norm + gamma_harm * sigma_harm_norm
 
     # 4. Perform Thurstonian Elo Tournament & Z-Norm Champion Selection
     champion_idx = elo_bracket(
