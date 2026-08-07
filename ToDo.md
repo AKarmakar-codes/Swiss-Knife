@@ -9,9 +9,40 @@
 
 ## 3. Ablation Studies — Teammate Instructions
 
-> Run both tests in full. Each test follows the same three-phase workflow: **Generate → Tribunal → Analyze 
 > All commands are run from the **project root** (`Swiss-Knife/`).
-> **Single entry point for both tests:** `evaluation/run_hh_experiments.py` — it loads the Anthropic HH-RLHF harmlessness test split (seed 42) and dispatches to both ablation scripts automatically.
+> **Single entry point for both tests:** `evaluation/run_hh_experiments.py` — passing `--test all` (or omitting `--test`) runs both ablation experiments sequentially.
+
+### Executive Quick Start — Run Both Tests at Once
+
+If you want to execute **both ablation tests together**, use the commands below:
+
+#### Phase 1 — Combined Generation (requires GPU)
+```bash
+python evaluation/run_hh_experiments.py \
+    --test all \
+    --mode generate \
+    --num_samples 50 \
+    --max_new_tokens 768
+```
+
+#### Phase 2 — Tribunal LLM-as-Judge Evaluation (requires GPU)
+```bash
+# Terminal 1 — start judge server
+cd tribunal
+python serve_judge.py
+
+# Terminal 2 — score both test outputs
+cd tribunal
+python -m tribunal.run_eval --input inputs/sigma_validity --output outputs/sigma_validity
+python -m tribunal.run_eval --input inputs/tournament_value --output outputs/tournament_value
+```
+
+#### Phase 3 — Combined Offline Analysis (no GPU needed)
+```bash
+python evaluation/run_hh_experiments.py \
+    --test all \
+    --mode analyze
+```
 
 ---
 
