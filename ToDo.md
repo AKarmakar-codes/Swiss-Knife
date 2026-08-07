@@ -1,13 +1,6 @@
 # Swiss Knife — Paper ToDo
 
-> **Core novelty:** `elo_swiss_mode_b` — Thurstonian Elo tournament-based decode-time alignment with unconditional champion acceptance and uncertainty-weighted objective (UWO).
-
-## 2. Hyperparameter Finalisation
-
-- [ ] **Complete Bayesian hyperparameter search** (`evaluation/parameter_search_optimized.py`) and lock in the best `(w_tournament, w_blade, uwo_lambda, elo_rounds, elo_temperature, gsi_n)` for the paper run.
----
-
-## 3. Ablation Studies — Teammate Instructions
+##  Ablation Studies — Teammate Instructions
 
 > All commands are run from the **project root** (`Swiss-Knife/`).
 > **Single entry point for both tests:** `evaluation/run_hh_experiments.py` — passing `--test all` (or omitting `--test`) runs both ablation experiments sequentially.
@@ -51,6 +44,8 @@ python evaluation/run_hh_experiments.py \
 It compares three σ conditions: **real σ** (actual log-ratio proxy), **shuffled σ** (same values, randomly reassigned to candidates), and **zero σ** (σ=0, collapses to plain Bradley-Terry Elo).
 If real σ beats shuffled and zero, it is doing real work.
 
+
+
 #### Phase 1 — Generate (requires GPU)
 ```bash
 python evaluation/run_hh_experiments.py \
@@ -69,6 +64,12 @@ python evaluation/run_hh_experiments.py \
 - Live logs are persisted to `runs/logs/experiment_run.log`.
 
 > **Sanity check before proceeding:** confirm those three `.jsonl` files exist and are non-empty.
+
+
+
+
+
+
 
 #### Phase 2 — Tribunal (LLM-as-Judge, requires GPU)
 Open two terminals. In terminal 1, start the judge server and wait until it prints "Model loaded":
@@ -156,6 +157,24 @@ python -m tribunal.run_eval \
 ```
 Wait for three `*_eval.csv` files in `tribunal/outputs/tournament_value/`.
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #### Phase 3 — Analyze (no GPU needed)
 ```bash
 python evaluation/run_hh_experiments.py \
@@ -196,6 +215,23 @@ python evaluation/run_hh_experiments.py \
 > - `refusal_delta` sign — if Thurstonian wins AND refusal_delta < 0 (less refusal), the win is genuine quality; if refusal_delta > 0, it’s a safety-collapse avoidance story
 
 ---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ### Phase 4 — Opus 5 Hypothesis: Finding the Prompt Subset Where Thurstonian Wins
 
