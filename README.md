@@ -191,16 +191,7 @@ python evaluation/benchmark_HH_harmlessness.py
 python evaluation/parameter_search_optimized.py
 ```
 
----
 
-## Ablation Study
-
-`evaluation/experiment_3_ambiguity_comparison.py` isolates the effect of the tournament mechanism
-in **high-ambiguity regimes** by comparing:
-
-- `w_tournament=1.0, w_blade=0.0` — tournament-only selection
-- Deterministic Elo baselines at temperatures T=28.6 and T=12.5
-- Full Mode B with Thurstonian uncertainty weighting
 
 ---
 
