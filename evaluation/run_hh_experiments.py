@@ -174,8 +174,8 @@ def main():
     parser.add_argument(
         "--max_new_tokens",
         type=int,
-        default=512,
-        help="Maximum generation sequence length in tokens (default: 512)",
+        default=768,
+        help="Maximum generation sequence length in tokens (default: 768)",
     )
     parser.add_argument(
         "--local_dataset_path",

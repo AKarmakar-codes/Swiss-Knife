@@ -26,7 +26,7 @@ python evaluation/run_hh_experiments.py \
     --test sigma_validity \
     --mode generate \
     --num_samples 50 \
-    --max_new_tokens 512
+    --max_new_tokens 768
 ```
 - Loads 50 prompts from the Anthropic HH-RLHF harmlessness test split (seed 42).
 - Runs three generators (real σ / shuffled σ / zero σ) on all prompts.
@@ -98,7 +98,7 @@ python evaluation/run_hh_experiments.py \
     --test tournament_value \
     --mode generate \
     --num_samples 50 \
-    --max_new_tokens 512
+    --max_new_tokens 768
 ```
 - Loads the same 50 HH-RLHF prompts (seed 42) used in Test 1.
 - Runs all three strategy generators (Thurstonian / Elo Baseline / Softmax Blade).
