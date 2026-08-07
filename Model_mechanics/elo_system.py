@@ -231,10 +231,14 @@ def elo_bracket(
                 denom = torch.sqrt(var_match + 1e-8)
                 P_A_beats_B = 0.5 * (1.0 + torch.erf((diff / denom) / math.sqrt(2.0))).item()
             else:
-                # ── Bradley-Terry sigmoid match ───────────────────────────
-                # P(A beats B) = σ(score_A − score_B)
-                # The higher scorer always has P > 0.5, effectively a soft sort.
-                P_A_beats_B = torch.sigmoid(diff).item()
+                # ── Deterministic match scoring for elo_baseline ──────────
+                # Candidate with higher score always wins the match (1.0 vs 0.0)
+                if diff.item() > 1e-6:
+                    P_A_beats_B = 1.0
+                elif diff.item() < -1e-6:
+                    P_A_beats_B = 0.0
+                else:
+                    P_A_beats_B = 0.5
 
             # Determine actual outcome
             if hard_draw:

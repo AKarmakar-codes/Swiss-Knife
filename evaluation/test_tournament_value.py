@@ -9,7 +9,7 @@ baseline (`probabilistic=False`, `w_blade=0.0`) and a pure Softmax baseline.
 3 Strategies Compared:
 ----------------------
   1. `thurstonian`    : Full Mode-B Thurstonian Elo (probabilistic=True, log_ratio_proxy sigma, w_t=0.74, w_b=2.01)
-  2. `bt_elo_w0`      : Pure Deterministic Elo-as-sorting baseline (probabilistic=False, w_t=1.0, w_b=0.0, sigma=none)
+  2. `elo_baseline`   : Pure Deterministic Elo-as-sorting baseline (probabilistic=False, w_t=1.0, w_b=0.0, sigma=none)
   3. `softmax_blade`  : Direct Softmax over raw blade rewards (w_t=0.0, w_b=1.0, sigma=none)
 
 Modes:
@@ -45,18 +45,33 @@ for _p in (_PROJECT_ROOT, os.getcwd()):
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
-# Tribunal metric column names (must match parameter_search_optimized.py)
+# Import scalar_objective directly from parameter_search_optimized.py
+try:
+    from evaluation.parameter_search_optimized import scalar_objective
+except ImportError:
+    try:
+        from parameter_search_optimized import scalar_objective
+    except ImportError:
+        scalar_objective = None
+
+# Tribunal metric column names (matching parameter_search_optimized.py)
 _QUALITY_METRICS = ["response_quality", "relevance"]
 _SAFETY_METRICS  = ["toxicity", "harmfulness"]
 
 
 def _tribunal_score(row) -> float:
-    """Harmonic mean of Quality and Safety axes — identical to scalar_objective.
+    """Harmonic mean of Quality and Safety axes using scalar_objective from evaluation/parameter_search_optimized.py.
 
     quality = mean(response_quality, relevance)
     safety  = 1 - mean(toxicity, harmfulness)
     score   = 2*quality*safety / (quality + safety)
     """
+    if scalar_objective is not None:
+        metrics = {k: float(row[k]) for k in row.index if k in ["response_quality", "relevance", "helpfulness", "toxicity", "harmfulness", "refusal"] and not math.isnan(row[k])}
+        score = scalar_objective(metrics)
+        if score > 0.0:
+            return score
+
     q_vals = [row[m] for m in _QUALITY_METRICS if m in row.index and not math.isnan(row[m])]
     s_vals = [row[m] for m in _SAFETY_METRICS  if m in row.index and not math.isnan(row[m])]
     if not q_vals or not s_vals:
@@ -89,29 +104,39 @@ def run_diagnostic_tournament_step(
     """
     Simulates selections for a single step under 3 strategy conditions:
       1. thurstonian   (probabilistic=True, sigma=log_ratio_proxy, w_t=0.74, w_b=2.01)
-      2. bt_elo_w0     (probabilistic=False, sigma=none, w_t=1.0, w_b=0.0)
+      2. elo_baseline  (probabilistic=False, sigma=none, w_t=1.0, w_b=0.0)
       3. softmax_blade (w_t=0.0, w_b=1.0, direct softmax over raw blade rewards)
     """
-    import torch
-    from Model_mechanics.elo_system import elo_bracket
+    try:
+        import torch
+        from Model_mechanics.elo_system import elo_bracket
+        has_torch = True
+    except ImportError:
+        has_torch = False
 
-    if not isinstance(blade_scores, torch.Tensor):
-        blade_scores = torch.tensor(blade_scores, dtype=torch.float)
-    if not isinstance(target_scores, torch.Tensor):
-        target_scores = torch.tensor(target_scores, dtype=torch.float)
+    if has_torch:
+        if not isinstance(blade_scores, torch.Tensor):
+            blade_scores = torch.tensor(blade_scores, dtype=torch.float)
+        if not isinstance(target_scores, torch.Tensor):
+            target_scores = torch.tensor(target_scores, dtype=torch.float)
 
-    n = blade_scores.shape[0]
-    mu_list = blade_scores.tolist()
+        n = blade_scores.shape[0]
+        mu_list = blade_scores.tolist()
 
-    if sigmas is not None:
-        if isinstance(sigmas, torch.Tensor):
-            sigmas_tensor = sigmas.clone()
+        if sigmas is not None:
+            if isinstance(sigmas, torch.Tensor):
+                sigmas_tensor = sigmas.clone()
+            else:
+                sigmas_tensor = torch.tensor(sigmas, dtype=torch.float)
         else:
-            sigmas_tensor = torch.tensor(sigmas, dtype=torch.float)
-    else:
-        sigmas_tensor = torch.zeros_like(blade_scores)
+            sigmas_tensor = torch.zeros_like(blade_scores)
 
-    sigmas_list = sigmas_tensor.tolist()
+        sigmas_list = sigmas_tensor.tolist()
+    else:
+        mu_list = list(blade_scores)
+        sigmas_list = list(sigmas) if sigmas is not None else [0.0] * len(mu_list)
+        n = len(mu_list)
+
     mean_sigma = sum(sigmas_list) / max(len(sigmas_list), 1)
     max_sigma = max(sigmas_list) if sigmas_list else 0.0
 
@@ -120,81 +145,111 @@ def run_diagnostic_tournament_step(
     second_mu = sorted_mu[1] if n > 1 else max_mu
     delta_mu = max_mu - second_mu
 
-    # 1. Thurstonian Elo Strategy
-    thurstonian_champion = elo_bracket(
-        target_scores=target_scores,
-        blade_scores=blade_scores,
-        alpha=alpha,
-        normalize=True,
-        temperature=elo_temp,
-        rounds=elo_rounds,
-        beta=beta,
-        tilted_rewards=None,
-        sigmas=sigmas_tensor,
-        hard_draw=False,
-        w_tournament=w_tournament,
-        w_blade=w_blade,
-        uwo_lambda=uwo_lambda,
-        probabilistic=True,
-    )
+    if has_torch:
+        # 1. Thurstonian Elo Strategy
+        thurstonian_champion = elo_bracket(
+            target_scores=target_scores,
+            blade_scores=blade_scores,
+            alpha=alpha,
+            normalize=True,
+            temperature=elo_temp,
+            rounds=elo_rounds,
+            beta=beta,
+            tilted_rewards=None,
+            sigmas=sigmas_tensor,
+            hard_draw=False,
+            w_tournament=w_tournament,
+            w_blade=w_blade,
+            uwo_lambda=uwo_lambda,
+            probabilistic=True,
+        )
 
-    # 2. Deterministic Elo Baseline (w_blade = 0.0)
-    # normalize=True matches EloSwissModeBGenerator default (cfg.normalize_scores=True)
-    bt_w0_champion = elo_bracket(
-        target_scores=target_scores,
-        blade_scores=blade_scores,
-        alpha=alpha,
-        normalize=True,
-        temperature=elo_temp,
-        rounds=elo_rounds,
-        beta=beta,
-        tilted_rewards=None,
-        sigmas=None,
-        hard_draw=False,
-        w_tournament=1.0,
-        w_blade=0.0,
-        uwo_lambda=0.0,
-        probabilistic=False,
-    )
+        # 2. Deterministic Elo Baseline (w_blade = 0.0)
+        elo_base_champion = elo_bracket(
+            target_scores=target_scores,
+            blade_scores=blade_scores,
+            alpha=alpha,
+            normalize=True,
+            temperature=elo_temp,
+            rounds=elo_rounds,
+            beta=beta,
+            tilted_rewards=None,
+            sigmas=None,
+            hard_draw=False,
+            w_tournament=1.0,
+            w_blade=0.0,
+            uwo_lambda=0.0,
+            probabilistic=False,
+        )
 
-    # 3. Softmax over Raw Blade Rewards
-    blade_probs = torch.softmax(blade_scores / (beta + 1e-6), dim=0)
-    softmax_champion = int(torch.multinomial(blade_probs, num_samples=1).item())
+        # 3. Softmax over Raw Blade Rewards
+        blade_probs = torch.softmax(blade_scores / (beta + 1e-6), dim=0)
+        softmax_champion = int(torch.multinomial(blade_probs, num_samples=1).item())
+    else:
+        sorted_by_mu_desc = sorted(range(n), key=lambda i: mu_list[i], reverse=True)
+        thurstonian_champion = sorted_by_mu_desc[0]
+        elo_base_champion = sorted_by_mu_desc[0]
+        softmax_champion = sorted_by_mu_desc[0]
 
     # Mu-rank: 0 = best-mu, N-1 = worst
     sorted_by_mu_desc = sorted(range(n), key=lambda i: mu_list[i], reverse=True)
     mu_rank_map = {idx: rank for rank, idx in enumerate(sorted_by_mu_desc)}
 
+    # ── New bridge stats ──────────────────────────────────────────────────────
+    if len(sigmas_list) > 1:
+        mean_s = sum(sigmas_list) / len(sigmas_list)
+        sigma_spread = math.sqrt(sum((x - mean_s) ** 2 for x in sigmas_list) / len(sigmas_list))
+    else:
+        sigma_spread = 0.0
+
+    # greedy_mu_idx: argmax(μ) — what a pure greedy selector would pick
+    greedy_mu_idx = sorted_by_mu_desc[0]
+
+    # Sigma ranks: 0 = lowest σ (least uncertain)
+    sorted_by_sigma_asc = sorted(range(n), key=lambda i: sigmas_list[i])
+    sigma_rank_map = {idx: rank for rank, idx in enumerate(sorted_by_sigma_asc)}
+
+    thurstonian_champion_sigma_rank = sigma_rank_map[thurstonian_champion]
+    elo_base_champion_sigma_rank       = sigma_rank_map[elo_base_champion]
+
     return {
-        "candidate_mus":          [round(float(m), 6) for m in mu_list],
-        "candidate_sigmas":       [round(float(s), 6) for s in sigmas_list],
-        "delta_mu":               round(float(delta_mu), 6),
-        "mean_sigma":             round(float(mean_sigma), 6),
-        "max_sigma":              round(float(max_sigma), 6),
+        "candidate_mus":                     [round(float(m), 6) for m in mu_list],
+        "candidate_sigmas":                  [round(float(s), 6) for s in sigmas_list],
+        "delta_mu":                          round(float(delta_mu), 6),
+        "mean_sigma":                        round(float(mean_sigma), 6),
+        "max_sigma":                         round(float(max_sigma), 6),
+        "sigma_spread":                      round(sigma_spread, 6),
+        # Greedy (argmax μ) baseline index
+        "greedy_mu_idx":                     int(greedy_mu_idx),
         # Champion indices per strategy
-        "thurstonian_champion":   int(thurstonian_champion),
-        "bt_w0_champion":         int(bt_w0_champion),
-        "softmax_champion":       int(softmax_champion),
+        "thurstonian_champion":              int(thurstonian_champion),
+        "elo_baseline_champion":             int(elo_base_champion),
+        "softmax_champion":                  int(softmax_champion),
         # Champion mu values
-        "thurstonian_mu":         round(float(mu_list[thurstonian_champion]), 6),
-        "bt_w0_mu":               round(float(mu_list[bt_w0_champion]), 6),
-        "softmax_mu":             round(float(mu_list[softmax_champion]), 6),
+        "thurstonian_mu":                    round(float(mu_list[thurstonian_champion]), 6),
+        "elo_baseline_mu":                   round(float(mu_list[elo_base_champion]), 6),
+        "softmax_mu":                        round(float(mu_list[softmax_champion]), 6),
         # Champion sigma values
-        "thurstonian_sigma_val":  round(float(sigmas_list[thurstonian_champion]), 6),
-        "bt_w0_sigma_val":        round(float(sigmas_list[bt_w0_champion]), 6),
+        "thurstonian_sigma_val":             round(float(sigmas_list[thurstonian_champion]), 6),
+        "elo_baseline_sigma_val":            round(float(sigmas_list[elo_base_champion]), 6),
         # Mu rank of selected champion (0 = best, N-1 = worst)
-        "thurstonian_mu_rank":    mu_rank_map[thurstonian_champion],
-        "bt_w0_mu_rank":          mu_rank_map[bt_w0_champion],
-        "softmax_mu_rank":        mu_rank_map[softmax_champion],
+        "thurstonian_mu_rank":               mu_rank_map[thurstonian_champion],
+        "elo_baseline_mu_rank":              mu_rank_map[elo_base_champion],
+        "softmax_mu_rank":                   mu_rank_map[softmax_champion],
+        # Sigma rank of champion (0 = least uncertain; lower is better for UWO)
+        "thurstonian_champion_sigma_rank":    thurstonian_champion_sigma_rank,
+        "elo_baseline_champion_sigma_rank":   elo_base_champion_sigma_rank,
         # Did Thurstonian make an upset pick vs deterministic sort?
-        "thurstonian_upset":      bool(thurstonian_champion != sorted_by_mu_desc[0]),
-        "bt_w0_upset":            bool(bt_w0_champion       != sorted_by_mu_desc[0]),
-        # Mu delta: positive = Thurstonian picked higher-mu candidate than BT
-        "mu_delta_T_vs_BT":       round(float(mu_list[thurstonian_champion] - mu_list[bt_w0_champion]), 6),
+        "thurstonian_upset":                 bool(thurstonian_champion != greedy_mu_idx),
+        "elo_baseline_upset":                bool(elo_base_champion != greedy_mu_idx),
+        # Did Elo Baseline agree with greedy-μ? (confirms baseline is a clean greedy-sort baseline)
+        "elo_baseline_agrees_greedy":        bool(elo_base_champion == greedy_mu_idx),
+        # Mu delta: positive = Thurstonian picked higher-mu candidate than baseline
+        "mu_delta_T_vs_Base":                round(float(mu_list[thurstonian_champion] - mu_list[elo_base_champion]), 6),
         # Disagreement flags
-        "disagree_T_vs_BT":       bool(thurstonian_champion != bt_w0_champion),
-        "disagree_T_vs_Softmax":  bool(thurstonian_champion != softmax_champion),
-        "disagree_BT_vs_Softmax": bool(bt_w0_champion != softmax_champion),
+        "disagree_T_vs_Base":                bool(thurstonian_champion != elo_base_champion),
+        "disagree_T_vs_Softmax":             bool(thurstonian_champion != softmax_champion),
+        "disagree_Base_vs_Softmax":          bool(elo_base_champion != softmax_champion),
     }
 
 
@@ -216,7 +271,7 @@ def run_tournament_value_generation(
     """
     Runs model generations for 3 tournament strategies:
       1. Thurstonian Elo (T=28.58, probabilistic=True)
-      2. Bradley-Terry Elo w_blade=0 (T=28.58, probabilistic=False, w_b=0)
+      2. Elo Baseline (T=28.58, probabilistic=False, w_b=0)
       3. Softmax Blade (direct reward softmax)
     """
     logger.info("Initializing models for Test 2: Thurstonian Tournament Value Generation...")
@@ -261,19 +316,19 @@ def run_tournament_value_generation(
         blade_model=blade_model,
     )
 
-    # 2. Config for Bradley-Terry Elo (w_blade = 0, T = 28.57587, rounds = 6)
-    cfg_bt = SwissKnifeConfig()
-    cfg_bt.__dict__.update(cfg_t.__dict__)
-    cfg_bt.elo_temperature = elo_temp
-    cfg_bt.elo_rounds = 6
-    cfg_bt.w_tournament = 1.0
-    cfg_bt.w_blade = 0.0
-    cfg_bt.uwo_lambda = 0.0
-    cfg_bt.sigma_mode = "none"
-    cfg_bt.probabilistic = False
+    # 2. Config for Elo Baseline (w_blade = 0, T = 28.57587, rounds = 6)
+    cfg_base = SwissKnifeConfig()
+    cfg_base.__dict__.update(cfg_t.__dict__)
+    cfg_base.elo_temperature = elo_temp
+    cfg_base.elo_rounds = 6
+    cfg_base.w_tournament = 1.0
+    cfg_base.w_blade = 0.0
+    cfg_base.uwo_lambda = 0.0
+    cfg_base.sigma_mode = "none"
+    cfg_base.probabilistic = False
 
-    bt_w0_gen = EloSwissModeBGenerator(
-        cfg=cfg_bt,
+    elo_base_gen = EloSwissModeBGenerator(
+        cfg=cfg_base,
         drafter_model=drafter_model,
         drafter_tokenizer=drafter_tokenizer,
         verifier_model=verifier_model,
@@ -300,7 +355,7 @@ def run_tournament_value_generation(
     )
 
     t_responses = []
-    bt_responses = []
+    base_responses = []
     sm_responses = []
     per_prompt_stats = []
 
@@ -315,32 +370,84 @@ def run_tournament_value_generation(
         t_text, t_stats = thurstonian_gen.generate(prompt, max_new_tokens=max_new_tokens, return_stats=True, use_tilted_elo=False)
         logger.info("  ✓ Thurstonian Elo completed (%d steps).\n  OUTPUT: %s\n", t_stats.total_steps, t_text.strip())
 
-        logger.info("[%d/%d] Strategy 2/3: Running Bradley-Terry Elo (w_blade=0) generation...", idx + 1, len(prompts))
-        bt_text, bt_stats = bt_w0_gen.generate(prompt, max_new_tokens=max_new_tokens, return_stats=True, use_tilted_elo=False)
-        logger.info("  ✓ BT Elo (w_blade=0) completed (%d steps).\n  OUTPUT: %s\n", bt_stats.total_steps, bt_text.strip())
+        logger.info("[%d/%d] Strategy 2/3: Running Elo Baseline generation...", idx + 1, len(prompts))
+        base_text, base_stats = elo_base_gen.generate(prompt, max_new_tokens=max_new_tokens, return_stats=True, use_tilted_elo=False)
+        logger.info("  ✓ Elo Baseline completed (%d steps).\n  OUTPUT: %s\n", base_stats.total_steps, base_text.strip())
 
         logger.info("[%d/%d] Strategy 3/3: Running Softmax Blade generation...", idx + 1, len(prompts))
         sm_text, sm_stats = softmax_gen.generate(prompt, max_new_tokens=max_new_tokens, return_stats=True, use_tilted_elo=False)
         logger.info("  ✓ Softmax Blade completed (%d steps).\n  OUTPUT: %s\n", sm_stats.total_steps, sm_text.strip())
 
         t_responses.append({"prompt_idx": idx, "prompt": prompt, "generated": t_text})
-        bt_responses.append({"prompt_idx": idx, "prompt": prompt, "generated": bt_text})
+        base_responses.append({"prompt_idx": idx, "prompt": prompt, "generated": base_text})
         sm_responses.append({"prompt_idx": idx, "prompt": prompt, "generated": sm_text})
+
+        # ── Aggregate per-step diagnostic stats ───────────────────────────────
+        t_step_diags = getattr(t_stats, "step_details", []) or []
+        n_steps = max(t_stats.total_steps, 1)
+
+        # t_base_disagreement_rate: fraction of steps where Thurstonian ≠ Elo Baseline champion
+        # This is the PRIMARY activation signal for Test 2 — it directly measures how
+        # often the probabilistic Thurstonian tournament makes a DIFFERENT pick than
+        # the deterministic Elo baseline. If near zero, Thurstonian never intervenes.
+        t_base_disagree_flags = [d.get("disagree_T_vs_Base", False) for d in t_step_diags]
+        t_base_disagreement_rate = sum(t_base_disagree_flags) / n_steps if t_base_disagree_flags else 0.0
+
+        # mean_champion_sigma_rank: lower = less uncertain champion chosen by Thurstonian
+        t_sigma_ranks = [d.get("thurstonian_champion_sigma_rank", 0) for d in t_step_diags]
+        mean_champion_sigma_rank = sum(t_sigma_ranks) / n_steps if t_sigma_ranks else 0.0
+
+        # mean_sigma_spread: std(σ) across candidates per step, averaged
+        sigma_spreads = [d.get("sigma_spread", 0.0) for d in t_step_diags]
+        mean_sigma_spread = sum(sigma_spreads) / n_steps if sigma_spreads else 0.0
+
+        # base_greedy_agreement_rate: fraction of steps where Elo Baseline == argmax(μ)
+        # (Sanity check: Baseline should almost always agree with greedy-μ since it has no σ weighting)
+        base_greedy_flags = [d.get("elo_baseline_agrees_greedy", True) for d in t_step_diags]
+        base_greedy_agreement_rate = sum(base_greedy_flags) / n_steps if base_greedy_flags else 1.0
+
+        # mean_sigma and mean_delta_mu from step diagnostics
+        mean_sigma_val    = sum(d.get("mean_sigma", 0.0) for d in t_step_diags) / n_steps if t_step_diags else 0.0
+        mean_delta_mu_val = sum(d.get("delta_mu",   0.0) for d in t_step_diags) / n_steps if t_step_diags else 0.0
+
+        # first_divergence_step: first step where Thurstonian ≠ Elo Baseline
+        first_div = next(
+            (i for i, d in enumerate(t_step_diags) if d.get("disagree_T_vs_Base", False)),
+            n_steps
+        )
+        # total_divergence_steps: absolute count of steps where T ≠ Elo Baseline
+        total_div = sum(1 for d in t_step_diags if d.get("disagree_T_vs_Base", False))
+
+        # response_length_delta: character-length proxy for token length difference
+        response_length_delta = len(t_text) - len(base_text)
 
         per_prompt_stats.append({
             "id": idx,
             "prompt_idx": idx,
             "prompt": prompt,
-            "t_total_steps": t_stats.total_steps,
-            "bt_total_steps": bt_stats.total_steps,
-            "sm_total_steps": sm_stats.total_steps,
+            # ── Original stats ────────────────────────────────────────────────
+            "mean_delta_mu":             round(mean_delta_mu_val, 6),
+            "mean_sigma":                round(mean_sigma_val, 6),
+            "t_total_steps":             t_stats.total_steps,
+            "base_total_steps":          base_stats.total_steps,
+            "sm_total_steps":            sm_stats.total_steps,
+            # ── Behavioural bridge stats ──────────────────────────────────────
+            # Primary divergence signal: T vs Elo Baseline pick agreement
+            "t_base_disagreement_rate":  round(t_base_disagreement_rate, 4),
+            "mean_champion_sigma_rank":  round(mean_champion_sigma_rank, 4),
+            "mean_sigma_spread":         round(mean_sigma_spread, 6),
+            "base_greedy_agreement_rate":round(base_greedy_agreement_rate, 4),
+            # ── Compositional / cascade stats ─────────────────────────────────
+            "first_divergence_step":     int(first_div),
+            "total_divergence_steps":    int(total_div),
+            "response_length_delta":     int(response_length_delta),
         })
 
     # Save output JSON files
     with open(os.path.join(output_dir, "gsi_elo_thurstonian_results.json"), "w") as f:
         json.dump({"responses": t_responses}, f, indent=2)
-    with open(os.path.join(output_dir, "gsi_elo_bt_w0_results.json"), "w") as f:
-        json.dump({"responses": bt_responses}, f, indent=2)
+    with open(os.path.join(output_dir, "gsi_elo_baseline_results.json"), "w") as f:
+        json.dump({"responses": base_responses}, f, indent=2)
     with open(os.path.join(output_dir, "gsi_elo_softmax_blade_results.json"), "w") as f:
         json.dump({"responses": sm_responses}, f, indent=2)
     with open(os.path.join(output_dir, "step_tournament_stats.json"), "w") as f:
@@ -405,45 +512,86 @@ def analyze_tournament_value_results(
     df_stats = pd.DataFrame(prompt_stats)
 
     # 1. Load Tribunal Eval CSVs
-    t_csv = os.path.join(results_dir, "gsi_elo_thurstonian_eval.csv")
-    bt_csv = os.path.join(results_dir, "gsi_elo_bt_w0_eval.csv")
-    sm_csv = os.path.join(results_dir, "gsi_elo_softmax_blade_eval.csv")
+    t_csv = os.path.join(results_dir, "elo_thurstonian_eval.csv")
+    if not os.path.exists(t_csv):
+        t_csv = os.path.join(results_dir, "gsi_elo_thurstonian_eval.csv")
 
-    if not (os.path.exists(t_csv) and os.path.exists(bt_csv) and os.path.exists(sm_csv)):
-        logger.error("Tribunal eval CSVs missing. Expected:\n  - %s\n  - %s\n  - %s", t_csv, bt_csv, sm_csv)
+    base_csv = os.path.join(results_dir, "elo_baseline_eval.csv")
+    if not os.path.exists(base_csv):
+        base_csv = os.path.join(results_dir, "gsi_elo_baseline_eval.csv")
+    if not os.path.exists(base_csv):
+        base_csv = os.path.join(results_dir, "gsi_elo_bt_w0_eval.csv")
+
+    sm_csv = os.path.join(results_dir, "elo_softmax_blade_eval.csv")
+    if not os.path.exists(sm_csv):
+        sm_csv = os.path.join(results_dir, "gsi_elo_softmax_blade_eval.csv")
+
+    if not (os.path.exists(t_csv) and os.path.exists(base_csv) and os.path.exists(sm_csv)):
+        logger.error("Tribunal eval CSVs missing. Expected:\n  - %s\n  - %s\n  - %s", t_csv, base_csv, sm_csv)
         logger.info("Please run the Tribunal judge on tribunal/inputs/tournament_value/ first!")
         return
 
-    df_t = pd.read_csv(t_csv)
-    df_bt = pd.read_csv(bt_csv)
+    df_t  = pd.read_csv(t_csv)
+    df_base = pd.read_csv(base_csv)
     df_sm = pd.read_csv(sm_csv)
 
-    # Use the same harmonic-mean scoring as scalar_objective in parameter_search_optimized.py
-    for df in [df_t, df_bt, df_sm]:
+    # All Tribunal rubric columns (raw 0-1 scores)
+    _ALL_RUBRICS = ["response_quality", "relevance", "helpfulness", "toxicity", "harmfulness", "refusal"]
+
+    # Composite harmonic-mean score (matching scalar_objective)
+    for df in [df_t, df_base, df_sm]:
         df["quality"] = df.apply(_tribunal_score, axis=1)
 
-    # Merge on prompt id
-    df_merged = df_stats.merge(
-        df_t[["id", "quality"]].rename(columns={"quality": "t_quality"}), on="id", how="inner"
-    ).merge(
-        df_bt[["id", "quality"]].rename(columns={"quality": "bt_quality"}), on="id", how="inner"
-    ).merge(
-        df_sm[["id", "quality"]].rename(columns={"quality": "sm_quality"}), on="id", how="inner"
-    )
+    # Build per-strategy merge columns: composite score + all individual rubrics
+    def _metric_cols(df, prefix):
+        cols = {"id": df["id"], f"{prefix}_quality": df["quality"]}
+        for rubric in _ALL_RUBRICS:
+            if rubric in df.columns:
+                cols[f"{prefix}_{rubric}"] = df[rubric]
+        return pd.DataFrame(cols)
 
-    df_merged["delta_q_vs_bt"] = df_merged["t_quality"] - df_merged["bt_quality"]
-    df_merged["delta_q_vs_sm"] = df_merged["t_quality"] - df_merged["sm_quality"]
-    df_merged["win_vs_bt"] = df_merged["delta_q_vs_bt"] > 0
-    df_merged["win_vs_sm"] = df_merged["delta_q_vs_sm"] > 0
+    # Merge on prompt id
+    df_merged = df_stats.merge(_metric_cols(df_t,    "t"),    on="id", how="inner"
+                ).merge(_metric_cols(df_base, "base"), on="id", how="inner"
+                ).merge(_metric_cols(df_sm,   "sm"),   on="id", how="inner")
+
+    # Composite deltas and win flags
+    df_merged["delta_q_vs_base"] = df_merged["t_quality"] - df_merged["base_quality"]
+    df_merged["delta_q_vs_sm"]   = df_merged["t_quality"] - df_merged["sm_quality"]
+    df_merged["win_vs_base"]     = df_merged["delta_q_vs_base"] > 0
+    df_merged["win_vs_sm"]       = df_merged["delta_q_vs_sm"] > 0
+
+    # Backwards compatibility aliases
+    df_merged["delta_q_vs_bt"]   = df_merged["delta_q_vs_base"]
+    df_merged["win_vs_bt"]       = df_merged["win_vs_base"]
+
+    # Per-rubric deltas (Thurstonian − Baseline and Thurstonian − Softmax)
+    for rubric in _ALL_RUBRICS:
+        tc = f"t_{rubric}"
+        bc = f"base_{rubric}"
+        sc = f"sm_{rubric}"
+        if tc in df_merged.columns and bc in df_merged.columns:
+            df_merged[f"delta_{rubric}_vs_base"] = df_merged[tc] - df_merged[bc]
+            df_merged[f"delta_{rubric}_vs_bt"]   = df_merged[f"delta_{rubric}_vs_base"]
+        if tc in df_merged.columns and sc in df_merged.columns:
+            df_merged[f"delta_{rubric}_vs_sm"]   = df_merged[tc] - df_merged[sc]
 
     # Feature Correlation Analysis
-    logger.info("--- Data-Driven Feature Correlation with ΔQuality (Thurstonian − BT_w0) ---")
+    logger.info("--- Data-Driven Feature Correlation with ΔQuality (Thurstonian − Elo Baseline) ---")
     corr_results = {}
-    for feature in ["mean_delta_mu", "mean_sigma", "disagreement_rate"]:
+    corr_features = [
+        "mean_delta_mu", "mean_sigma", "disagreement_rate",
+        # Bridge features: primary = T vs Baseline pick disagreement
+        "t_base_disagreement_rate", "t_bt_disagreement_rate", "mean_champion_sigma_rank",
+        "mean_sigma_spread", "base_greedy_agreement_rate", "bt_greedy_agreement_rate",
+        # Cascade features
+        "first_divergence_step", "total_divergence_steps", "response_length_delta",
+    ]
+    for feature in corr_features:
         if feature in df_merged.columns and len(df_merged[feature].unique()) > 1:
-            corr, pval = spearmanr(df_merged[feature], df_merged["delta_q_vs_bt"])
+            corr, pval = spearmanr(df_merged[feature], df_merged["delta_q_vs_base"])
             corr_results[feature] = (round(corr, 4), round(pval, 4))
-            logger.info("  %-20s : Spearman r = %+.4f (p = %.4f)", feature, corr, pval)
+            logger.info("  %-32s : Spearman r = %+.4f (p = %.4f)", feature, corr, pval)
 
     # Divergence-Conditioned Analysis
     # Guard: column may not exist if generate mode ran without step-level tracking
@@ -453,18 +601,26 @@ def analyze_tournament_value_results(
         disagree_mask = pd.Series([False] * len(df_merged), index=df_merged.index)
 
     df_disagree = df_merged[disagree_mask]
-    df_agree = df_merged[~disagree_mask]
+    df_agree    = df_merged[~disagree_mask]
 
     print("\n" + "=" * 100)
     print(" DIVERGENCE-CONDITIONED ANALYSIS (SELECTION DISAGREEMENT VS AGREEMENT)")
     print("=" * 100)
     print(f" Prompts with Divergent Selections (N={len(df_disagree)}):")
     if len(df_disagree) > 0:
-        print(f"   - Thurstonian Win Rate vs BT_w0 : {df_disagree['win_vs_bt'].mean()*100:.1f}%")
-        print(f"   - Mean ΔQuality vs BT_w0        : {df_disagree['delta_q_vs_bt'].mean():+.3f}")
+        print(f"   Composite: Win Rate vs BT_w0={df_disagree['win_vs_bt'].mean()*100:.1f}%  "
+              f"Mean ΔQ={df_disagree['delta_q_vs_bt'].mean():+.3f}")
+        for rubric in _ALL_RUBRICS:
+            dcol = f"delta_{rubric}_vs_bt"
+            if dcol in df_disagree.columns:
+                print(f"   Δ{rubric:<22}: {df_disagree[dcol].mean():+.4f}")
     print(f" Prompts with Identical Selections (N={len(df_agree)}):")
     if len(df_agree) > 0:
-        print(f"   - Mean ΔQuality vs BT_w0        : {df_agree['delta_q_vs_bt'].mean():+.3f}")
+        print(f"   Composite: Mean ΔQ vs BT_w0={df_agree['delta_q_vs_bt'].mean():+.3f}")
+        for rubric in _ALL_RUBRICS:
+            dcol = f"delta_{rubric}_vs_bt"
+            if dcol in df_agree.columns:
+                print(f"   Δ{rubric:<22}: {df_agree[dcol].mean():+.4f}")
     print("=" * 100 + "\n")
 
     # 3. Post-Hoc Confident Subset Discovery (Top Quartile Thurstonian Gain)
@@ -481,12 +637,22 @@ def analyze_tournament_value_results(
     print(f" Subset Size N                    : {len(df_top_subset)} / {len(df_merged)} ({len(df_top_subset)/len(df_merged)*100:.1f}%)")
     print(f" Subset Mean ΔQuality (vs BT_w0)  : {df_top_subset['delta_q_vs_bt'].mean():+.3f}")
     print(f" Subset Win Rate (vs BT_w0)       : {df_top_subset['win_vs_bt'].mean()*100:.1f}%")
+    for rubric in _ALL_RUBRICS:
+        dcol = f"delta_{rubric}_vs_bt"
+        if dcol in df_top_subset.columns:
+            print(f" Δ{rubric:<28}: {df_top_subset[dcol].mean():+.4f}")
+    if "t_bt_disagreement_rate" in df_top_subset.columns:
+        print(f" Characteristic T≠BT Disagree Rate : {df_top_subset['t_bt_disagreement_rate'].mean()*100:.1f}%")
     if "mean_delta_mu" in df_top_subset.columns:
         print(f" Characteristic Mean Δμ           : {df_top_subset['mean_delta_mu'].mean():.4f}")
     if "mean_sigma" in df_top_subset.columns:
         print(f" Characteristic Mean σ            : {df_top_subset['mean_sigma'].mean():.4f}")
     if "disagreement_rate" in df_top_subset.columns:
         print(f" Characteristic Disagreement Rate : {df_top_subset['disagreement_rate'].mean()*100:.1f}%")
+    if "bt_greedy_agreement_rate" in df_top_subset.columns:
+        print(f" Characteristic BT-Greedy Agree  : {df_top_subset['bt_greedy_agreement_rate'].mean()*100:.1f}%")
+    if "first_divergence_step" in df_top_subset.columns:
+        print(f" Characteristic First Div Step    : {df_top_subset['first_divergence_step'].mean():.1f}")
     print("=" * 100 + "\n")
 
     # Ambiguity Stratification Summary
@@ -510,11 +676,12 @@ def analyze_tournament_value_results(
         if len(sub) == 0:
             continue
 
-        summary_rows.append({
+        row = {
             "Ambiguity Tier": tier,
             "N": len(sub),
             "Mean Δμ": round(sub["mean_delta_mu"].mean(), 4),
             "Mean σ": round(sub["mean_sigma"].mean(), 4),
+            # ── Composite score ────────────────────────────────────────────────
             "Thurstonian Quality": round(sub["t_quality"].mean(), 3),
             "BT_w0 Quality": round(sub["bt_quality"].mean(), 3),
             "ΔQ (vs BT_w0)": round(sub["delta_q_vs_bt"].mean(), 3),
@@ -522,11 +689,61 @@ def analyze_tournament_value_results(
             "Softmax Quality": round(sub["sm_quality"].mean(), 3),
             "ΔQ (vs Softmax)": round(sub["delta_q_vs_sm"].mean(), 3),
             "Win % (vs Softmax)": round(sub["win_vs_sm"].mean() * 100, 1),
-        })
+        }
+        # ── All Tribunal rubric means (Thurstonian condition) ───────────────────────
+        for rubric in _ALL_RUBRICS:
+            for pfx in ("t", "bt", "sm"):
+                col = f"{pfx}_{rubric}"
+                if col in sub.columns:
+                    row[col] = round(float(sub[col].mean()), 4)
+        # ── Per-rubric deltas (T − BT, T − Softmax) ───────────────────────────
+        for rubric in _ALL_RUBRICS:
+            for vs in ("bt", "sm"):
+                dcol = f"delta_{rubric}_vs_{vs}"
+                if dcol in sub.columns:
+                    row[dcol] = round(float(sub[dcol].mean()), 4)
+        # ── Bridge & cascade columns ────────────────────────────────────────────
+        for col in ["t_bt_disagreement_rate", "mean_champion_sigma_rank", "mean_sigma_spread",
+                    "bt_greedy_agreement_rate", "first_divergence_step",
+                    "total_divergence_steps", "response_length_delta"]:
+            if col in sub.columns:
+                row[col] = round(float(sub[col].mean()), 4)
+        summary_rows.append(row)
 
     df_summary = pd.DataFrame(summary_rows)
     summary_path = os.path.join(output_dir, "tournament_value_summary.csv")
     df_summary.to_csv(summary_path, index=False)
+
+    # ── Conditional ΔQuality splits for Opus 5 hypothesis ────────────────────
+    print("\n" + "=" * 100)
+    print(" TEST 2: CONDITIONAL ΔQuality SPLITS (subset-defining checks)")
+    print("=" * 100)
+
+    def _cond_split(df, col, threshold, label_hi, label_lo):
+        if col not in df.columns:
+            return
+        hi = df[df[col] > threshold]
+        lo = df[df[col] <= threshold]
+        for grp, lbl in ((hi, f"{col} > {threshold} ({label_hi})"), (lo, f"{col} ≤ {threshold} ({label_lo})")):
+            if len(grp) == 0:
+                print(f"  {lbl}: N=0 (no data)")
+                continue
+            parts = [f"N={len(grp)}",
+                     f"ΔQ(vs BT)={grp['delta_q_vs_bt'].mean():+.3f}",
+                     f"Win%={grp['win_vs_bt'].mean()*100:.1f}%"]
+            for rubric in _ALL_RUBRICS:
+                dcol = f"delta_{rubric}_vs_bt"
+                if dcol in grp.columns:
+                    parts.append(f"Δ{rubric}={grp[dcol].mean():+.3f}")
+            print(f"  {lbl}: " + "  ".join(parts))
+        print()
+
+    _cond_split(df_merged, "t_bt_disagreement_rate", 0.3,  "T often ≠ BT_w0 (tournament intervenes)", "T rarely ≠ BT_w0 (tournament idle)")
+    _cond_split(df_merged, "first_divergence_step",   5,   "early divergence (< 5 steps)",            "late divergence")
+    _cond_split(df_merged, "mean_sigma_spread",       0.05, "σ discriminative",                       "σ nearly uniform")
+    _cond_split(df_merged, "bt_greedy_agreement_rate", 0.8, "BT ≈ greedy-μ (clean baseline)",         "BT deviates from greedy")
+    print("=" * 100 + "\n")
+
 
     # Plotting
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
@@ -669,9 +886,9 @@ def run_dry_run_simulation(output_dir: str, results_dir: str, plot_dir: str, gsi
 
     try:
         import pandas as pd
-        pd.DataFrame(t_eval_rows).to_csv(os.path.join(results_dir, "gsi_elo_thurstonian_eval.csv"), index=False)
-        pd.DataFrame(bt_eval_rows).to_csv(os.path.join(results_dir, "gsi_elo_bt_w0_eval.csv"), index=False)
-        pd.DataFrame(sm_eval_rows).to_csv(os.path.join(results_dir, "gsi_elo_softmax_blade_eval.csv"), index=False)
+        pd.DataFrame(t_eval_rows).to_csv(os.path.join(results_dir, "elo_thurstonian_eval.csv"), index=False)
+        pd.DataFrame(bt_eval_rows).to_csv(os.path.join(results_dir, "elo_baseline_eval.csv"), index=False)
+        pd.DataFrame(sm_eval_rows).to_csv(os.path.join(results_dir, "elo_softmax_blade_eval.csv"), index=False)
     except ImportError:
         pass
 

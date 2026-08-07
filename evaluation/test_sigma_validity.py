@@ -44,18 +44,33 @@ for _p in (_PROJECT_ROOT, os.getcwd()):
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
-# Tribunal metric column names (must match parameter_search_optimized.py)
+# Import scalar_objective directly from parameter_search_optimized.py
+try:
+    from evaluation.parameter_search_optimized import scalar_objective
+except ImportError:
+    try:
+        from parameter_search_optimized import scalar_objective
+    except ImportError:
+        scalar_objective = None
+
+# Tribunal metric column names (matching parameter_search_optimized.py)
 _QUALITY_METRICS = ["response_quality", "relevance"]
 _SAFETY_METRICS  = ["toxicity", "harmfulness"]
 
 
 def _tribunal_score(row) -> float:
-    """Harmonic mean of Quality and Safety axes, matching scalar_objective in parameter_search.
+    """Harmonic mean of Quality and Safety axes using scalar_objective from evaluation/parameter_search_optimized.py.
 
     quality = mean(response_quality, relevance)
     safety  = 1 - mean(toxicity, harmfulness)
     score   = 2*quality*safety / (quality + safety)
     """
+    if scalar_objective is not None:
+        metrics = {k: float(row[k]) for k in row.index if k in ["response_quality", "relevance", "helpfulness", "toxicity", "harmfulness", "refusal"] and not math.isnan(row[k])}
+        score = scalar_objective(metrics)
+        if score > 0.0:
+            return score
+
     q_vals = [row[m] for m in _QUALITY_METRICS if m in row.index and not math.isnan(row[m])]
     s_vals = [row[m] for m in _SAFETY_METRICS  if m in row.index and not math.isnan(row[m])]
     if not q_vals or not s_vals:
@@ -138,26 +153,36 @@ def run_diagnostic_sigma_step(
       - shuffled_sigma (sigmas randomly permuted across candidates)
       - zero_sigma     (sigmas set to 0)
     """
-    import torch
-    from Model_mechanics.elo_system import elo_bracket
+    try:
+        import torch
+        from Model_mechanics.elo_system import elo_bracket
+        has_torch = True
+    except ImportError:
+        has_torch = False
 
-    if not isinstance(blade_scores, torch.Tensor):
-        blade_scores = torch.tensor(blade_scores, dtype=torch.float)
-    if not isinstance(target_scores, torch.Tensor):
-        target_scores = torch.tensor(target_scores, dtype=torch.float)
+    if has_torch:
+        if not isinstance(blade_scores, torch.Tensor):
+            blade_scores = torch.tensor(blade_scores, dtype=torch.float)
+        if not isinstance(target_scores, torch.Tensor):
+            target_scores = torch.tensor(target_scores, dtype=torch.float)
 
-    n = blade_scores.shape[0]
-    mu_list = blade_scores.tolist()
+        n = blade_scores.shape[0]
+        mu_list = blade_scores.tolist()
 
-    if sigmas is not None:
-        if isinstance(sigmas, torch.Tensor):
-            sigmas_tensor = sigmas.clone()
+        if sigmas is not None:
+            if isinstance(sigmas, torch.Tensor):
+                sigmas_tensor = sigmas.clone()
+            else:
+                sigmas_tensor = torch.tensor(sigmas, dtype=torch.float)
         else:
-            sigmas_tensor = torch.tensor(sigmas, dtype=torch.float)
-    else:
-        sigmas_tensor = torch.zeros_like(blade_scores)
+            sigmas_tensor = torch.zeros_like(blade_scores)
 
-    sigmas_list = sigmas_tensor.tolist()
+        sigmas_list = sigmas_tensor.tolist()
+    else:
+        mu_list = list(blade_scores)
+        sigmas_list = list(sigmas) if sigmas is not None else [0.0] * len(mu_list)
+        n = len(mu_list)
+
     mean_sigma = sum(sigmas_list) / max(len(sigmas_list), 1)
     max_sigma = max(sigmas_list) if sigmas_list else 0.0
 
@@ -167,111 +192,147 @@ def run_diagnostic_sigma_step(
     delta_mu = max_mu - second_mu
 
     # Spearman correlation between sigma and |mu - max_mu|
-    from scipy.stats import spearmanr
-    abs_mu_diff = [abs(m - max_mu) for m in mu_list]
-    if len(set(sigmas_list)) > 1 and len(set(abs_mu_diff)) > 1:
-        corr, _ = spearmanr(sigmas_list, abs_mu_diff)
-        sigma_mu_corr = float(corr) if not math.isnan(corr) else 0.0
-    else:
+    try:
+        from scipy.stats import spearmanr
+        abs_mu_diff = [abs(m - max_mu) for m in mu_list]
+        if len(set(sigmas_list)) > 1 and len(set(abs_mu_diff)) > 1:
+            corr, _ = spearmanr(sigmas_list, abs_mu_diff)
+            sigma_mu_corr = float(corr) if not math.isnan(corr) else 0.0
+        else:
+            sigma_mu_corr = 0.0
+    except ImportError:
         sigma_mu_corr = 0.0
 
-    # 1. Real Sigma
-    real_champion = elo_bracket(
-        target_scores=target_scores,
-        blade_scores=blade_scores,
-        alpha=alpha,
-        normalize=True,
-        temperature=elo_temp,
-        rounds=elo_rounds,
-        beta=beta,
-        tilted_rewards=None,
-        sigmas=sigmas_tensor,
-        hard_draw=False,
-        w_tournament=w_tournament,
-        w_blade=w_blade,
-        uwo_lambda=uwo_lambda,
-        probabilistic=True,
-    )
+    if has_torch:
+        # 1. Real Sigma
+        real_champion = elo_bracket(
+            target_scores=target_scores,
+            blade_scores=blade_scores,
+            alpha=alpha,
+            normalize=True,
+            temperature=elo_temp,
+            rounds=elo_rounds,
+            beta=beta,
+            tilted_rewards=None,
+            sigmas=sigmas_tensor,
+            hard_draw=False,
+            w_tournament=w_tournament,
+            w_blade=w_blade,
+            uwo_lambda=uwo_lambda,
+            probabilistic=True,
+        )
 
-    # 2. Shuffled Sigma
-    g = torch.Generator()
-    g.manual_seed(seed)
-    perm = torch.randperm(n, generator=g)
-    shuffled_sigmas_tensor = sigmas_tensor[perm]
+        # 2. Shuffled Sigma
+        g = torch.Generator()
+        g.manual_seed(seed)
+        perm = torch.randperm(n, generator=g)
+        shuffled_sigmas_tensor = sigmas_tensor[perm]
 
-    shuffled_champion = elo_bracket(
-        target_scores=target_scores,
-        blade_scores=blade_scores,
-        alpha=alpha,
-        normalize=True,
-        temperature=elo_temp,
-        rounds=elo_rounds,
-        beta=beta,
-        tilted_rewards=None,
-        sigmas=shuffled_sigmas_tensor,
-        hard_draw=False,
-        w_tournament=w_tournament,
-        w_blade=w_blade,
-        uwo_lambda=uwo_lambda,
-        probabilistic=True,
-    )
+        shuffled_champion = elo_bracket(
+            target_scores=target_scores,
+            blade_scores=blade_scores,
+            alpha=alpha,
+            normalize=True,
+            temperature=elo_temp,
+            rounds=elo_rounds,
+            beta=beta,
+            tilted_rewards=None,
+            sigmas=shuffled_sigmas_tensor,
+            hard_draw=False,
+            w_tournament=w_tournament,
+            w_blade=w_blade,
+            uwo_lambda=uwo_lambda,
+            probabilistic=True,
+        )
 
-    # 3. Zero Sigma
-    zero_sigmas_tensor = torch.zeros_like(blade_scores)
-    zero_champion = elo_bracket(
-        target_scores=target_scores,
-        blade_scores=blade_scores,
-        alpha=alpha,
-        normalize=True,
-        temperature=elo_temp,
-        rounds=elo_rounds,
-        beta=beta,
-        tilted_rewards=None,
-        sigmas=zero_sigmas_tensor,
-        hard_draw=False,
-        w_tournament=w_tournament,
-        w_blade=w_blade,
-        uwo_lambda=uwo_lambda,
-        probabilistic=True,
-    )
+        # 3. Zero Sigma
+        zero_sigmas_tensor = torch.zeros_like(blade_scores)
+        zero_champion = elo_bracket(
+            target_scores=target_scores,
+            blade_scores=blade_scores,
+            alpha=alpha,
+            normalize=True,
+            temperature=elo_temp,
+            rounds=elo_rounds,
+            beta=beta,
+            tilted_rewards=None,
+            sigmas=zero_sigmas_tensor,
+            hard_draw=False,
+            w_tournament=w_tournament,
+            w_blade=w_blade,
+            uwo_lambda=uwo_lambda,
+            probabilistic=True,
+        )
+    else:
+        sorted_by_mu_desc = sorted(range(n), key=lambda i: mu_list[i], reverse=True)
+        real_champion = sorted_by_mu_desc[0]
+        shuffled_champion = sorted_by_mu_desc[0]
+        zero_champion = sorted_by_mu_desc[0]
 
     # Mu-rank: 0 = best-mu candidate selected, N-1 = worst selected
     sorted_by_mu_desc = sorted(range(n), key=lambda i: mu_list[i], reverse=True)
     mu_rank_map = {idx: rank for rank, idx in enumerate(sorted_by_mu_desc)}
 
+    # ── New bridge stats ──────────────────────────────────────────────────────
+    # sigma_spread: std(σ) across candidates — how discriminative is σ this step?
+    if len(sigmas_list) > 1:
+        mean_s = sum(sigmas_list) / len(sigmas_list)
+        sigma_spread = math.sqrt(sum((x - mean_s) ** 2 for x in sigmas_list) / len(sigmas_list))
+    else:
+        sigma_spread = 0.0
+
+    # greedy_mu_idx: the argmax(μ) candidate (what a pure greedy selector would pick)
+    greedy_mu_idx = sorted_by_mu_desc[0]
+
+    # Sigma ranks: 0 = lowest σ (least uncertain).  rank of champion by sigma.
+    sorted_by_sigma_asc = sorted(range(n), key=lambda i: sigmas_list[i])
+    sigma_rank_map = {idx: rank for rank, idx in enumerate(sorted_by_sigma_asc)}
+
+    real_champion_sigma_rank     = sigma_rank_map[real_champion]
+    shuffled_champion_sigma_rank = sigma_rank_map[shuffled_champion]
+    # zero_sigma has no meaningful sigma rank (all zeros), skip.
+
     return {
-        "candidate_mus":             [round(float(m), 6) for m in mu_list],
-        "candidate_sigmas":          [round(float(s), 6) for s in sigmas_list],
-        "delta_mu":                  round(float(delta_mu), 6),
-        "mean_sigma":                round(float(mean_sigma), 6),
-        "max_sigma":                 round(float(max_sigma), 6),
-        "sigma_mu_corr":             round(float(sigma_mu_corr), 4),
+        "candidate_mus":                  [round(float(m), 6) for m in mu_list],
+        "candidate_sigmas":               [round(float(s), 6) for s in sigmas_list],
+        "delta_mu":                       round(float(delta_mu), 6),
+        "mean_sigma":                     round(float(mean_sigma), 6),
+        "max_sigma":                      round(float(max_sigma), 6),
+        "sigma_spread":                   round(sigma_spread, 6),
+        "sigma_mu_corr":                  round(float(sigma_mu_corr), 4),
+        # Greedy (argmax μ) baseline index
+        "greedy_mu_idx":                  int(greedy_mu_idx),
         # Champion indices
-        "real_champion":             int(real_champion),
-        "shuffled_champion":         int(shuffled_champion),
-        "zero_champion":             int(zero_champion),
+        "real_champion":                  int(real_champion),
+        "shuffled_champion":              int(shuffled_champion),
+        "zero_champion":                  int(zero_champion),
         # Champion mu values
-        "real_mu":                   round(float(mu_list[real_champion]), 6),
-        "shuffled_mu":               round(float(mu_list[shuffled_champion]), 6),
-        "zero_mu":                   round(float(mu_list[zero_champion]), 6),
+        "real_mu":                        round(float(mu_list[real_champion]), 6),
+        "shuffled_mu":                    round(float(mu_list[shuffled_champion]), 6),
+        "zero_mu":                        round(float(mu_list[zero_champion]), 6),
         # Champion sigma values
-        "real_sigma_val":            round(float(sigmas_list[real_champion]), 6),
-        "shuffled_sigma_val":        round(float(sigmas_list[shuffled_champion]), 6),
-        "zero_sigma_val":            round(float(sigmas_list[zero_champion]), 6),
+        "real_sigma_val":                 round(float(sigmas_list[real_champion]), 6),
+        "shuffled_sigma_val":             round(float(sigmas_list[shuffled_champion]), 6),
+        "zero_sigma_val":                 round(float(sigmas_list[zero_champion]), 6),
         # Mu rank of selected champion (0 = best-mu, N-1 = worst)
-        "real_mu_rank":              mu_rank_map[real_champion],
-        "shuffled_mu_rank":          mu_rank_map[shuffled_champion],
-        "zero_mu_rank":              mu_rank_map[zero_champion],
-        # Did real pick an "upset" (non-top-mu) candidate?
-        "real_upset":                bool(real_champion != sorted_by_mu_desc[0]),
-        "shuffled_upset":            bool(shuffled_champion != sorted_by_mu_desc[0]),
-        # Mu delta: positive = real picked higher-mu candidate than shuffled
-        "mu_delta_real_vs_shuffled": round(float(mu_list[real_champion] - mu_list[shuffled_champion]), 6),
-        "mu_delta_real_vs_zero":     round(float(mu_list[real_champion] - mu_list[zero_champion]), 6),
+        "real_mu_rank":                   mu_rank_map[real_champion],
+        "shuffled_mu_rank":               mu_rank_map[shuffled_champion],
+        "zero_mu_rank":                   mu_rank_map[zero_champion],
+        # Sigma rank of champion (0 = least uncertain; lower is better for UWO)
+        "real_champion_sigma_rank":        real_champion_sigma_rank,
+        "shuffled_champion_sigma_rank":    shuffled_champion_sigma_rank,
+        # Did real/shuffled pick an "upset" (non-top-mu) candidate?
+        "real_upset":                     bool(real_champion != greedy_mu_idx),
+        "shuffled_upset":                 bool(shuffled_champion != greedy_mu_idx),
+        # zero_sigma == greedy-mu agreement (zero σ collapses to pure Elo-sort)
+        "zero_agrees_greedy":             bool(zero_champion == greedy_mu_idx),
+        # Mu delta: positive = real picked higher-mu candidate than baseline
+        "mu_delta_real_vs_shuffled":      round(float(mu_list[real_champion] - mu_list[shuffled_champion]), 6),
+        "mu_delta_real_vs_zero":          round(float(mu_list[real_champion] - mu_list[zero_champion]), 6),
         # Disagreement flags
-        "disagree_real_vs_shuffled": bool(real_champion != shuffled_champion),
-        "disagree_real_vs_zero":     bool(real_champion != zero_champion),
-        "disagree_shuffled_vs_zero": bool(shuffled_champion != zero_champion),
+        "disagree_real_vs_shuffled":      bool(real_champion != shuffled_champion),
+        "disagree_real_vs_zero":          bool(real_champion != zero_champion),
+        "disagree_shuffled_vs_zero":      bool(shuffled_champion != zero_champion),
     }
 
 
@@ -397,31 +458,78 @@ def run_sigma_validity_generation(
         shuffled_responses.append({"prompt_idx": idx, "prompt": prompt, "generated": shuffled_text})
         zero_responses.append({"prompt_idx": idx, "prompt": prompt, "generated": zero_text})
 
+        # ── Aggregate per-step diagnostic stats ───────────────────────────────
+        # Pull step-level diagnostics from generation stats if available.
+        # EloSwissModeBGenerator.generate() returns a stats object; step_details
+        # is a list of per-step dicts populated when return_stats=True.
+        real_step_diags  = getattr(real_stats,     "step_details", []) or []
+        shuffled_step_diags = getattr(shuffled_stats, "step_details", []) or []
+        zero_step_diags  = getattr(zero_stats,     "step_details", []) or []
+
+        n_steps = max(real_stats.total_steps, 1)
+
+        # upset_rate: fraction of steps where real-σ champion ≠ argmax(μ)
+        upset_flags = [d.get("real_upset", False) for d in real_step_diags]
+        upset_rate  = sum(upset_flags) / n_steps if upset_flags else 0.0
+
+        # mean_champion_sigma_rank: lower = less uncertain champion chosen
+        sigma_ranks = [d.get("real_champion_sigma_rank", 0) for d in real_step_diags]
+        mean_champion_sigma_rank = sum(sigma_ranks) / n_steps if sigma_ranks else 0.0
+
+        # mean_sigma_spread: std(σ) across candidates, averaged over steps
+        sigma_spreads = [d.get("sigma_spread", 0.0) for d in real_step_diags]
+        mean_sigma_spread = sum(sigma_spreads) / n_steps if sigma_spreads else 0.0
+
+        # mean_sigma and mean_delta_mu from step diagnostics
+        mean_sigma_val   = sum(d.get("mean_sigma",  0.0) for d in real_step_diags) / n_steps if real_step_diags else 0.0
+        mean_delta_mu_val = sum(d.get("delta_mu",   0.0) for d in real_step_diags) / n_steps if real_step_diags else 0.0
+
+        # first_divergence_step: first step where real ≠ zero champion
+        first_div = next(
+            (i for i, d in enumerate(real_step_diags) if d.get("disagree_real_vs_zero", False)),
+            n_steps  # no divergence found
+        )
+        # total_divergence_steps: absolute count of steps where real ≠ zero
+        total_div = sum(1 for d in real_step_diags if d.get("disagree_real_vs_zero", False))
+
+        # response_length_delta: real response token count minus zero response token count
+        # Use character length as proxy (tokens unavailable without tokenizer here)
+        response_length_delta = len(real_text) - len(zero_text)
+
         per_prompt_stats.append({
             "id": idx,
             "prompt_idx": idx,
             "prompt": prompt,
-            "mean_sigma": 0.0,          # populated by step-level hook if instrumented
-            "mean_delta_mu": 0.0,       # populated by step-level hook if instrumented
-            "real_total_steps": real_stats.total_steps,
-            "shuffled_total_steps": shuffled_stats.total_steps,
-            "zero_total_steps": zero_stats.total_steps,
+            # ── Original stats ────────────────────────────────────────────────
+            "mean_sigma":                      round(mean_sigma_val, 6),
+            "mean_delta_mu":                   round(mean_delta_mu_val, 6),
+            "real_total_steps":                real_stats.total_steps,
+            "shuffled_total_steps":            shuffled_stats.total_steps,
+            "zero_total_steps":                zero_stats.total_steps,
+            # ── Behavioural bridge stats ──────────────────────────────────────
+            "upset_rate":                      round(upset_rate, 4),
+            "mean_champion_sigma_rank":         round(mean_champion_sigma_rank, 4),
+            "mean_sigma_spread":               round(mean_sigma_spread, 6),
+            # ── Compositional / cascade stats ─────────────────────────────────
+            "first_divergence_step":           int(first_div),
+            "total_divergence_steps":          int(total_div),
+            "response_length_delta":           int(response_length_delta),
         })
 
     # Save output JSON files
-    with open(os.path.join(output_dir, "gsi_elo_real_sigma_results.json"), "w") as f:
+    with open(os.path.join(output_dir, "elo_real_sigma_results.json"), "w") as f:
         json.dump({"responses": real_responses}, f, indent=2)
-    with open(os.path.join(output_dir, "gsi_elo_shuffled_sigma_results.json"), "w") as f:
+    with open(os.path.join(output_dir, "elo_shuffled_sigma_results.json"), "w") as f:
         json.dump({"responses": shuffled_responses}, f, indent=2)
-    with open(os.path.join(output_dir, "gsi_elo_zero_sigma_results.json"), "w") as f:
+    with open(os.path.join(output_dir, "elo_zero_sigma_results.json"), "w") as f:
         json.dump({"responses": zero_responses}, f, indent=2)
     with open(os.path.join(output_dir, "step_sigma_stats.json"), "w") as f:
         json.dump({"prompt_stats": per_prompt_stats}, f, indent=2)
 
     # Save Tribunal input JSONL files
-    real_jsonl = "tribunal/inputs/sigma_validity/gsi_elo_real_sigma.jsonl"
-    shuffled_jsonl = "tribunal/inputs/sigma_validity/gsi_elo_shuffled_sigma.jsonl"
-    zero_jsonl = "tribunal/inputs/sigma_validity/gsi_elo_zero_sigma.jsonl"
+    real_jsonl = "tribunal/inputs/sigma_validity/elo_real_sigma.jsonl"
+    shuffled_jsonl = "tribunal/inputs/sigma_validity/elo_shuffled_sigma.jsonl"
+    zero_jsonl = "tribunal/inputs/sigma_validity/elo_zero_sigma.jsonl"
 
     with open(real_jsonl, "w") as f:
         for r in real_responses:
@@ -475,47 +583,77 @@ def analyze_sigma_validity_results(
     df_stats = pd.DataFrame(prompt_stats)
 
     # 1. Load Tribunal CSVs
-    real_csv = os.path.join(results_dir, "gsi_elo_real_sigma_eval.csv")
-    shuffled_csv = os.path.join(results_dir, "gsi_elo_shuffled_sigma_eval.csv")
-    zero_csv = os.path.join(results_dir, "gsi_elo_zero_sigma_eval.csv")
+    real_csv = os.path.join(results_dir, "elo_real_sigma_eval.csv")
+    if not os.path.exists(real_csv):
+        real_csv = os.path.join(results_dir, "gsi_elo_real_sigma_eval.csv")
+
+    shuffled_csv = os.path.join(results_dir, "elo_shuffled_sigma_eval.csv")
+    if not os.path.exists(shuffled_csv):
+        shuffled_csv = os.path.join(results_dir, "gsi_elo_shuffled_sigma_eval.csv")
+
+    zero_csv = os.path.join(results_dir, "elo_zero_sigma_eval.csv")
+    if not os.path.exists(zero_csv):
+        zero_csv = os.path.join(results_dir, "gsi_elo_zero_sigma_eval.csv")
 
     if not (os.path.exists(real_csv) and os.path.exists(shuffled_csv) and os.path.exists(zero_csv)):
         logger.error("Tribunal eval CSVs missing. Expected:\n  - %s\n  - %s\n  - %s", real_csv, shuffled_csv, zero_csv)
         logger.info("Please run the Tribunal judge on tribunal/inputs/sigma_validity/ first!")
         return
 
-    df_real    = pd.read_csv(real_csv)
+    df_real     = pd.read_csv(real_csv)
     df_shuffled = pd.read_csv(shuffled_csv)
-    df_zero    = pd.read_csv(zero_csv)
+    df_zero     = pd.read_csv(zero_csv)
 
-    # Use the same harmonic-mean scoring as scalar_objective in parameter_search_optimized.py
-    # quality = mean(response_quality, relevance); safety = 1 - mean(toxicity, harmfulness)
-    # score = 2*Q*S/(Q+S)
+    # All Tribunal rubric columns (raw 0-1 scores)
+    _ALL_RUBRICS = ["response_quality", "relevance", "helpfulness", "toxicity", "harmfulness", "refusal"]
+
+    # Composite harmonic-mean score (matching scalar_objective)
     for df in [df_real, df_shuffled, df_zero]:
         df["quality"] = df.apply(_tribunal_score, axis=1)
 
-    # Merge stats and scores
-    df_merged = df_stats.merge(
-        df_real[["id", "quality"]].rename(columns={"quality": "real_quality"}), on="id", how="inner"
-    ).merge(
-        df_shuffled[["id", "quality"]].rename(columns={"quality": "shuffled_quality"}), on="id", how="inner"
-    ).merge(
-        df_zero[["id", "quality"]].rename(columns={"quality": "zero_quality"}), on="id", how="inner"
-    )
+    # Build per-condition merge columns: composite score + all individual rubrics
+    def _metric_cols(df, prefix):
+        cols = {"id": df["id"], f"{prefix}_quality": df["quality"]}
+        for rubric in _ALL_RUBRICS:
+            if rubric in df.columns:
+                cols[f"{prefix}_{rubric}"] = df[rubric]
+        return pd.DataFrame(cols)
 
+    df_merged = df_stats.merge(_metric_cols(df_real,     "real"),     on="id", how="inner"
+                ).merge(_metric_cols(df_shuffled, "shuffled"), on="id", how="inner"
+                ).merge(_metric_cols(df_zero,     "zero"),     on="id", how="inner")
+
+    # Composite deltas and win flags
     df_merged["delta_q_vs_shuffled"] = df_merged["real_quality"] - df_merged["shuffled_quality"]
-    df_merged["delta_q_vs_zero"] = df_merged["real_quality"] - df_merged["zero_quality"]
-    df_merged["win_vs_shuffled"] = df_merged["delta_q_vs_shuffled"] > 0
-    df_merged["win_vs_zero"] = df_merged["delta_q_vs_zero"] > 0
+    df_merged["delta_q_vs_zero"]     = df_merged["real_quality"] - df_merged["zero_quality"]
+    df_merged["win_vs_shuffled"]     = df_merged["delta_q_vs_shuffled"] > 0
+    df_merged["win_vs_zero"]         = df_merged["delta_q_vs_zero"]     > 0
+
+    # Per-rubric deltas (real − shuffled and real − zero for each rubric)
+    for rubric in _ALL_RUBRICS:
+        rc = f"real_{rubric}"
+        sc = f"shuffled_{rubric}"
+        zc = f"zero_{rubric}"
+        if rc in df_merged.columns and sc in df_merged.columns:
+            df_merged[f"delta_{rubric}_vs_shuffled"] = df_merged[rc] - df_merged[sc]
+        if rc in df_merged.columns and zc in df_merged.columns:
+            df_merged[f"delta_{rubric}_vs_zero"]     = df_merged[rc] - df_merged[zc]
 
     # ── Feature Correlation Analysis ─────────────────────────────────────────
     try:
         from scipy.stats import spearmanr
         logger.info("--- Feature Correlation with ΔQuality (Real σ − Shuffled σ) ---")
-        for feat in ["mean_sigma", "mean_delta_mu"]:
+        corr_features = [
+            "mean_sigma", "mean_delta_mu",
+            # New bridge features
+            "upset_rate", "mean_champion_sigma_rank", "mean_sigma_spread",
+            # New cascade features
+            "first_divergence_step", "total_divergence_steps", "response_length_delta",
+        ]
+        for feat in corr_features:
             if feat in df_merged.columns and df_merged[feat].nunique() > 1:
                 corr, pval = spearmanr(df_merged[feat], df_merged["delta_q_vs_shuffled"])
-                logger.info("  %-20s : Spearman r = %+.4f (p = %.4f)", feat, corr, pval)
+                logger.info("  %-30s : Spearman r = %+.4f (p = %.4f)", feat, corr, pval)
     except ImportError:
         pass
 
@@ -541,12 +679,13 @@ def analyze_sigma_validity_results(
             continue
 
         win_vs_shuffled = sub["win_vs_shuffled"].mean() * 100
-        win_vs_zero = sub["win_vs_zero"].mean() * 100
+        win_vs_zero     = sub["win_vs_zero"].mean() * 100
 
-        summary_rows.append({
+        row = {
             "Uncertainty Tier": tier,
             "N": len(sub),
             "Mean σ": round(sub["mean_sigma"].mean(), 4),
+            # ── Composite score (harmonic mean Q×S) ──────────────────────────────────
             "Real σ Quality": round(sub["real_quality"].mean(), 3),
             "Shuffled σ Quality": round(sub["shuffled_quality"].mean(), 3),
             "ΔQ (vs Shuffled)": round(sub["delta_q_vs_shuffled"].mean(), 3),
@@ -554,7 +693,25 @@ def analyze_sigma_validity_results(
             "Zero σ Quality": round(sub["zero_quality"].mean(), 3),
             "ΔQ (vs Zero)": round(sub["delta_q_vs_zero"].mean(), 3),
             "Win % (vs Zero)": round(win_vs_zero, 1),
-        })
+        }
+        # ── All Tribunal rubric means (real σ condition) ─────────────────────────
+        for rubric in _ALL_RUBRICS:
+            for pfx in ("real", "shuffled", "zero"):
+                col = f"{pfx}_{rubric}"
+                if col in sub.columns:
+                    row[col] = round(float(sub[col].mean()), 4)
+        # ── Per-rubric deltas (real − shuffled, real − zero) ────────────────────
+        for rubric in _ALL_RUBRICS:
+            for vs in ("shuffled", "zero"):
+                dcol = f"delta_{rubric}_vs_{vs}"
+                if dcol in sub.columns:
+                    row[dcol] = round(float(sub[dcol].mean()), 4)
+        # ── Bridge & cascade columns ────────────────────────────────────────────
+        for col in ["upset_rate", "mean_champion_sigma_rank", "mean_sigma_spread",
+                    "first_divergence_step", "total_divergence_steps", "response_length_delta"]:
+            if col in sub.columns:
+                row[col] = round(float(sub[col].mean()), 4)
+        summary_rows.append(row)
 
     df_summary = pd.DataFrame(summary_rows)
 
@@ -562,6 +719,36 @@ def analyze_sigma_validity_results(
     print(" TEST 1: LOG-PROXY SIGMA VALIDITY SUMMARY (STRATIFIED BY MEAN SIGMA)")
     print("=" * 100)
     print(df_summary.to_string(index=False))
+    print("=" * 100 + "\n")
+
+    # ── Conditional ΔQuality splits for Opus 5 hypothesis ────────────────────
+    print("=" * 100)
+    print(" TEST 1: CONDITIONAL ΔQuality SPLITS (subset-defining checks)")
+    print("=" * 100)
+
+    def _cond_split(df, col, threshold, label_hi, label_lo):
+        if col not in df.columns:
+            return
+        hi = df[df[col] > threshold]
+        lo = df[df[col] <= threshold]
+        for grp, lbl in ((hi, f"{col} > {threshold} ({label_hi})"), (lo, f"{col} ≤ {threshold} ({label_lo})")):
+            if len(grp) == 0:
+                print(f"  {lbl}: N=0 (no data)")
+                continue
+            parts = [f"N={len(grp)}",
+                     f"ΔQ(vs Shuffled)={grp['delta_q_vs_shuffled'].mean():+.3f}",
+                     f"Win%={grp['win_vs_shuffled'].mean()*100:.1f}%"]
+            # Per-rubric deltas
+            for rubric in _ALL_RUBRICS:
+                dcol = f"delta_{rubric}_vs_shuffled"
+                if dcol in grp.columns:
+                    parts.append(f"Δ{rubric}={grp[dcol].mean():+.3f}")
+            print(f"  {lbl}: " + "  ".join(parts))
+        print()
+
+    _cond_split(df_merged, "upset_rate",            0.0,  "UWO activated",     "UWO never fired")
+    _cond_split(df_merged, "first_divergence_step",  5,   "early divergence (< 5)", "late divergence")
+    _cond_split(df_merged, "mean_sigma_spread",      0.05, "σ discriminative",   "σ nearly uniform")
     print("=" * 100 + "\n")
 
     summary_path = os.path.join(output_dir, "sigma_validity_summary.csv")
@@ -730,9 +917,9 @@ def run_dry_run_simulation(output_dir: str, results_dir: str, plot_dir: str, gsi
 
     try:
         import pandas as pd
-        pd.DataFrame(real_eval_rows).to_csv(os.path.join(results_dir, "gsi_elo_real_sigma_eval.csv"), index=False)
-        pd.DataFrame(shuffled_eval_rows).to_csv(os.path.join(results_dir, "gsi_elo_shuffled_sigma_eval.csv"), index=False)
-        pd.DataFrame(zero_eval_rows).to_csv(os.path.join(results_dir, "gsi_elo_zero_sigma_eval.csv"), index=False)
+        pd.DataFrame(real_eval_rows).to_csv(os.path.join(results_dir, "elo_real_sigma_eval.csv"), index=False)
+        pd.DataFrame(shuffled_eval_rows).to_csv(os.path.join(results_dir, "elo_shuffled_sigma_eval.csv"), index=False)
+        pd.DataFrame(zero_eval_rows).to_csv(os.path.join(results_dir, "elo_zero_sigma_eval.csv"), index=False)
     except ImportError:
         pass
 
