@@ -163,34 +163,37 @@ python evaluation/run_hh_experiments.py \
     --mode analyze
 ```
 - Reads `tribunal/outputs/tournament_value/` CSVs and `runs/tournament_value/step_tournament_stats.json`.
+- Computes composite **Scalar Objective Score** (matching `scalar_objective` in `parameter_search_optimized.py`: harmonic mean of Quality & Safety) and reports all 6 individual Tribunal rubrics: `response_quality`, `relevance`, `helpfulness`, `toxicity`, `harmfulness`, `refusal`.
 - Stratifies prompts into **High / Medium / Low Ambiguity tiers** (by mean Δμ across the candidate pool).
-- Prints the divergence-conditioned table: on steps where Thurstonian disagrees with BT, does it win?
-- Identifies the **top-quartile "confident subset"** (`confident_subset.csv`) where Thurstonian gains are largest.
+- Computes data-driven Spearman feature correlations across all pre-outcome step statistics and composite ΔObjective.
+- Prints the **Divergence-Conditioned Table** (comparing prompts where Thurstonian intervened vs. where it remained idle).
+- Discovers and exports the **Top-Quartile Confident Subset** (`confident_subset.csv`) where Thurstonian gains are largest.
 - Saves bar charts (`tournament_value_gap.png`) and scatter plot (`delta_quality_vs_delta_mu_scatter.png`).
 
 > **Key numbers to record for the paper:**
 >
-> *Tribunal outcome stats (primary — ground-truth claim):*
-> - ΔQuality (Thurstonian − BT) overall and per ambiguity tier
-> - `refusal_delta` (Tribunal refusal: Thurstonian − BT). **Critical:** if Thurstonian wins only by refusing more, the tournament mechanism is not the cause — the harmlessness blade is.
-> - ΔSafety and ΔQuality rubrics separately — know which axis is driving the win
+> *Tribunal outcome stats & Objective Function (primary ground-truth claims):*
+> - Composite ΔScalar Objective & ΔQuality (Thurstonian − Elo Baseline) overall and per ambiguity tier
+> - All individual Tribunal rubric scores (`response_quality`, `relevance`, `helpfulness`, `toxicity`, `harmfulness`, `refusal`) reported separately for Thurstonian, Elo Baseline, and Softmax Blade.
+> - ΔSafety = Δ(1 − mean(toxicity, harmfulness)) — verifies safety retention.
+> - `refusal_delta` (Tribunal refusal score: Thurstonian − Elo Baseline). **Critical:** if Thurstonian wins only by refusing more, the tournament mechanism is not the cause — the harmlessness blade is.
 >
 > *Behavioural bridge stats (pre-outcome; explain when tournament activated):*
-> - `upset_rate` — fraction of steps where Thurstonian chose a non-argmax(μ) candidate. **Core activation check: if upset_rate ≈ 0, Thurstonian and BT are identical and any ΔQuality is noise.**
+> - `t_base_disagreement_rate` / `t_bt_disagreement_rate` — fraction of steps where Thurstonian chose a different champion than `elo_baseline`. **Primary activation signal: if disagreement_rate ≈ 0, Thurstonian and Baseline are identical and any ΔObjective is noise.**
 > - `mean_champion_sigma_rank` — σ-rank of Thurstonian’s champion (0=least uncertain). If UWO works, should be significantly below pool average (N-1)/2.
 > - `mean_sigma_spread` — std(σ) across candidates. Low spread = UWO ranking is near-random; high spread = σ genuinely discriminates.
-> - `bt_greedy_agreement_rate` — fraction of steps where BT w_blade=0 == argmax(μ). Confirms BT is a clean greedy-sort baseline.
+> - `base_greedy_agreement_rate` — fraction of steps where `elo_baseline` == argmax(μ). Confirms `elo_baseline` is a clean greedy-sort baseline.
 >
 > *Compositional/cascade stats (explain why final response quality differs):*
-> - `first_divergence_step` — step index of first T vs. BT champion disagreement. Step 0 divergence → almost entirely different responses.
+> - `first_divergence_step` — step index of first T vs. Baseline champion disagreement. Step 0 divergence → almost entirely different responses.
 > - `total_divergence_steps` — absolute count of diverging steps (the “effective dose” of the tournament’s intervention on the response).
-> - `response_length_delta` — Thurstonian response − BT response in tokens. Must control for this before attributing gains to the mechanism.
+> - `response_length_delta` — Thurstonian response − Baseline response in tokens. Must control for length bias.
 >
 > *Subset-defining conditional checks (pre-outcome, for Opus 5 hypothesis):*
-> - ΔQuality conditional on `upset_rate > 0.3` vs. `≤ 0.3`
-> - ΔQuality conditional on `first_divergence_step < 5` vs. later
-> - ΔQuality conditional on `mean_sigma_spread > threshold`
-> - `refusal_delta` sign — if Thurstonian wins AND refusal_delta < 0 (less refusal), the win is genuine quality; if refusal_delta > 0, it’s a safety collapse avoidance story
+> - Composite ΔObjective and rubric deltas conditional on `t_base_disagreement_rate > 0.3` vs. `≤ 0.3`
+> - Composite ΔObjective conditional on `first_divergence_step < 5` vs. later
+> - Composite ΔObjective conditional on `mean_sigma_spread > 0.05`
+> - `refusal_delta` sign — if Thurstonian wins AND refusal_delta < 0 (less refusal), the win is genuine quality; if refusal_delta > 0, it’s a safety-collapse avoidance story
 
 ---
 
@@ -202,23 +205,23 @@ After both Analyze steps are done, feed the following to **Claude Opus** (or equ
 >
 > *"You are helping us write the Analysis section of an AAAI 2027 paper on Swiss Knife, a decode-time alignment system. The core novelty is `elo_swiss_mode_b`: a Thurstonian probabilistic Elo tournament that selects a decoding-step champion unconditionally, using an uncertainty-weighted objective (UWO, μ − λσ) to penalise high-σ candidates.*
 >
-> *We ran two ablation experiments on the Anthropic HH-RLHF harmlessness test split. The Tribunal quality scores (response_quality, relevance, toxicity, harmfulness, refusal) are the ground-truth outcome variable. μ and σ per step are mechanism-level diagnostics. Behavioural stats (upset_rate, champion_sigma_rank, first_divergence_step, etc.) are the bridge — they capture whether and how the tournament’s different selection actually propagated into a different final response.*
+> *We ran two ablation experiments on the Anthropic HH-RLHF harmlessness test split. The Tribunal metrics (response_quality, relevance, helpfulness, toxicity, harmfulness, refusal) and the composite Scalar Objective function (harmonic mean of Quality and Safety) are the ground-truth outcome variables. μ and σ per step are mechanism-level diagnostics. Behavioural stats (t_base_disagreement_rate, champion_sigma_rank, first_divergence_step, total_divergence_steps, etc.) are the bridge — they capture whether and how the tournament’s different selection actually propagated into a different final response.*
 >
 > *State a single, falsifiable subset hypothesis of this exact form:*
-> *"Thurstonian significantly outperforms Bradley-Terry (ΔQuality > X) if and only if [condition using only pre-outcome step stats], because [causal mechanism linking step-level selection to final response quality]. Outside this regime, ΔQuality ≈ 0 because [explanation]."*
+> *"Thurstonian significantly outperforms Elo Baseline (ΔObjective > X) if and only if [condition using only pre-outcome step stats], because [causal mechanism linking step-level selection to final response quality]. Outside this regime, ΔObjective ≈ 0 because [explanation]."*
 >
 > *Requirements for the hypothesis:*
-> *1. Use ONLY pre-outcome features: upset_rate, mean_sigma_spread, first_divergence_step, total_divergence_steps, mean_delta_mu, mean_champion_sigma_rank. Do NOT use Tribunal scores as a condition.*
+> *1. Use ONLY pre-outcome features: t_base_disagreement_rate, mean_sigma_spread, first_divergence_step, total_divergence_steps, mean_delta_mu, mean_champion_sigma_rank. Do NOT use Tribunal scores as a condition.*
 > *2. Name a specific numeric threshold for every feature used.*
 > *3. Explain the mechanism — why does the Thurstonian CDF resolution of ambiguous matches produce a better final response in that regime?*
-> *4. State the null prediction: what should ΔQuality look like on prompts that fail the condition?*
-> *5. Note whether refusal_delta is positive or negative in the subset — this separates genuine quality improvement from safety-collapse avoidance.*
+> *4. State the null prediction: what should ΔObjective look like on prompts that fail the condition?*
+> *5. Report all individual Tribunal rubrics (quality, relevance, helpfulness, toxicity, harmfulness, refusal) alongside ΔObjective, and note whether refusal_delta is positive or negative — this separates genuine quality improvement from safety-collapse avoidance.*
 >
 > *Attached data:*
-> *- `runs/sigma_validity/sigma_validity_summary.csv` — ΔQuality, ΔSafety, refusal_delta, win rates per σ-tier, upset_rate, champion_sigma_rank, sigma_spread, first_divergence_step*
-> *- `runs/tournament_value/tournament_value_summary.csv` — same metrics per ambiguity tier (mean Δμ), plus total_divergence_steps, bt_greedy_agreement_rate, response_length_delta*
-> *- `runs/tournament_value/confident_subset.csv` — full per-prompt feature table for the top-quartile ΔQuality prompts*
-> *- Scatter plot: `delta_quality_vs_delta_mu_scatter.png` (x=mean Δμ, y=ΔQuality T−BT, colour=mean σ)"*
+> *- `runs/sigma_validity/sigma_validity_summary.csv` — Composite ΔObjective, all 6 Tribunal rubrics, ΔSafety, refusal_delta, win rates per σ-tier, upset_rate, champion_sigma_rank, sigma_spread, first_divergence_step*
+> *- `runs/tournament_value/tournament_value_summary.csv` — same metrics per ambiguity tier (mean Δμ), plus total_divergence_steps, base_greedy_agreement_rate, response_length_delta*
+> *- `runs/tournament_value/confident_subset.csv` — full per-prompt feature table for the top-quartile ΔObjective prompts (including all 6 Tribunal rubrics)*
+> *- Scatter plot: `delta_quality_vs_delta_mu_scatter.png` (x=mean Δμ, y=ΔObjective T−Baseline, colour=mean σ)"*
 
 - [ ] Record Opus 5’s hypothesis, the specific feature thresholds, and the null prediction in the paper’s Analysis section.
 - [ ] Verify each threshold: split `confident_subset.csv` by the proposed condition and confirm within-condition win rate is materially higher than out-of-condition win rate.
