@@ -1,0 +1,246 @@
+====================================================================================================
+SWISS-KNIFE: TECHNICAL REVIEW & IN-DEPTH MECHANISTIC ANALYSIS OF MODE-B ELO GENERATOR
+File: Model_mechanics/elo_swiss_mode_b.py
+====================================================================================================
+
+1. EXECUTIVE OVERVIEW & ARCHITECTURAL INTENT
+----------------------------------------------------------------------------------------------------
+The EloSwissModeBGenerator implements step-level Generative Step-level Inference (GSI) using a 
+simulated Thurstonian / Bradley-Terry Elo tournament over candidate reasoning steps sampled from a 
+fast Drafter model. 
+
+Mode B differs fundamentally from Mode A (elo_swiss.py) in the following key dimensions:
+  1. Unconditional Acceptance: Mode B completely removes the Verifier acceptance threshold check 
+     (r_tilted >= u) and secondary Verifier resampling. The candidate selected as the tournament 
+     champion is accepted unconditionally at every decoding step.
+  2. Latency & Simplicity: Elimination of verifier fallback reduces inference latency strictly to 
+     the Drafter sampling cost plus the single-pass Blade reward evaluation cost.
+  3. O(1) Memory Footprint: By utilizing a shared base verifier model and dynamically swapping PEFT 
+     LoRA adapters, Mode B eliminates the linear VRAM scaling penalty when using multiple DPO blades.
+
+----------------------------------------------------------------------------------------------------
+2. STEP-BY-STEP DECODING PIPELINE
+----------------------------------------------------------------------------------------------------
+Given a prompt prefix x_0, decoding proceeds iteratively over step indices t = 1, 2, ... until 
+max_new_tokens is reached or an EOS token is generated:
+
+Step 1: Drafter Candidate Sampling
+  - The fast Drafter model (e.g., Qwen 2.5 3B) samples n candidate reasoning steps:
+    s_i ~ pi_draft(. | x_{<t}),   for i = 1, 2, ..., n
+  - Sampling utilizes temperature, top_k, and top_p settings specified in SwissKnifeConfig.
+  - Step delimitations are extracted based on gsi_step_delimiter or EOS tokens.
+
+Step 2: Drafter Log-Probability Computation
+  - The mean per-token log-probability under the Drafter model, log pi_draft(s_i | x_{<t}), is 
+    computed in a single batched forward pass via compute_logprobs_batched.
+
+Step 3: Verifier Base Model & Blade Reward Computation
+  - DPO Blade rewards mu_i and uncertainty estimates sigma_i are computed via estimate_mu_sigma.
+  - If sigma_mode == 'log_ratio_proxy', Verifier base model log-probabilities log pi_ref(s_i | x_{<t}) 
+    are computed using compute_logprobs_batched with the verifier adapter disabled.
+  - Blade rewards mu_i are evaluated under the active LoRA adapter via score_reasoning_steps.
+
+Step 4: Elo Rating Tournament
+  - An Elo tournament of R rounds is simulated over the n candidates using elo_bracket.
+  - Initial ratings for all candidates are set to R_i^{(0)} = 1500.0.
+  - Match outcomes between candidate pairs (a, b) are determined probabilistically (Thurstonian Case-V) 
+    or deterministically (Bradley-Terry).
+  - Ratings are updated dynamically across rounds using a decaying K-factor schedule.
+
+Step 5: Champion Selection Logits & Softmax Draw
+  - After R rounds, champion selection logits are constructed:
+      logit_i = w_tournament * znorm((R_i - 1500) / T) + w_blade * znorm(mu_i - lambda * sigma_i)
+  - The champion candidate k is sampled from softmax(logits).
+
+Step 6: Unconditional Commitment & State Update
+  - Candidate s_k is appended to the prefix: x_{\le t} = [x_{<t}, s_k].
+  - Cached prefix token IDs are updated directly without re-tokenizing text from scratch.
+
+----------------------------------------------------------------------------------------------------
+3. EXACT MATHEMATICAL FORMULATION OF LOG-PROBABILITIES
+----------------------------------------------------------------------------------------------------
+All log-probability calculations across Drafter, Verifier, and DPO Blade models adhere to a strict 
+mean per-token log-probability formulation to maintain scale consistency across variable step lengths.
+
+Given:
+  - Prefix token IDs:  P = [p_1, p_2, ..., p_L]  (length L)
+  - Step token IDs:    S = [s_1, s_2, ..., s_M]  (length M)
+  - Full input tensor: F = [p_1, ..., p_L, s_1, ..., s_M]  (length L + M)
+
+Causal Alignment Logic:
+  In autoregressive Transformers, the logit output at index t predicts token input at index t + 1.
+  Therefore:
+    - Prediction positions for step tokens S:
+        pred_positions = [L - 1, L, L + 1, ..., L + M - 2]
+    - Target label tokens to gather:
+        label_tokens   = [s_1, s_2, s_3, ..., s_M] = F[L : L + M]
+
+Batched Forward Pass (compute_logprobs_batched):
+  1. For a batch of n candidate steps, full inputs are padded to max_len = L + max(M_i).
+  2. A single forward pass evaluates logits:
+       Z = Model(batch_ids, attention_mask=attention_mask).logits   # Shape: [n, max_len, Vocab]
+  3. Log-softmax converts logits to log-probabilities:
+       log_probs = log_softmax(Z[:, pred_positions, :], dim=-1)     # Shape: [n, max(M_i), Vocab]
+  4. Per-token log-probabilities for candidate i are extracted via gather:
+       log_pi(s_{i,m}) = log_probs[i, m, s_{i,m}]
+  5. The scalar score returned is the mean over the M_i step tokens:
+       log pi(S_i | P) = (1 / M_i) * \sum_{m=1}^{M_i} log pi(s_{i,m} | P, s_{i,<m})
+
+Why Mean Per-Token Log-Probabilities Matter:
+  Summed log-probabilities accumulate negative magnitude proportional to step length M_i. If raw 
+  sums were used, longer steps would be heavily penalized regardless of alignment quality. Using 
+  the mean per-token log-probability guarantees an O(1) scale (~ [-4.0, -0.1]), ensuring mathematical 
+  compatibility with DPO reward terms and uncertainty estimators.
+
+----------------------------------------------------------------------------------------------------
+4. DPO BLADE REWARD (mu_i) & UNCERTAINTY (sigma_i) ESTIMATION
+----------------------------------------------------------------------------------------------------
+The DPO Blade reward mu_i measures the alignment of a candidate step with the target preference 
+distribution implicitly defined by the LoRA adapter.
+
+DPO Reward Formula:
+  mu_i = beta * (log pi_blade(S_i | P) - log pi_ref(S_i | P))
+       = (beta / M_i) * \sum_{m=1}^{M_i} [ log pi_blade(s_{i,m}) - log pi_ref(s_{i,m}) ]
+
+  Where:
+    - pi_blade is the model output with the PEFT LoRA adapter active (set_adapter(blade_name)).
+    - pi_ref   is the frozen base model output with adapters disabled (disable_adapter()).
+    - beta     is the implicit reward scaling factor (default: 0.1).
+
+Uncertainty Modes (sigma_mode):
+
+  1. 'none':
+     sigma_i = 0.0 for all i.
+
+  2. 'log_ratio_proxy':
+     Estimates epistemic/aleatoric reward uncertainty via the absolute residual between clean DPO 
+     blade reward and the empirical log-ratio proxy:
+       sigma_i = | mu_i - (1 / beta) * (log pi_blade(S_i | P) - log pi_ref(S_i | P)) |
+
+  3. 'mc_dropout':
+     Estimates reward variance via Monte Carlo sampling across K stochastic forward passes:
+       - Selective LoRA dropout layers are enabled at test time (set_lora_dropout(training=True)).
+       - K forward passes evaluate stochastic rewards mu_i^{(k)} for k = 1, ..., K.
+       - sigma_i = std_{k}(mu_i^{(k)}).
+
+----------------------------------------------------------------------------------------------------
+5. ELO TOURNAMENT MATCH MECHANICS & RATING UPDATES
+----------------------------------------------------------------------------------------------------
+Function: elo_bracket(target_scores, blade_scores, ...)
+
+Initialization:
+  - All n candidates begin with an initial rating R_i^{(0)} = 1500.0.
+  - Scores (draft_logprobs and blade_scores) are Z-score normalized across candidates:
+      znorm(x) = (x - mean(x)) / (std(x) + 1e-6)
+
+Round Execution (for round r = 0, 1, ..., R - 1):
+  1. Decaying K-Factor Schedule:
+       K_r = K_max * (K_min / K_max)^(r / max(R - 1, 1))
+     With K_max = 40.0 and K_min = 10.0, K-factors decay geometrically across rounds, allowing 
+     large early rating movements followed by fine-grained convergence.
+
+  2. Rating-Based Pairing:
+       - Candidates are sorted descending by current rating R_i.
+       - Greedily paired with adjacent opponents while attempting to avoid rematches.
+
+  3. Match Outcome Decider:
+     (a) Thurstonian Case-V CDF (probabilistic = True or sigmas present):
+         Calculates the win probability of candidate A over candidate B using the standard normal CDF Phi:
+           Delta_mu = mu_A - mu_B
+           Var_match = sigma_A^2 + sigma_B^2
+           P(A beats B) = Phi( Delta_mu / sqrt(Var_match + 1e-8) )
+                        = 0.5 * [ 1 + erf( (Delta_mu / sqrt(2 * Var_match + 2e-8)) ) ]
+
+         Key Research Insight: High uncertainty (large sigma) widens the denominator, driving 
+         P(A beats B) toward 0.5. This increases the probability of stochastic upset wins, allowing 
+         uncertain candidates to be tested thoroughly in the tournament.
+
+     (b) Bradley-Terry Sigmoid (probabilistic = False and sigmas is None):
+         Deterministic step outcome:
+           P(A beats B) = 1.0 if score_A > score_B else (0.0 if score_A < score_B else 0.5)
+
+  4. Outcome Assignment:
+       - Soft Draw (default): actual outcome S_A = P(A beats B), S_B = 1 - S_A.
+       - Hard Draw (hard_draw = True): actual outcome sampled from Bernoulli(P(A beats B)).
+
+  5. Expected Outcome Calculation:
+       Uses a numerically stable sigmoid to compute expected rating performance:
+         diff_ratings = (R_A - R_B) * ln(10) / 400.0
+         E_A = 1.0 / (1.0 + exp(-diff_ratings))   if diff_ratings >= 0
+         E_A = exp(diff_ratings) / (1.0 + exp(diff_ratings))  otherwise
+         E_B = 1.0 - E_A
+
+  6. Rating Update:
+       R_A^{\text{new}} = R_A + K_r * (S_A - E_A)
+       R_B^{\text{new}} = R_B + K_r * (S_B - E_B)
+
+----------------------------------------------------------------------------------------------------
+6. UWO CHAMPION SELECTION LOGITS & SOFTMAX DRAW
+----------------------------------------------------------------------------------------------------
+After R rounds of matches, the final champion step is selected using an Uncertainty-Weighted 
+Objective (UWO) softmax distribution over all n candidates.
+
+Logit Construction:
+  1. Tournament Component:
+       tournament_term = (R_i - 1500.0) / T
+  2. Blade UWO Component:
+       uwo_term = mu_i - uwo_lambda * sigma_i
+  3. Z-Score Normalization & Blending:
+       logits_i = w_tournament * znorm(tournament_term) + w_blade * znorm(uwo_term)
+
+Selection Rule:
+  - If temperature T < 1e-5:
+      champion = argmax_i (logits_i)
+  - Else (Probabilistic Draw):
+      probs = softmax(logits)
+      champion ~ Multinomial(probs)
+
+Role of uwo_lambda:
+  uwo_lambda penalizes candidates with high reward uncertainty (sigma_i) during softmax champion 
+  selection. Unlike Mode A, there is no hard rejection threshold; uwo_lambda softly reduces the 
+  selection probability of unconfident steps while maintaining smooth gradient coverage.
+
+----------------------------------------------------------------------------------------------------
+7. ADAPTER SWAPPING & CONTEXT MANAGEMENT IN PEFT
+----------------------------------------------------------------------------------------------------
+To guarantee O(1) VRAM usage when evaluating DPO blades on a shared base model instance:
+
+1. Initialization:
+   - Verifier base model (e.g. Qwen 2.5 7B) is loaded into VRAM once as a PeftModel.
+   - Blade LoRA adapters (e.g. helpfulness, harmlessness, humour) are loaded dynamically onto the 
+     shared base model using PeftModel.load_adapter(path, adapter_name=name).
+
+2. Context Isolation:
+   - Evaluation of pi_ref (Base Model):
+       with verifier_model.disable_adapter():
+           logits = verifier_model(input_ids, attention_mask)
+     Disables all LoRA weights, ensuring log probabilities reflect the pure unadapted base model.
+
+   - Evaluation of pi_blade (Active LoRA Adapter):
+       verifier_model.set_adapter(blade_name)
+       logits = verifier_model(input_ids, attention_mask)
+     Activates the specified adapter in O(1) time without reloading or duplicating base model 
+     parameters in VRAM.
+
+----------------------------------------------------------------------------------------------------
+8. PERFORMANCE & LATENCY OPTIMIZATIONS
+----------------------------------------------------------------------------------------------------
+1. Tokenizer Prefix Caching:
+   Instead of re-tokenizing the entire growing string prefix_text on every decoding step (which 
+   incurs O(T^2) CPU string tokenization overhead), the generator caches prefix_ids_verifier:
+     cached_prefix_ids_verifier = torch.cat([prefix_ids_verifier, winner_step_ids], dim=0)
+   This reduces per-step CPU tokenization latency to O(1).
+
+2. Batched Single-Pass Verification:
+   All n candidate steps are evaluated in a single padded batch for both base model and blade model 
+   forward passes, maximizing Tensor Core utilization on consumer GPUs.
+
+====================================================================================================
+SUMMARY OF CODE DEPENDENCIES
+====================================================================================================
+  - Model_mechanics/elo_swiss_mode_b.py       : Main Mode-B generator class.
+  - Model_mechanics/blades.py                  : DPOBlade reward computation and adapter context manager.
+  - Model_mechanics/sigma_estimator.py         : Mu and Sigma uncertainty estimator (proxy / MC-dropout).
+  - Model_mechanics/elo_system.py             : Tournament bracket pairing and Elo rating update logic.
+  - evaluation/logprob_utilities.py            : Batched mean per-token log-probability functions.
+====================================================================================================

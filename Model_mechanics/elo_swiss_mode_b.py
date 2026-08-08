@@ -200,14 +200,22 @@ class EloSwissModeBGenerator(EloSwissGenerator):
         )
         initial_prefix_ids = initial_encoded["input_ids"].squeeze(0).tolist()
 
+        # Cache verifier prefix IDs to avoid full re-tokenization every step.
+        # At each step we extend by the winner's step token IDs directly.
+        cached_prefix_ids_verifier: Optional[torch.Tensor] = None
+
         while len(generated_tokens) < max_tokens:
             stats.total_steps += 1
 
             # ── Tokenise prefix ──────────────────────────────────────────────
-            encoded = self.verifier_tokenizer(
-                prefix_text, return_tensors="pt", padding=False, truncation=True
-            )
-            prefix_ids_verifier = encoded["input_ids"].squeeze(0).to(self.verifier_device)
+            # Use cached prefix IDs if available to skip full re-tokenization.
+            if cached_prefix_ids_verifier is None:
+                encoded = self.verifier_tokenizer(
+                    prefix_text, return_tensors="pt", padding=False, truncation=True
+                )
+                prefix_ids_verifier = encoded["input_ids"].squeeze(0).to(self.verifier_device)
+            else:
+                prefix_ids_verifier = cached_prefix_ids_verifier
             prefix_ids_drafter = prefix_ids_verifier.to(self.drafter_device)
 
             # ── Step 1: Sample n reasoning steps from Drafter ────────────────
@@ -249,9 +257,15 @@ class EloSwissModeBGenerator(EloSwissGenerator):
             # ── Verifier log-probabilities (if needed) ───────────────────────
             # Needed for: tilted reward computation OR log_ratio_proxy sigma estimation.
             if active_use_tilted_elo or self.cfg.sigma_mode == "log_ratio_proxy":
-                verifier_logprobs_list = compute_logprobs_batched(
-                    self.verifier_model, prefix_ids_verifier, verifier_step_ids_list
-                )
+                if isinstance(self.verifier_model, PeftModel):
+                    with self.verifier_model.disable_adapter():
+                        verifier_logprobs_list = compute_logprobs_batched(
+                            self.verifier_model, prefix_ids_verifier, verifier_step_ids_list
+                        )
+                else:
+                    verifier_logprobs_list = compute_logprobs_batched(
+                        self.verifier_model, prefix_ids_verifier, verifier_step_ids_list
+                    )
                 verifier_logprobs = torch.tensor(
                     verifier_logprobs_list, dtype=torch.float, device=self.verifier_device
                 )
@@ -313,9 +327,16 @@ class EloSwissModeBGenerator(EloSwissGenerator):
             if active_use_tilted_elo:
                 winner_target_lp = verifier_logprobs[selected_idx].item()
             else:
-                winner_target_lp = compute_logprob(
-                    self.verifier_model, prefix_ids_verifier, winner_verifier_step_ids
-                )
+                # Guard: disable adapter so we compute π_ref (base), not π_blade.
+                if isinstance(self.verifier_model, PeftModel):
+                    with self.verifier_model.disable_adapter():
+                        winner_target_lp = compute_logprob(
+                            self.verifier_model, prefix_ids_verifier, winner_verifier_step_ids
+                        )
+                else:
+                    winner_target_lp = compute_logprob(
+                        self.verifier_model, prefix_ids_verifier, winner_verifier_step_ids
+                    )
             kl_term = (1.0 / beta) * (winner_target_lp - winner_draft_lp)
             self.threshold_calibrator.update(selected_reward, kl_term)
 
@@ -347,6 +368,10 @@ class EloSwissModeBGenerator(EloSwissGenerator):
 
             generated_tokens.extend(clean_tokens)
             stats.total_tokens += len(clean_tokens)
+
+            # Extend cached prefix IDs with the accepted winner tokens (no re-tokenization).
+            clean_ids = winner_verifier_step_ids[:len(clean_tokens)]
+            cached_prefix_ids_verifier = torch.cat([prefix_ids_verifier, clean_ids], dim=0)
 
             if eos_hit:
                 logger.info("EOS token generated. Stopping.")

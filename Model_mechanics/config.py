@@ -110,15 +110,14 @@ class SwissKnifeConfig:
     """Number of rounds in the Elo rating system tournament (used only when
     tournament_mode='elo'). Default: 6."""
 
-    use_tilted_selection: bool = True
-    """If True (default), uses the tilted reward r_tilted = r_blade + (1/β)*(log π_verifier - log π_draft)
-    as the main candidate selection metric inside GSI-Swiss and GSI-Elo, replacing the
-    default blended match(A,B) formula. Set to False to use the original match formula."""
+    use_tilted_selection: bool = False
+    """If True, uses the tilted reward r_tilted = r_blade + (1/β)*(log π_verifier - log π_draft)
+    as the main candidate selection metric inside GSI-Swiss and GSI-Elo. Set to False (default) to use
+    the DPO blade reward directly."""
 
-    use_tilted_elo: bool = True
-    """If True (default), uses the verifier tilted reward instead of the blended match score inside GSI-Elo.
-    Kept as a separate flag for independent control. Controlled together with use_tilted_selection via
-    the --selection-mode CLI argument."""
+    use_tilted_elo: bool = False
+    """If True, uses the verifier tilted reward instead of the blade reward inside GSI-Elo.
+    Set to False (default)."""
 
     generation_mode: str = "option_b"
     """Which generation loop to run:
@@ -207,6 +206,10 @@ class SwissKnifeConfig:
     device: str = "auto"
     """Device for model placement.  'auto' uses accelerate device_map.
     On CPU-only machines, 'cpu' is set automatically when no CUDA is found."""
+
+    shared_base_model: bool = True
+    """If True, multiple DPO blades will share a single base model instance
+    in memory and use dynamic adapter swapping, drastically reducing VRAM usage."""
 
     # ── Stochastic Auditor hyperparameters ──────────────────────────────
     use_stochastic_auditor: bool = False

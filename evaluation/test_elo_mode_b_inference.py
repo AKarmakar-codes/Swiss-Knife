@@ -137,7 +137,11 @@ def run_gpu_inference(args):
     verifier_tokenizer = load_verifier_tokenizer(cfg)
 
     logger.info("Loading Blade model ('%s')...", args.blade)
-    blade_model = load_blade_model(cfg, args.blade)
+    blade_model = load_blade_model(
+        cfg, 
+        args.blade, 
+        base_model=verifier_model if getattr(cfg, "shared_base_model", False) else None
+    )
 
     logger.info("Instantiating EloSwissModeBGenerator...")
     generator = EloSwissModeBGenerator(

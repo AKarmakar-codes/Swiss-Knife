@@ -44,8 +44,12 @@ class EloSwissDualBladeModeBGenerator(EloSwissGenerator):
             helpfulness_blade_model,
         )
         # Instantiate both blades explicitly
-        self.helpfulness_blade = DPOBlade(cfg, verifier_model, helpfulness_blade_model, verifier_tokenizer)
-        self.harmlessness_blade = DPOBlade(cfg, verifier_model, harmlessness_blade_model, verifier_tokenizer)
+        self.helpfulness_blade = DPOBlade(
+            cfg, verifier_model, helpfulness_blade_model, verifier_tokenizer, blade_name="helpfulness"
+        )
+        self.harmlessness_blade = DPOBlade(
+            cfg, verifier_model, harmlessness_blade_model, verifier_tokenizer, blade_name="harmlessness"
+        )
         
         # Nullify the single self.blade inherited from parent to prevent accidental usage
         self.blade = None
@@ -104,14 +108,21 @@ class EloSwissDualBladeModeBGenerator(EloSwissGenerator):
         )
         initial_prefix_ids = initial_encoded["input_ids"].squeeze(0).tolist()
 
+        # Cache verifier prefix IDs to avoid full re-tokenization every step.
+        cached_prefix_ids_verifier: Optional[torch.Tensor] = None
+
         while len(generated_tokens) < max_tokens:
             stats.total_steps += 1
 
             # ── Tokenise prefix ──────────────────────────────────────────────
-            encoded = self.verifier_tokenizer(
-                prefix_text, return_tensors="pt", padding=False, truncation=True
-            )
-            prefix_ids_verifier = encoded["input_ids"].squeeze(0).to(self.verifier_device)
+            # Use cached prefix IDs if available to skip full re-tokenization.
+            if cached_prefix_ids_verifier is None:
+                encoded = self.verifier_tokenizer(
+                    prefix_text, return_tensors="pt", padding=False, truncation=True
+                )
+                prefix_ids_verifier = encoded["input_ids"].squeeze(0).to(self.verifier_device)
+            else:
+                prefix_ids_verifier = cached_prefix_ids_verifier
             prefix_ids_drafter = prefix_ids_verifier.to(self.drafter_device)
 
             # ── Step 1: Sample n reasoning steps from Drafter ────────────────
@@ -152,9 +163,15 @@ class EloSwissDualBladeModeBGenerator(EloSwissGenerator):
 
             # ── Verifier log-probabilities ───────────────────────
             # Must be precomputed because both blades need it for log_ratio_proxy
-            verifier_logprobs_list = compute_logprobs_batched(
-                self.verifier_model, prefix_ids_verifier, verifier_step_ids_list
-            )
+            if isinstance(self.verifier_model, PeftModel):
+                with self.verifier_model.disable_adapter():
+                    verifier_logprobs_list = compute_logprobs_batched(
+                        self.verifier_model, prefix_ids_verifier, verifier_step_ids_list
+                    )
+            else:
+                verifier_logprobs_list = compute_logprobs_batched(
+                    self.verifier_model, prefix_ids_verifier, verifier_step_ids_list
+                )
             verifier_logprobs = torch.tensor(
                 verifier_logprobs_list, dtype=torch.float, device=self.verifier_device
             )
@@ -271,6 +288,10 @@ class EloSwissDualBladeModeBGenerator(EloSwissGenerator):
 
             generated_tokens.extend(clean_tokens)
             stats.total_tokens += len(clean_tokens)
+
+            # Extend cached prefix IDs with accepted winner tokens (no re-tokenization).
+            clean_ids = winner_verifier_step_ids[:len(clean_tokens)]
+            cached_prefix_ids_verifier = torch.cat([prefix_ids_verifier, clean_ids], dim=0)
 
             if eos_hit:
                 logger.info("EOS token generated. Stopping.")

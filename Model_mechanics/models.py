@@ -180,6 +180,7 @@ def load_base_model(cfg: SwissKnifeConfig) -> PreTrainedModel:
 def load_blade_model(
     cfg: SwissKnifeConfig,
     blade_name: str,
+    base_model: Optional[PreTrainedModel] = None,
 ) -> PeftModel:
     """Load a DPO LoRA adapter (blade) on a fresh copy of the base model.
 
@@ -212,69 +213,59 @@ def load_blade_model(
     dtype = _resolve_dtype(cfg)
     device = _resolve_device(cfg)
 
-    logger.info(
-        "Loading blade '%s' base copy [dtype=%s, device=%s]...",
-        blade_name, dtype, device,
-    )
-    attn_kwargs = {}
-    if dtype in [torch.float16, torch.bfloat16] and torch.cuda.is_available():
-        try:
-            import flash_attn
-            attn_kwargs["attn_implementation"] = "flash_attention_2"
-        except ImportError:
-            pass
+    if base_model is not None and getattr(cfg, "shared_base_model", False):
+        logger.info("Using shared base model for blade '%s' [device=%s]...", blade_name, device)
+        base_for_blade = base_model
+    else:
+        logger.info("Loading blade '%s' base copy [dtype=%s, device=%s]...", blade_name, dtype, device)
+        attn_kwargs = {}
+        if dtype in [torch.float16, torch.bfloat16] and torch.cuda.is_available():
+            try:
+                import flash_attn
+                attn_kwargs["attn_implementation"] = "flash_attention_2"
+            except ImportError:
+                pass
 
-    base_for_blade = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        torch_dtype=dtype,
-        device_map=device,
-        trust_remote_code=True,
-        **attn_kwargs,
-    )
+        base_for_blade = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            torch_dtype=dtype,
+            device_map=device,
+            trust_remote_code=True,
+            **attn_kwargs,
+        )
 
+    adapter_path_resolved = ""
     if repo_type == "model":
-        logger.info(
-            "Attaching LoRA adapter from model repo %s / %s ...",
-            repo_id, subfolder,
-        )
-        blade_model = PeftModel.from_pretrained(
-            base_for_blade,
-            repo_id,
-            subfolder=subfolder,
-            torch_dtype=dtype,
-        )
+        logger.info("Attaching LoRA adapter from model repo %s / %s ...", repo_id, subfolder)
+        adapter_path_resolved = repo_id
     elif repo_type == "dataset":
-        logger.info(
-            "Downloading dataset-hosted adapter %s / %s ...",
-            repo_id, subfolder,
-        )
-        local_dir = snapshot_download(
-            repo_id=repo_id,
-            repo_type="dataset",
-            allow_patterns=[f"{subfolder}/*"],
-        )
-        adapter_path = os.path.join(local_dir, subfolder)
-        logger.info("Attaching LoRA adapter from local path: %s", adapter_path)
-        blade_model = PeftModel.from_pretrained(
-            base_for_blade,
-            adapter_path,
-            torch_dtype=dtype,
-        )
+        logger.info("Downloading dataset-hosted adapter %s / %s ...", repo_id, subfolder)
+        local_dir = snapshot_download(repo_id=repo_id, repo_type="dataset", allow_patterns=[f"{subfolder}/*"])
+        adapter_path_resolved = os.path.join(local_dir, subfolder)
+        logger.info("Attaching LoRA adapter from local path: %s", adapter_path_resolved)
     elif repo_type == "local":
-        # repo_id is treated as a direct local filesystem path to the adapter directory.
-        # No HuggingFace Hub download needed — used for locally-trained adapters
-        # (e.g. the Humour Blade at dpo_out/humour/final_adapter/).
-        adapter_path = repo_id if os.path.isabs(repo_id) else os.path.abspath(repo_id)
-        logger.info("Attaching LoRA adapter from local filesystem path: %s", adapter_path)
-        blade_model = PeftModel.from_pretrained(
-            base_for_blade,
-            adapter_path,
-            torch_dtype=dtype,
-        )
+        adapter_path_resolved = repo_id if os.path.isabs(repo_id) else os.path.abspath(repo_id)
+        logger.info("Attaching LoRA adapter from local filesystem path: %s", adapter_path_resolved)
     else:
         raise ValueError(
             f"Unknown repo_type '{repo_type}' for blade '{blade_name}'. "
             f"Expected 'model', 'dataset', or 'local'."
+        )
+
+    if isinstance(base_for_blade, PeftModel):
+        base_for_blade.load_adapter(
+            adapter_path_resolved,
+            adapter_name=blade_name,
+            subfolder=subfolder if repo_type == "model" else None
+        )
+        blade_model = base_for_blade
+    else:
+        blade_model = PeftModel.from_pretrained(
+            base_for_blade,
+            adapter_path_resolved,
+            subfolder=subfolder if repo_type == "model" else None,
+            adapter_name=blade_name,
+            torch_dtype=dtype,
         )
 
     blade_model.eval()
@@ -364,7 +355,8 @@ def load_all(
     """Convenience: load tokenizer, base model, and one blade in one call."""
     tokenizer   = load_tokenizer(cfg)
     base_model  = load_base_model(cfg)
-    blade_model = load_blade_model(cfg, blade_name)
+    # If shared_base_model is True, base_model becomes a PeftModel here
+    blade_model = load_blade_model(cfg, blade_name, base_model=base_model if getattr(cfg, "shared_base_model", False) else None)
     return tokenizer, base_model, blade_model
 
 

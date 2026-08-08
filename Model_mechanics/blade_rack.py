@@ -197,8 +197,12 @@ class BladeRack:
 
         logger.info("Loading blade '%s' into rack...", blade_name)
         t0 = time.perf_counter()
-        blade_model = load_blade_model(self.cfg, blade_name)
-        blade = DPOBlade(self.cfg, self.base_model, blade_model, self.tokenizer)
+        blade_model = load_blade_model(
+            self.cfg, 
+            blade_name, 
+            base_model=self.base_model if getattr(self.cfg, "shared_base_model", False) else None
+        )
+        blade = DPOBlade(self.cfg, self.base_model, blade_model, self.tokenizer, blade_name=blade_name)
         elapsed = (time.perf_counter() - t0) * 1000
         self._blades[blade_name] = blade
         self._load_times[blade_name] = elapsed
