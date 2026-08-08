@@ -350,6 +350,7 @@ def run_sigma_validity_generation(
     w_tournament: float = 0.74063,
     w_blade: float = 2.00907,
     uwo_lambda: float = 0.82332,
+    shard_tag: str = "",
 ):
     """
     Runs model generations for 3 sigma conditions:
@@ -380,14 +381,23 @@ def run_sigma_validity_generation(
     cfg.use_tilted_elo = False
     cfg.probabilistic = True
 
-    from Model_mechanics.models import load_drafter_model, load_drafter_tokenizer, load_verifier_model, load_verifier_tokenizer, load_blade_model
+    from Model_mechanics.models import (
+        load_drafter_model, load_drafter_tokenizer,
+        load_verifier_tokenizer, load_blade_model,
+        load_verifier_model_shared,
+    )
 
-    logger.info("Loading Drafter, Verifier, and DPO Blade Models via Model_mechanics...")
+    logger.info("Loading Drafter and DPO Blade Models via Model_mechanics...")
     drafter_model = load_drafter_model(cfg)
     drafter_tokenizer = load_drafter_tokenizer(cfg)
-    verifier_model = load_verifier_model(cfg)
     verifier_tokenizer = load_verifier_tokenizer(cfg)
     blade_model = load_blade_model(cfg, "harmlessness")
+    # NOTE: verifier_model == base_model == π_ref for this pipeline (same repo
+    # + subfolder as the blade's base). Rather than loading a second ~7.6B
+    # copy of identical weights, reuse blade_model's base weights with its
+    # LoRA adapter disabled. This alone frees ~15GB of VRAM on whichever GPU
+    # these are pinned to, without changing any downstream math.
+    verifier_model = load_verifier_model_shared(blade_model)
 
     # 1. Real Sigma Generator
     cfg_real = SwissKnifeConfig()
@@ -516,20 +526,25 @@ def run_sigma_validity_generation(
             "response_length_delta":           int(response_length_delta),
         })
 
+    # shard_tag (e.g. "_shard3") keeps parallel per-GPU processes from
+    # overwriting each other's output; leave "" for the original single-run
+    # filenames. Merge shards with the same base filename before Tribunal.
+    tag = shard_tag or ""
+
     # Save output JSON files
-    with open(os.path.join(output_dir, "elo_real_sigma_results.json"), "w") as f:
+    with open(os.path.join(output_dir, f"elo_real_sigma_results{tag}.json"), "w") as f:
         json.dump({"responses": real_responses}, f, indent=2)
-    with open(os.path.join(output_dir, "elo_shuffled_sigma_results.json"), "w") as f:
+    with open(os.path.join(output_dir, f"elo_shuffled_sigma_results{tag}.json"), "w") as f:
         json.dump({"responses": shuffled_responses}, f, indent=2)
-    with open(os.path.join(output_dir, "elo_zero_sigma_results.json"), "w") as f:
+    with open(os.path.join(output_dir, f"elo_zero_sigma_results{tag}.json"), "w") as f:
         json.dump({"responses": zero_responses}, f, indent=2)
-    with open(os.path.join(output_dir, "step_sigma_stats.json"), "w") as f:
+    with open(os.path.join(output_dir, f"step_sigma_stats{tag}.json"), "w") as f:
         json.dump({"prompt_stats": per_prompt_stats}, f, indent=2)
 
     # Save Tribunal input JSONL files
-    real_jsonl = "tribunal/inputs/sigma_validity/elo_real_sigma.jsonl"
-    shuffled_jsonl = "tribunal/inputs/sigma_validity/elo_shuffled_sigma.jsonl"
-    zero_jsonl = "tribunal/inputs/sigma_validity/elo_zero_sigma.jsonl"
+    real_jsonl = f"tribunal/inputs/sigma_validity/elo_real_sigma{tag}.jsonl"
+    shuffled_jsonl = f"tribunal/inputs/sigma_validity/elo_shuffled_sigma{tag}.jsonl"
+    zero_jsonl = f"tribunal/inputs/sigma_validity/elo_zero_sigma{tag}.jsonl"
 
     with open(real_jsonl, "w") as f:
         for r in real_responses:

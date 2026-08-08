@@ -289,6 +289,74 @@ def load_blade_model(
     return blade_model
 
 
+class DisabledAdapterView:
+    """Callable wrapper exposing a PEFT model's *base* (LoRA-disabled)
+    forward pass, without loading a second copy of the base model.
+
+    ``load_blade_model`` loads a fresh ~7.6B-parameter base model and
+    attaches a small (~40M-param) LoRA adapter to make ``blade_model``.
+    Historically, callers *also* loaded a completely separate ~7.6B-param
+    copy via ``load_verifier_model``/``load_base_model`` to act as π_ref —
+    doubling weight memory (~15 GB → ~30 GB in bf16) for two copies of
+    numerically identical weights.
+
+    Since PEFT's ``LoraLayer``s wrap (rather than replace) the base
+    ``nn.Linear`` modules, the underlying base weights are still present
+    inside ``blade_model`` and reachable via ``disable_adapter()``. This
+    view makes that accessible with the same call signature
+    (``model(input_ids=..., attention_mask=...) -> outputs.logits``) that
+    ``DPOBlade`` / ``compute_logprob`` / ``compute_logprobs_batched``
+    already expect, so it's a drop-in replacement for a separately loaded
+    verifier/base model — no other code needs to change.
+
+    Usage
+    -----
+    >>> blade_model = load_blade_model(cfg, "harmlessness")
+    >>> verifier_model = DisabledAdapterView(blade_model)  # no 2nd copy
+    """
+
+    def __init__(self, peft_model):
+        self._m = peft_model
+
+    def __call__(self, *args, **kwargs):
+        with self._m.disable_adapter():
+            return self._m(*args, **kwargs)
+
+    def generate(self, *args, **kwargs):
+        with self._m.disable_adapter():
+            return self._m.generate(*args, **kwargs)
+
+    def parameters(self, *args, **kwargs):
+        return self._m.parameters(*args, **kwargs)
+
+    def named_parameters(self, *args, **kwargs):
+        return self._m.named_parameters(*args, **kwargs)
+
+    def eval(self):
+        self._m.eval()
+        return self
+
+    def to(self, *args, **kwargs):
+        self._m.to(*args, **kwargs)
+        return self
+
+    @property
+    def device(self):
+        return next(self._m.parameters()).device
+
+    @property
+    def config(self):
+        return self._m.config
+
+
+def load_verifier_model_shared(blade_model: PeftModel) -> "DisabledAdapterView":
+    """Preferred alternative to ``load_verifier_model``/``load_base_model``
+    when a blade model is already loaded: reuses its weights via
+    ``DisabledAdapterView`` instead of downloading and loading a second
+    ~7.6B-parameter copy onto the GPU. Saves ~15 GB VRAM in bf16."""
+    return DisabledAdapterView(blade_model)
+
+
 def load_all(
     cfg: SwissKnifeConfig,
     blade_name: str,

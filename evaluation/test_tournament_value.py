@@ -267,6 +267,7 @@ def run_tournament_value_generation(
     w_tournament: float = 0.74063,
     w_blade: float = 2.00907,
     uwo_lambda: float = 0.82332,
+    shard_tag: str = "",
 ):
     """
     Runs model generations for 3 tournament strategies:
@@ -298,14 +299,20 @@ def run_tournament_value_generation(
     cfg_t.use_tilted_elo = False
     cfg_t.probabilistic = True
 
-    from Model_mechanics.models import load_drafter_model, load_drafter_tokenizer, load_verifier_model, load_verifier_tokenizer, load_blade_model
+    from Model_mechanics.models import (
+        load_drafter_model, load_drafter_tokenizer,
+        load_verifier_tokenizer, load_blade_model,
+        load_verifier_model_shared,
+    )
 
-    logger.info("Loading Drafter, Verifier, and DPO Blade Models via Model_mechanics...")
+    logger.info("Loading Drafter and DPO Blade Models via Model_mechanics...")
     drafter_model = load_drafter_model(cfg_t)
     drafter_tokenizer = load_drafter_tokenizer(cfg_t)
-    verifier_model = load_verifier_model(cfg_t)
     verifier_tokenizer = load_verifier_tokenizer(cfg_t)
     blade_model = load_blade_model(cfg_t, "harmlessness")
+    # Share weights with the blade model instead of loading a second ~7.6B
+    # copy — see Model_mechanics/models.py::DisabledAdapterView.
+    verifier_model = load_verifier_model_shared(blade_model)
 
     thurstonian_gen = EloSwissModeBGenerator(
         cfg=cfg_t,
@@ -443,27 +450,29 @@ def run_tournament_value_generation(
             "response_length_delta":     int(response_length_delta),
         })
 
+    tag = shard_tag or ""
+
     # Save output JSON files
-    with open(os.path.join(output_dir, "gsi_elo_thurstonian_results.json"), "w") as f:
+    with open(os.path.join(output_dir, f"gsi_elo_thurstonian_results{tag}.json"), "w") as f:
         json.dump({"responses": t_responses}, f, indent=2)
-    with open(os.path.join(output_dir, "gsi_elo_baseline_results.json"), "w") as f:
+    with open(os.path.join(output_dir, f"gsi_elo_baseline_results{tag}.json"), "w") as f:
         json.dump({"responses": base_responses}, f, indent=2)
-    with open(os.path.join(output_dir, "gsi_elo_softmax_blade_results.json"), "w") as f:
+    with open(os.path.join(output_dir, f"gsi_elo_softmax_blade_results{tag}.json"), "w") as f:
         json.dump({"responses": sm_responses}, f, indent=2)
-    with open(os.path.join(output_dir, "step_tournament_stats.json"), "w") as f:
+    with open(os.path.join(output_dir, f"step_tournament_stats{tag}.json"), "w") as f:
         json.dump({"prompt_stats": per_prompt_stats}, f, indent=2)
 
     # Convert to Tribunal input JSONL files
-    t_jsonl = "tribunal/inputs/tournament_value/gsi_elo_thurstonian.jsonl"
-    bt_jsonl = "tribunal/inputs/tournament_value/gsi_elo_bt_w0.jsonl"
-    sm_jsonl = "tribunal/inputs/tournament_value/gsi_elo_softmax_blade.jsonl"
+    t_jsonl = f"tribunal/inputs/tournament_value/gsi_elo_thurstonian{tag}.jsonl"
+    bt_jsonl = f"tribunal/inputs/tournament_value/gsi_elo_bt_w0{tag}.jsonl"
+    sm_jsonl = f"tribunal/inputs/tournament_value/gsi_elo_softmax_blade{tag}.jsonl"
 
     with open(t_jsonl, "w") as f:
         for r in t_responses:
             f.write(json.dumps({"id": r["prompt_idx"], "prompt": r["prompt"], "response": r["generated"]}) + "\n")
 
     with open(bt_jsonl, "w") as f:
-        for r in bt_responses:
+        for r in base_responses:
             f.write(json.dumps({"id": r["prompt_idx"], "prompt": r["prompt"], "response": r["generated"]}) + "\n")
 
     with open(sm_jsonl, "w") as f:
@@ -683,7 +692,7 @@ def analyze_tournament_value_results(
             "Mean σ": round(sub["mean_sigma"].mean(), 4),
             # ── Composite score ────────────────────────────────────────────────
             "Thurstonian Quality": round(sub["t_quality"].mean(), 3),
-            "BT_w0 Quality": round(sub["bt_quality"].mean(), 3),
+            "BT_w0 Quality": round(sub["base_quality"].mean(), 3),
             "ΔQ (vs BT_w0)": round(sub["delta_q_vs_bt"].mean(), 3),
             "Win % (vs BT_w0)": round(sub["win_vs_bt"].mean() * 100, 1),
             "Softmax Quality": round(sub["sm_quality"].mean(), 3),

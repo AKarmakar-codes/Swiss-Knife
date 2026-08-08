@@ -183,8 +183,30 @@ def main():
         default=None,
         help="Optional local path to HH-RLHF dataset JSONL file",
     )
+    parser.add_argument(
+        "--num-shards",
+        type=int,
+        default=1,
+        help=(
+            "Split the prompt set into this many shards for data-parallel "
+            "generation across multiple GPUs. Run one process per shard, "
+            "each with a distinct --shard-id and CUDA_VISIBLE_DEVICES set "
+            "to a different physical GPU. Output files get a '_shardN' "
+            "suffix (see evaluation/merge_shards.py) so processes never "
+            "write to the same file. Default 1 = no sharding (old behaviour)."
+        ),
+    )
+    parser.add_argument(
+        "--shard-id",
+        type=int,
+        default=0,
+        help="Which shard (0-indexed) this process should generate for.",
+    )
 
     args = parser.parse_args()
+
+    if args.num_shards > 1 and not (0 <= args.shard_id < args.num_shards):
+        parser.error(f"--shard-id must be in [0, {args.num_shards})")
 
     print("\n" + "=" * 90)
     print(f" AAAI ABLATION EXPERIMENTS: ANTHROPIC HH-RLHF HARMLESSNESS (SEED {args.seed})")
@@ -223,19 +245,33 @@ def main():
     )
 
     if args.mode == "generate":
+        shard_tag = ""
+        if args.num_shards > 1:
+            # Split prompts into contiguous shards; each GPU process handles
+            # one shard so 8 GPUs generate in parallel instead of one GPU
+            # serially working through all 50 prompts.
+            prompts = prompts[args.shard_id::args.num_shards]
+            shard_tag = f"_shard{args.shard_id}"
+            logger.info(
+                "Shard %d/%d: generating for %d prompts (tag=%s)",
+                args.shard_id, args.num_shards, len(prompts), shard_tag,
+            )
+
         if run_test1:
             logger.info("--- Executing Test 1: Sigma Validity Generation ---")
             run_sigma_validity_generation(
                 prompts=prompts,
                 output_dir="runs/sigma_validity",
-                max_new_tokens=args.max_new_tokens
+                max_new_tokens=args.max_new_tokens,
+                shard_tag=shard_tag,
             )
         if run_test2:
             logger.info("\n--- Executing Test 2: Tournament Value Generation ---")
             run_tournament_value_generation(
                 prompts=prompts,
                 output_dir="runs/tournament_value",
-                max_new_tokens=args.max_new_tokens
+                max_new_tokens=args.max_new_tokens,
+                shard_tag=shard_tag,
             )
 
         print("\n" + "=" * 90)
@@ -248,20 +284,16 @@ def main():
         if run_test1:
             logger.info("--- Executing Test 1: Sigma Validity Offline Analysis ---")
             analyze_sigma_validity_results(
-                stats_json="runs/sigma_validity/step_sigma_stats.json",
-                real_csv="tribunal/outputs/sigma_validity/real_sigma.csv",
-                shuffled_csv="tribunal/outputs/sigma_validity/shuffled_sigma.csv",
-                zero_csv="tribunal/outputs/sigma_validity/zero_sigma.csv",
+                stats_file="runs/sigma_validity/step_sigma_stats.json",
+                results_dir="tribunal/outputs/sigma_validity",
                 output_dir="runs/sigma_validity",
                 plot_dir="runs/tribunal_plots/sigma_validity"
             )
         if run_test2:
             logger.info("\n--- Executing Test 2: Tournament Value Offline Analysis ---")
             analyze_tournament_value_results(
-                stats_json="runs/tournament_value/step_tournament_stats.json",
-                thurstonian_csv="tribunal/outputs/tournament_value/thurstonian.csv",
-                bt_csv="tribunal/outputs/tournament_value/bt_w0.csv",
-                sm_csv="tribunal/outputs/tournament_value/softmax_blade.csv",
+                stats_file="runs/tournament_value/step_tournament_stats.json",
+                results_dir="tribunal/outputs/tournament_value",
                 output_dir="runs/tournament_value",
                 plot_dir="runs/tribunal_plots/tournament_value"
             )

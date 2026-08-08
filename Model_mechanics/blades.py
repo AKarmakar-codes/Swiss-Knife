@@ -18,7 +18,7 @@ Option B adds two key methods:
 """
 
 import logging
-from typing import List
+from typing import List, Optional
 
 import torch
 import torch.nn.functional as F
@@ -395,11 +395,58 @@ class DPOBlade:
 
     # ── GSI: Step-level reward scoring ──────────────────────────────────
 
+    @staticmethod
+    def _step_logprob_sum(
+        logits: torch.Tensor,
+        padded_ids: torch.Tensor,
+        prefix_len: int,
+        step_token_ids_list: list,
+        device: torch.device,
+    ) -> torch.Tensor:
+        """Sum log p(tok_t | tok_<t) over each candidate's step span.
+
+        Deliberately avoids ``F.log_softmax(logits, dim=-1)`` over the full
+        ``[batch, seq_len, vocab]`` tensor: that materializes a dense
+        float32 tensor covering *every* prefix position (which is never
+        used — only the last `step_len` positions per row are read) times
+        the *full* vocab (~152k for Qwen2.5), for every candidate. For
+        n=11 candidates and a few hundred prefix tokens that is multiple
+        GB, computed twice (blade + ref) and held live simultaneously —
+        that is exactly what threw the CUDA OOM.
+
+        Instead we slice to just the needed (short) `pred_positions` rows
+        *before* touching the vocab dimension, and use a numerically
+        stable gather + logsumexp per row instead of a dense log-softmax.
+        Peak memory here is O(step_len · V) per row, not O(seq_len · V)
+        per whole batch — typically a >90% reduction since step_len
+        (a handful to a few dozen tokens) is usually << seq_len (prefix
+        + step, which grows over the course of generation).
+        """
+        m = logits.shape[0]
+        out = torch.zeros(m, device=device)
+        for i, step_ids in enumerate(step_token_ids_list):
+            step_len = step_ids.shape[0]
+            if step_len == 0:
+                continue
+            pred_positions = torch.arange(
+                prefix_len - 1, prefix_len - 1 + step_len, device=device
+            )
+            label_tokens = padded_ids[i, prefix_len:prefix_len + step_len]
+
+            row_logits = logits[i, pred_positions, :].float()          # [step_len, V]
+            row_logsumexp = torch.logsumexp(row_logits, dim=-1)         # [step_len]
+            row_target = row_logits.gather(
+                -1, label_tokens.unsqueeze(-1)
+            ).squeeze(-1)                                                # [step_len]
+            out[i] = (row_target - row_logsumexp).sum()
+        return out
+
     @torch.no_grad()
     def score_reasoning_steps(
         self,
         prefix_ids: torch.Tensor,
         step_token_ids_list: list,
+        micro_batch_size: Optional[int] = None,
     ) -> torch.Tensor:
         """Compute blade rewards for n complete reasoning steps.
 
@@ -414,6 +461,11 @@ class DPOBlade:
         step_token_ids_list : list of torch.Tensor
             n tensors, each of shape ``[step_len_i]`` — token IDs for each
             candidate reasoning step (variable lengths allowed).
+        micro_batch_size : int, optional
+            If set, candidates are scored in chunks of this size instead of
+            all ``n`` at once, bounding peak activation memory regardless of
+            how large ``n`` or the prefix gets. Defaults to scoring all ``n``
+            candidates in one batch (previous behaviour).
 
         Returns
         -------
@@ -427,60 +479,54 @@ class DPOBlade:
 
         prefix_len = prefix_ids.shape[1]
         device = prefix_ids.device
-
-        # Build [prefix ⊕ step_i] for each candidate step
-        full_ids_list = []
-        full_mask_list = []
-        max_len = 0
-
-        for step_ids in step_token_ids_list:
-            step_ids = step_ids.to(device)
-            full = torch.cat([prefix_ids.squeeze(0), step_ids], dim=0)
-            mask = torch.ones(full.shape[0], dtype=torch.long, device=device)
-            full_ids_list.append(full)
-            full_mask_list.append(mask)
-            max_len = max(max_len, full.shape[0])
-
-        # Pad to uniform length (right-pad for simplicity; mask handles it)
-        padded_ids = torch.full(
-            (n, max_len), self.tokenizer.pad_token_id,
-            dtype=torch.long, device=device,
-        )
-        padded_mask = torch.zeros(n, max_len, dtype=torch.long, device=device)
-
-        for i, (ids, mask) in enumerate(zip(full_ids_list, full_mask_list)):
-            padded_ids[i, :ids.shape[0]] = ids
-            padded_mask[i, :mask.shape[0]] = mask
-
-        # Forward pass: blade and ref models
-        blade_logits = self.blade_model(
-            input_ids=padded_ids, attention_mask=padded_mask
-        ).logits  # [n, max_len, V]
-
-        ref_logits = self.base_model(
-            input_ids=padded_ids, attention_mask=padded_mask
-        ).logits  # [n, max_len, V]
-
-        # Compute per-token log-probs over the step portion only
-        blade_logprobs = F.log_softmax(blade_logits.float(), dim=-1)
-        ref_logprobs = F.log_softmax(ref_logits.float(), dim=-1)
-
+        mbs = micro_batch_size or n
         rewards = torch.zeros(n, device=device)
-        for i, step_ids in enumerate(step_token_ids_list):
-            step_len = step_ids.shape[0]
-            if step_len == 0:
-                continue
-            # Positions: predict step tokens from positions [prefix_len-1, prefix_len+step_len-2]
-            # Labels: step tokens at positions [prefix_len, prefix_len+step_len-1]
-            pred_positions = torch.arange(
-                prefix_len - 1, prefix_len - 1 + step_len, device=device
+
+        for start in range(0, n, mbs):
+            chunk = step_token_ids_list[start:start + mbs]
+            m = len(chunk)
+
+            full_ids_list, full_mask_list, max_len = [], [], 0
+            for step_ids in chunk:
+                step_ids = step_ids.to(device)
+                full = torch.cat([prefix_ids.squeeze(0), step_ids], dim=0)
+                mask = torch.ones(full.shape[0], dtype=torch.long, device=device)
+                full_ids_list.append(full)
+                full_mask_list.append(mask)
+                max_len = max(max_len, full.shape[0])
+
+            padded_ids = torch.full(
+                (m, max_len), self.tokenizer.pad_token_id,
+                dtype=torch.long, device=device,
             )
-            label_tokens = padded_ids[i, prefix_len:prefix_len + step_len]
+            padded_mask = torch.zeros(m, max_len, dtype=torch.long, device=device)
+            for i, (ids, mask) in enumerate(zip(full_ids_list, full_mask_list)):
+                padded_ids[i, :ids.shape[0]] = ids
+                padded_mask[i, :mask.shape[0]] = mask
 
-            blade_lp = blade_logprobs[i, pred_positions, label_tokens].sum()
-            ref_lp = ref_logprobs[i, pred_positions, label_tokens].sum()
+            # Score blade first, then free its activations *before* running
+            # the ref forward pass — the two [m, max_len, V] logit tensors
+            # never need to be alive at the same time.
+            blade_logits = self.blade_model(
+                input_ids=padded_ids, attention_mask=padded_mask
+            ).logits  # [m, max_len, V]
+            blade_lp_sum = self._step_logprob_sum(
+                blade_logits, padded_ids, prefix_len, chunk, device
+            )
+            del blade_logits
 
-            rewards[i] = self.beta * (blade_lp - ref_lp)
+            ref_logits = self.base_model(
+                input_ids=padded_ids, attention_mask=padded_mask
+            ).logits  # [m, max_len, V]
+            ref_lp_sum = self._step_logprob_sum(
+                ref_logits, padded_ids, prefix_len, chunk, device
+            )
+            del ref_logits
+
+            if device.type == "cuda":
+                torch.cuda.empty_cache()
+
+            rewards[start:start + m] = self.beta * (blade_lp_sum - ref_lp_sum)
 
         return rewards
 
@@ -538,18 +584,12 @@ class DPOBlade:
         draft_logits = self.base_model(
             input_ids=padded_ids, attention_mask=padded_mask
         ).logits
-        draft_logprobs = F.log_softmax(draft_logits.float(), dim=-1)
-
-        scores = torch.zeros(n, device=device)
-        for i, step_ids in enumerate(step_token_ids_list):
-            step_len = step_ids.shape[0]
-            if step_len == 0:
-                continue
-            pred_positions = torch.arange(
-                prefix_len - 1, prefix_len - 1 + step_len, device=device
-            )
-            label_tokens = padded_ids[i, prefix_len:prefix_len + step_len]
-            scores[i] = draft_logprobs[i, pred_positions, label_tokens].sum()
+        scores = self._step_logprob_sum(
+            draft_logits, padded_ids, prefix_len, step_token_ids_list, device
+        )
+        del draft_logits
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
 
         return scores
 
