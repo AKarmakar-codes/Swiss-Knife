@@ -1,0 +1,74 @@
+# Prompt for Opus 5: Independent Evaluation of Mode-B Thurstonian Elo Ablation Studies
+
+## Research Context & Mechanics
+
+We are preparing a research paper for AAAI introducing **Elo-Swiss Mode B** (`Model_mechanics/elo_swiss_mode_b.py`), a decoding strategy for Large Language Models that selects candidate reasoning steps via a **Probabilistic Thurstonian Elo Tournament**.
+
+### Pipeline & Match Mechanics
+At each decoding step:
+1. **Candidate Generation**: The Drafter model samples $N$ candidate reasoning steps.
+2. **Reward & Uncertainty Estimation**: A DPO Blade model estimates candidate reward $\mu$. A verifier log-ratio proxy estimates candidate uncertainty $\sigma \approx |r_{\text{blade}} - \frac{1}{\beta}(\log \pi_V - \log \pi_D)|$.
+3. **Thurstonian Pairwise Tournament**: Matches between candidate $A$ and candidate $B$ are determined by the Thurstonian Case-V normal CDF:
+   $$P(A \text{ beats } B) = \Phi\left(\frac{\mu_A - \mu_B}{\sqrt{\sigma_A^2 + \sigma_B^2 + \varepsilon}}\right)$$
+4. **Champion Selection**: The champion is selected via a softmax draw over combined Elo rating and blade reward logits:
+   $$\text{logit}_i = w_{\text{tournament}} \cdot \frac{R_i - 1500}{T} + w_{\text{blade}} \cdot (\mu_i - \lambda \cdot \sigma_i)$$
+5. **Unconditional Acceptance**: Mode B accepts the champion step unconditionally without a verifier threshold gate or fallback resampling.
+
+---
+
+## IMPORTANT NOTICE: Diagnostic Logging Bug
+
+> **Note on Stats Data**: There is a known bug in the step diagnostic logging wrapper (`EloSwissStats`) where `mean_delta_mu` and `mean_sigma` were logged as `0.0` in the output JSON files due to unpopulated `step_details`. **Do not be thrown off by 0.0 values for $\mu$ or $\sigma$ in stats files.** The GPU model generations ran correctly, and the generated text responses were evaluated directly by the external Tribunal Judge. Focus your analysis on the evaluation metrics and prompt characteristics rather than the missing logged candidate stat vectors.
+
+---
+
+## Objective Function Definition
+
+The primary target metric is the Tribunal Judge **Scalar Objective ($S_{\text{obj}}$)**, defined as the harmonic mean of Quality and Safety axes:
+$$S_{\text{obj}} = \frac{2 \cdot \text{Quality} \cdot \text{Safety}}{\text{Quality} + \text{Safety}}$$
+where:
+$$\text{Quality} = \text{mean}(\text{response\_quality}, \text{relevance})$$
+$$\text{Safety} = 1 - \text{mean}(\text{toxicity}, \text{harmfulness})$$
+
+---
+
+## Two Primary Ablations to Evaluate
+
+We conducted two primary ablation studies:
+
+### 1. Test 1: Log-Proxy Sigma Validity (`evaluation/test_sigma_validity.py`)
+Compares three $\sigma$ conditions:
+- **`real_sigma`**: Genuine log-ratio proxy $\sigma$ driving Thurstonian matches.
+- **`shuffled_sigma`**: Permuted $\sigma$ assignments (same distribution, randomized candidate assignment).
+- **`zero_sigma`**: $\sigma = 0$ for all candidates (collapses matches to standard Bradley-Terry Elo).
+
+**Core Question for Test 1**: Does log-ratio proxy $\sigma$ measure real epistemic/aleatoric uncertainty, or is it merely functioning as random noise?
+
+### 2. Test 2: Thurstonian Tournament Value (`evaluation/test_tournament_value.py`)
+Compares three candidate selection strategies:
+- **`thurstonian`**: Probabilistic Thurstonian Elo tournament ($w_{\text{tournament}} > 0, \text{probabilistic}=\text{True}$).
+- **`elo_baseline`**: Pure deterministic Elo sorting ($w_{\text{blade}}=0, \text{probabilistic}=\text{False}$).
+- **`softmax_blade`**: Direct softmax over raw blade rewards ($w_{\text{tournament}}=0$).
+
+**Core Question for Test 2**: Does the probabilistic Thurstonian tournament add value over deterministic matchups or direct softmax selection?
+
+---
+
+## Tasks & Analysis Requested
+
+Please perform a neutral, objective review of these mechanisms and hypothesize the following:
+
+1. **Prompt Subsets & Characteristics**:
+   Hypothesize specific subsets or categories of prompts (characterized by prompt intent, ambiguity level, risk profile, open-endedness, or boundary sensitivity) where the **probabilistic Thurstonian tournament** is expected to excel compared to deterministic sorting.
+
+2. **Reward Landscape Behavior ($\Delta \mu$)**:
+   Hypothesize how candidate reward proximity ($\Delta \mu = \mu_{\text{top1}} - \mu_{\text{top2}}$) and candidate uncertainty ($\sigma$) interact under the Thurstonian CDF versus deterministic sigmoidal sorting. Under what reward landscape conditions does Thurstonian Elo alter candidate selection in a way that maximizes the objective function?
+
+3. **Validity of Uncertainty Estimation ($\sigma$)**:
+   Compare the expected behavior of `real_sigma` vs `shuffled_sigma` vs `zero_sigma`. What pattern of results would prove that $\sigma$ provides a genuine uncertainty signal rather than acting as random exploration noise?
+
+4. **Regimes Where Deterministic Sorting May Perform Better**:
+   Identify prompt types or reward landscapes where deterministic sorting or simple argmax selection might be equal to or better than probabilistic tournament selection, and explain why.
+
+5. **Recommendations for the AAAI Paper**:
+   Provide objective recommendations on how to structure the ablation narrative, define prompt subsets, and frame the theoretical claims for our AAAI paper submission.
