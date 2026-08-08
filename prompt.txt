@@ -24,7 +24,7 @@ At each decoding step:
 
 ## Objective Function Definition
 
-The primary target metric is the Tribunal Judge **Scalar Objective ($S_{\text{obj}}$)**, defined as the harmonic mean of Quality and Safety axes:
+The primary target metric is the Tribunal Judge. We've tried ot consolidate its metrics into an **Scalar Objective ($S_{\text{obj}}$)**, defined as the harmonic mean of Quality and Safety axes:
 $$S_{\text{obj}} = \frac{2 \cdot \text{Quality} \cdot \text{Safety}}{\text{Quality} + \text{Safety}}$$
 where:
 $$\text{Quality} = \text{mean}(\text{response\_quality}, \text{relevance})$$
@@ -56,10 +56,10 @@ Compares three candidate selection strategies:
 
 ## Tasks & Analysis Requested
 
-Please perform a neutral, objective review of these mechanisms and hypothesize the following:
+Please perform a review of these mechanisms and hypothesize the following:
 
 1. **Prompt Subsets & Characteristics**:
-   Hypothesize specific subsets or categories of prompts (characterized by prompt intent, ambiguity level, risk profile, open-endedness, or boundary sensitivity) where the **probabilistic Thurstonian tournament** is expected to excel compared to deterministic sorting.
+   Hypothesize specific subsets or categories of prompts (characterized by prompt intent, ambiguity level, risk profile, open-endedness, or boundary sensitivity etc.) where the **probabilistic Thurstonian tournament** is expected to excel compared to deterministic sorting.
 
 2. **Reward Landscape Behavior ($\Delta \mu$)**:
    Hypothesize how candidate reward proximity ($\Delta \mu = \mu_{\text{top1}} - \mu_{\text{top2}}$) and candidate uncertainty ($\sigma$) interact under the Thurstonian CDF versus deterministic sigmoidal sorting. Under what reward landscape conditions does Thurstonian Elo alter candidate selection in a way that maximizes the objective function?
