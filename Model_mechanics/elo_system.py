@@ -172,8 +172,8 @@ def elo_bracket(
     for round_idx in range(rounds):
         k_factor = k_factors[round_idx]
 
-        # Pair candidates based on current ratings DESC, breaking ties with target_scores/tilted_rewards DESC
-        tie_breaker = tilted_rewards if tilted_rewards is not None else target_scores
+        # Pair candidates based on current ratings DESC, breaking ties with blade_scores/tilted_rewards DESC
+        tie_breaker = tilted_rewards if tilted_rewards is not None else blade_scores
         sorted_by_rating = sorted(
             indices,
             key=lambda i: (-ratings[i], -tie_breaker[i].item()),
@@ -270,16 +270,7 @@ def elo_bracket(
             )
 
     # ── Step C: Uncertainty-Weighted Objective (UWO) Logit ──────────────────
-    # Formula: logit_i = w_tournament * znorm((R_i-1500)/T) + w_blade * znorm(μ_i - λ·σ_i)
-    #
-    # WHY Z-normalize each term:
-    #   The tournament term (R_i-1500)/T can be very large when T is small (e.g.
-    #   T≈1.36 gives ±50 point Elo swings of ±37 units) while the blade UWO term
-    #   μ_i - λσ_i lives in a narrow range (typically ±0.5 for DPO rewards).
-    #   Without normalisation w_tournament completely dominates regardless of its
-    #   set value.  Z-normalising each COMPLETE term independently across the N
-    #   candidates (zero mean, unit std) makes w_tournament and w_blade genuinely
-    #   comparable weights.  The relative ranking inside each term is preserved.
+    # Formula: logit_i = w_tournament * (znorm(R_i-1500)/T) + w_blade * znorm(μ_i - λ·σ_i)
     ratings_tensor = torch.tensor(ratings, dtype=torch.float, device=target_scores.device)
 
     if sigmas is not None:
@@ -301,23 +292,24 @@ def elo_bracket(
         return (t - t.mean()) / (std + 1e-6)
 
     if temperature < 1e-5:
-        # Greedy (T→0): use raw tournament rank (argmax doesn't need normalised logits)
-        tournament_term = (ratings_tensor - 1500.0) / (temperature + 1e-8)
+        # Greedy (T→0): use raw score sum (argmax doesn't need normalised logits)
         if normalize:
-            scores = w_tournament * _znorm_term(tournament_term) + w_blade * _znorm_term(uwo_term)
+            scores = w_tournament * _znorm_term(ratings_tensor - 1500.0) + w_blade * _znorm_term(uwo_term)
         else:
-            scores = w_tournament * tournament_term + w_blade * uwo_term
+            scores = w_tournament * (ratings_tensor - 1500.0) + w_blade * uwo_term
         champion = int(torch.argmax(scores).item())
         logger.debug(
             "Elo champion (Greedy, T=0): c%d (rating=%.1f)", champion, ratings[champion]
         )
     else:
-        tournament_term = (ratings_tensor - 1500.0) / temperature
         if normalize:
-            logits = w_tournament * _znorm_term(tournament_term) + w_blade * _znorm_term(uwo_term)
+            # Normalize deviation terms first, then scale combined logits by 1 / temperature
+            tournament_term = _znorm_term(ratings_tensor - 1500.0)
+            uwo_normed = _znorm_term(uwo_term)
+            logits = (w_tournament * tournament_term + w_blade * uwo_normed) / temperature
         else:
-            logits = w_tournament * tournament_term + w_blade * uwo_term
-        logits = logits
+            tournament_term = ratings_tensor - 1500.0
+            logits = (w_tournament * tournament_term + w_blade * uwo_term) / temperature
         probs = torch.softmax(logits, dim=0)
         champion = int(torch.multinomial(probs, num_samples=1).item())
         logger.debug(

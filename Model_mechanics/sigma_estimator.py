@@ -154,14 +154,13 @@ def estimate_mu_sigma(
         return mu, sigma
 
     elif sigma_mode == "log_ratio_proxy":
-        # Compute verifier and blade logprobs in batches
         from peft import PeftModel
         from evaluation.logprob_utilities import compute_logprobs_batched
         prefix_ids_squeezed = prefix_ids.squeeze(0)
 
         if verifier_logprobs is None:
             # Guard: if the base model is a shared PeftModel, disable adapters so we
-            # get π_ref (base weights), not π_blade (LoRA-adapted weights).
+            # get pi_ref (base weights), not pi_blade (LoRA-adapted weights).
             if isinstance(blade.base_model, PeftModel):
                 with blade.base_model.disable_adapter():
                     verifier_logprobs_list = compute_logprobs_batched(
@@ -173,16 +172,12 @@ def estimate_mu_sigma(
                 )
             verifier_logprobs = torch.tensor(verifier_logprobs_list, dtype=torch.float, device=device)
 
-        # Activate the correct blade adapter before computing blade logprobs.
-        if isinstance(blade.blade_model, PeftModel) and blade.blade_name:
-            blade.blade_model.set_adapter(blade.blade_name)
-        blade_logprobs_list = compute_logprobs_batched(
-            blade.blade_model, prefix_ids_squeezed, step_token_ids_list
-        )
-        blade_logprobs = torch.tensor(blade_logprobs_list, dtype=torch.float, device=device)
+        if draft_logprobs is None:
+            raise ValueError("draft_logprobs must be provided when sigma_mode='log_ratio_proxy'")
 
-        # Formula: sigma = | r_blade - (1/beta)*(log pi_{V+LoRA} - log pi_V) |
-        sigma = (mu - (blade_logprobs - verifier_logprobs) / beta).abs()
+        # Formula: sigma = | mu - (1/beta)*(log pi_verifier - log pi_draft) |
+        kl_proxy = (1.0 / beta) * (verifier_logprobs - draft_logprobs)
+        sigma = (mu - kl_proxy).abs()
         return mu, sigma
 
     elif sigma_mode == "mc_dropout":

@@ -114,8 +114,8 @@ Uncertainty Modes (sigma_mode):
 
   2. 'log_ratio_proxy':
      Estimates epistemic/aleatoric reward uncertainty via the absolute residual between clean DPO 
-     blade reward and the empirical log-ratio proxy:
-       sigma_i = | mu_i - (1 / beta) * (log pi_blade(S_i | P) - log pi_ref(S_i | P)) |
+     blade reward and the empirical verifier-draft log-ratio proxy:
+       sigma_i = | mu_i - (1 / beta) * (log pi_verifier(S_i | P) - log pi_draft(S_i | P)) |
 
   3. 'mc_dropout':
      Estimates reward variance via Monte Carlo sampling across K stochastic forward passes:
@@ -182,11 +182,11 @@ Objective (UWO) softmax distribution over all n candidates.
 
 Logit Construction:
   1. Tournament Component:
-       tournament_term = (R_i - 1500.0) / T
+       tournament_term = znorm(R_i - 1500.0) / T
   2. Blade UWO Component:
-       uwo_term = mu_i - uwo_lambda * sigma_i
-  3. Z-Score Normalization & Blending:
-       logits_i = w_tournament * znorm(tournament_term) + w_blade * znorm(uwo_term)
+       uwo_term = znorm(mu_i - uwo_lambda * sigma_i)
+  3. Blending:
+       logits_i = w_tournament * tournament_term + w_blade * uwo_term
 
 Selection Rule:
   - If temperature T < 1e-5:

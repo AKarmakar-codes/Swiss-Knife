@@ -511,55 +511,7 @@ class DPOBlade:
 
         prefix_len = prefix_ids.shape[1]
         device = prefix_ids.device
-<<<<<<< HEAD
         mbs = micro_batch_size or n
-=======
-
-        # Build [prefix ⊕ step_i] for each candidate step
-        full_ids_list = []
-        full_mask_list = []
-        max_len = 0
-
-        for step_ids in step_token_ids_list:
-            step_ids = step_ids.to(device)
-            full = torch.cat([prefix_ids.squeeze(0), step_ids], dim=0)
-            mask = torch.ones(full.shape[0], dtype=torch.long, device=device)
-            full_ids_list.append(full)
-            full_mask_list.append(mask)
-            max_len = max(max_len, full.shape[0])
-
-        # Pad to uniform length (right-pad for simplicity; mask handles it)
-        padded_ids = torch.full(
-            (n, max_len), self.tokenizer.pad_token_id,
-            dtype=torch.long, device=device,
-        )
-        padded_mask = torch.zeros(n, max_len, dtype=torch.long, device=device)
-
-        for i, (ids, mask) in enumerate(zip(full_ids_list, full_mask_list)):
-            padded_ids[i, :ids.shape[0]] = ids
-            padded_mask[i, :mask.shape[0]] = mask
-
-        if isinstance(self.blade_model, PeftModel) and self.blade_name:
-            self.blade_model.set_adapter(self.blade_name)
-        blade_logits = self.blade_model(
-            input_ids=padded_ids, attention_mask=padded_mask
-        ).logits  # [n, max_len, V]
-
-        if isinstance(self.base_model, PeftModel):
-            with self.base_model.disable_adapter():
-                ref_logits = self.base_model(
-                    input_ids=padded_ids, attention_mask=padded_mask
-                ).logits  # [n, max_len, V]
-        else:
-            ref_logits = self.base_model(
-                input_ids=padded_ids, attention_mask=padded_mask
-            ).logits  # [n, max_len, V]
-
-        # Compute per-token log-probs over the step portion only
-        blade_logprobs = F.log_softmax(blade_logits.float(), dim=-1)
-        ref_logprobs = F.log_softmax(ref_logits.float(), dim=-1)
-
->>>>>>> ee82dfe (minor changes)
         rewards = torch.zeros(n, device=device)
 
         for start in range(0, n, mbs):
@@ -595,7 +547,6 @@ class DPOBlade:
             )
             del blade_logits
 
-<<<<<<< HEAD
             ref_logits = self.base_model(
                 input_ids=padded_ids, attention_mask=padded_mask
             ).logits  # [m, max_len, V]
@@ -604,17 +555,12 @@ class DPOBlade:
             )
             del ref_logits
 
-            if device.type == "cuda":
-                torch.cuda.empty_cache()
-
-            rewards[start:start + m] = self.beta * (blade_lp_sum - ref_lp_sum)
-=======
             # Normalize by step length so scale matches compute_logprobs_batched
             # (which returns mean per-token log-prob). This ensures mu, draft_logprobs
-            # and verifier_logprobs are all on the same O(1) per-token scale, which is
-            # required for correct sigma (log_ratio_proxy) and tilted reward computation.
-            rewards[i] = self.beta * (blade_lp - ref_lp) / step_len
->>>>>>> ee82dfe (minor changes)
+            # and verifier_logprobs are all on the same O(1) per-token scale.
+            for i, step_ids in enumerate(chunk):
+                step_len = max(step_ids.shape[0], 1)
+                rewards[start + i] = self.beta * (blade_lp_sum[i] - ref_lp_sum[i]) / step_len
 
         return rewards
 
@@ -669,7 +615,6 @@ class DPOBlade:
             padded_ids[i, :ids.shape[0]] = ids
             padded_mask[i, :mask.shape[0]] = mask
 
-<<<<<<< HEAD
         draft_logits = self.base_model(
             input_ids=padded_ids, attention_mask=padded_mask
         ).logits
@@ -679,30 +624,6 @@ class DPOBlade:
         del draft_logits
         if device.type == "cuda":
             torch.cuda.empty_cache()
-=======
-        if isinstance(self.base_model, PeftModel):
-            with self.base_model.disable_adapter():
-                draft_logits = self.base_model(
-                    input_ids=padded_ids, attention_mask=padded_mask
-                ).logits
-        else:
-            draft_logits = self.base_model(
-                input_ids=padded_ids, attention_mask=padded_mask
-            ).logits
-        draft_logprobs = F.log_softmax(draft_logits.float(), dim=-1)
-
-        scores = torch.zeros(n, device=device)
-        for i, step_ids in enumerate(step_token_ids_list):
-            step_len = step_ids.shape[0]
-            if step_len == 0:
-                continue
-            pred_positions = torch.arange(
-                prefix_len - 1, prefix_len - 1 + step_len, device=device
-            )
-            label_tokens = padded_ids[i, prefix_len:prefix_len + step_len]
-            # Use mean per-token log-prob to match compute_logprobs_batched scale.
-            scores[i] = draft_logprobs[i, pred_positions, label_tokens].mean()
->>>>>>> ee82dfe (minor changes)
 
         return scores
 
