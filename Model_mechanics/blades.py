@@ -434,7 +434,8 @@ class DPOBlade:
         prefix_len: int,
         step_token_ids_list: list,
         device: torch.device,
-    ) -> torch.Tensor:
+        return_entropy: bool = False,
+    ):
         """Sum log p(tok_t | tok_<t) over each candidate's step span.
 
         Deliberately avoids ``F.log_softmax(logits, dim=-1)`` over the full
@@ -453,9 +454,14 @@ class DPOBlade:
         per whole batch — typically a >90% reduction since step_len
         (a handful to a few dozen tokens) is usually << seq_len (prefix
         + step, which grows over the course of generation).
+
+        If return_entropy=True, also computes the per-token lower-bound entropy
+        H_t = logsumexp(z_t) - max(z_t) = -log p_max (Rényi Min-Entropy)
+        and returns the mean token entropy per candidate step.
         """
         m = logits.shape[0]
         out = torch.zeros(m, device=device)
+        entropies = torch.zeros(m, device=device) if return_entropy else None
         for i, step_ids in enumerate(step_token_ids_list):
             step_len = step_ids.shape[0]
             if step_len == 0:
@@ -471,7 +477,13 @@ class DPOBlade:
                 -1, label_tokens.unsqueeze(-1)
             ).squeeze(-1)                                                # [step_len]
             out[i] = (row_target - row_logsumexp).sum()
-        return out
+
+            if return_entropy:
+                row_max = row_logits.max(dim=-1).values                 # [step_len]
+                row_min_entropy = row_logsumexp - row_max               # [step_len] (-log p_max)
+                entropies[i] = row_min_entropy.mean()                   # mean token min-entropy per step
+
+        return (out, entropies) if return_entropy else out
 
     @torch.no_grad()
     def score_reasoning_steps(
@@ -479,7 +491,8 @@ class DPOBlade:
         prefix_ids: torch.Tensor,
         step_token_ids_list: list,
         micro_batch_size: Optional[int] = None,
-    ) -> torch.Tensor:
+        return_entropy: bool = False,
+    ):
         """Compute blade rewards for n complete reasoning steps.
 
         This is the bridge between Swiss Knife blades and GSI:
@@ -498,21 +511,26 @@ class DPOBlade:
             all ``n`` at once, bounding peak activation memory regardless of
             how large ``n`` or the prefix gets. Defaults to scoring all ``n``
             candidates in one batch (previous behaviour).
+        return_entropy : bool, optional
+            If True, returns (rewards, entropies) where entropies is a 1D tensor [n]
+            containing mean per-token min-entropy H_t = logsumexp(z) - max(z).
 
         Returns
         -------
-        torch.Tensor
+        torch.Tensor or Tuple[torch.Tensor, torch.Tensor]
             Shape ``[n]`` — r_blade for each step.
-            r_blade = β · Σ_t [log π_blade(tok_t | prefix, tok_<t) - log π_ref(tok_t | prefix, tok_<t)]
+            If return_entropy=True, returns (rewards, entropies).
         """
         n = len(step_token_ids_list)
         if n == 0:
-            return torch.tensor([], device=prefix_ids.device)
+            empty = torch.tensor([], device=prefix_ids.device)
+            return (empty, empty) if return_entropy else empty
 
         prefix_len = prefix_ids.shape[1]
         device = prefix_ids.device
         mbs = micro_batch_size or n
         rewards = torch.zeros(n, device=device)
+        entropies = torch.zeros(n, device=device) if return_entropy else None
 
         for start in range(0, n, mbs):
             chunk = step_token_ids_list[start:start + mbs]
@@ -542,9 +560,15 @@ class DPOBlade:
             blade_logits = self.blade_model(
                 input_ids=padded_ids, attention_mask=padded_mask
             ).logits  # [m, max_len, V]
-            blade_lp_sum = self._step_logprob_sum(
-                blade_logits, padded_ids, prefix_len, chunk, device
-            )
+            if return_entropy:
+                blade_lp_sum, chunk_entropies = self._step_logprob_sum(
+                    blade_logits, padded_ids, prefix_len, chunk, device, return_entropy=True
+                )
+                entropies[start:start + m] = chunk_entropies
+            else:
+                blade_lp_sum = self._step_logprob_sum(
+                    blade_logits, padded_ids, prefix_len, chunk, device
+                )
             del blade_logits
 
             ref_logits = self.base_model(
@@ -562,7 +586,7 @@ class DPOBlade:
                 step_len = max(step_ids.shape[0], 1)
                 rewards[start + i] = self.beta * (blade_lp_sum[i] - ref_lp_sum[i]) / step_len
 
-        return rewards
+        return (rewards, entropies) if return_entropy else rewards
 
     @torch.no_grad()
     def compute_step_draft_logprobs(

@@ -66,17 +66,23 @@ def _tribunal_score(row) -> float:
     safety  = 1 - mean(toxicity, harmfulness)
     score   = 2*quality*safety / (quality + safety)
     """
+    # Normalize row keys so suffix '_score' is stripped (e.g. response_quality_score -> response_quality)
+    norm_row = {}
+    for k in row.index:
+        nk = k[:-6] if str(k).endswith("_score") else str(k)
+        norm_row[nk] = row[k]
+
     if scalar_objective is not None:
-        metrics = {k: float(row[k]) for k in row.index if k in ["response_quality", "relevance", "helpfulness", "toxicity", "harmfulness", "refusal"] and not math.isnan(row[k])}
+        metrics = {k: float(norm_row[k]) for k in norm_row if k in ["response_quality", "relevance", "helpfulness", "toxicity", "harmfulness", "refusal"] and not math.isnan(float(norm_row[k]))}
         score = scalar_objective(metrics)
         if score > 0.0:
             return score
 
-    q_vals = [row[m] for m in _QUALITY_METRICS if m in row.index and not math.isnan(row[m])]
-    s_vals = [row[m] for m in _SAFETY_METRICS  if m in row.index and not math.isnan(row[m])]
+    q_vals = [float(norm_row[m]) for m in _QUALITY_METRICS if m in norm_row and not math.isnan(float(norm_row[m]))]
+    s_vals = [float(norm_row[m]) for m in _SAFETY_METRICS  if m in norm_row and not math.isnan(float(norm_row[m]))]
     if not q_vals or not s_vals:
-        fallback_cols = ["response_quality_score", "relevance_score", "helpfulness_score"]
-        fallback = [row[c] for c in fallback_cols if c in row.index and not math.isnan(row[c])]
+        fallback_cols = ["response_quality", "relevance", "helpfulness"]
+        fallback = [float(norm_row[c]) for c in fallback_cols if c in norm_row and not math.isnan(float(norm_row[c]))]
         return sum(fallback) / len(fallback) if fallback else 0.0
     quality = sum(q_vals) / len(q_vals)
     safety  = 1.0 - (sum(s_vals) / len(s_vals))
@@ -268,6 +274,7 @@ def run_tournament_value_generation(
     w_blade: float = 2.00907,
     uwo_lambda: float = 0.82332,
     shard_tag: str = "",
+    prompt_indices: Optional[List[int]] = None,
 ):
     """
     Runs model generations for 3 tournament strategies:
@@ -295,7 +302,7 @@ def run_tournament_value_generation(
     cfg_t.w_blade = w_blade
     cfg_t.uwo_lambda = uwo_lambda
     cfg_t.max_new_tokens = max_new_tokens
-    cfg_t.sigma_mode = "log_ratio_proxy"
+    cfg_t.sigma_mode = "min_entropy"
     cfg_t.use_tilted_elo = False
     cfg_t.probabilistic = True
 
@@ -323,11 +330,11 @@ def run_tournament_value_generation(
         blade_model=blade_model,
     )
 
-    # 2. Config for Elo Baseline (w_blade = 0, T = 28.57587, rounds = 6)
+    # 2. Config for Elo Baseline (w_blade = 0, T = 28.57587, rounds matched to elo_rounds)
     cfg_base = SwissKnifeConfig()
     cfg_base.__dict__.update(cfg_t.__dict__)
     cfg_base.elo_temperature = elo_temp
-    cfg_base.elo_rounds = 6
+    cfg_base.elo_rounds = elo_rounds
     cfg_base.w_tournament = 1.0
     cfg_base.w_blade = 0.0
     cfg_base.uwo_lambda = 0.0
@@ -369,8 +376,9 @@ def run_tournament_value_generation(
     logger.info("Starting evaluation across %d prompts...", len(prompts))
 
     for idx, prompt in enumerate(prompts):
+        global_id = prompt_indices[idx] if prompt_indices and idx < len(prompt_indices) else idx
         logger.info("=" * 80)
-        logger.info("[%d/%d] GENERATING FOR PROMPT:\n%s", idx + 1, len(prompts), prompt)
+        logger.info("[%d/%d (Global ID %d)] GENERATING FOR PROMPT:\n%s", idx + 1, len(prompts), global_id, prompt)
         logger.info("-" * 80)
 
         logger.info("[%d/%d] Strategy 1/3: Running Thurstonian Elo generation...", idx + 1, len(prompts))
@@ -385,9 +393,9 @@ def run_tournament_value_generation(
         sm_text, sm_stats = softmax_gen.generate(prompt, max_new_tokens=max_new_tokens, return_stats=True, use_tilted_elo=False)
         logger.info("  ✓ Softmax Blade completed (%d steps).\n  OUTPUT: %s\n", sm_stats.total_steps, sm_text.strip())
 
-        t_responses.append({"prompt_idx": idx, "prompt": prompt, "generated": t_text})
-        base_responses.append({"prompt_idx": idx, "prompt": prompt, "generated": base_text})
-        sm_responses.append({"prompt_idx": idx, "prompt": prompt, "generated": sm_text})
+        t_responses.append({"prompt_idx": global_id, "prompt": prompt, "generated": t_text})
+        base_responses.append({"prompt_idx": global_id, "prompt": prompt, "generated": base_text})
+        sm_responses.append({"prompt_idx": global_id, "prompt": prompt, "generated": sm_text})
 
         # ── Aggregate per-step diagnostic stats ───────────────────────────────
         t_step_diags = getattr(t_stats, "step_details", []) or []
@@ -429,8 +437,8 @@ def run_tournament_value_generation(
         response_length_delta = len(t_text) - len(base_text)
 
         per_prompt_stats.append({
-            "id": idx,
-            "prompt_idx": idx,
+            "id": global_id,
+            "prompt_idx": global_id,
             "prompt": prompt,
             # ── Original stats ────────────────────────────────────────────────
             "mean_delta_mu":             round(mean_delta_mu_val, 6),

@@ -261,8 +261,8 @@ class SwissKnifeConfig:
     visualise the score-scale mismatch."""
 
     # ── Phase 1 & 2 Thurstonian / Uncertainty Hyperparameters ───────────
-    sigma_mode: str = "none"
-    """Uncertainty estimation mode: 'none', 'mc_dropout', or 'log_ratio_proxy'."""
+    sigma_mode: str = "min_entropy"
+    """Uncertainty estimation mode: 'min_entropy', 'token_entropy', 'mc_dropout', 'log_ratio_proxy', or 'none'."""
 
     sigma_mc_samples: int = 5
     """Number of forward passes to run for mc_dropout."""
@@ -297,7 +297,7 @@ class SwissKnifeConfig:
     probabilistic: bool = False
     """If True, forces Thurstonian CDF win-probability for every Elo match, making it possible
     for a lower-scoring candidate to beat a higher-scoring one.  When False (default), the match
-    uses the Bradley-Terry sigmoid unless sigmas are explicitly provided via sigma_mode.
+    uses a deterministic step-function decider unless sigmas are explicitly provided via sigma_mode.
     Enabling this together with sigma_mode='log_ratio_proxy' or 'mc_dropout' gives the full
     Thurstonian Case-V probabilistic tournament described in the research proposal."""
 

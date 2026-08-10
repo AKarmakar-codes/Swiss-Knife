@@ -6,7 +6,7 @@ File: Model_mechanics/elo_swiss_mode_b.py
 1. EXECUTIVE OVERVIEW & ARCHITECTURAL INTENT
 ----------------------------------------------------------------------------------------------------
 The EloSwissModeBGenerator implements step-level Generative Step-level Inference (GSI) using a 
-simulated Thurstonian / Bradley-Terry Elo tournament over candidate reasoning steps sampled from a 
+simulated Thurstonian / Deterministic Elo tournament over candidate reasoning steps sampled from a 
 fast Drafter model. 
 
 Mode B differs fundamentally from Mode A (elo_swiss.py) in the following key dimensions:
@@ -44,7 +44,7 @@ Step 4: Elo Rating Tournament
   - An Elo tournament of R rounds is simulated over the n candidates using elo_bracket.
   - Initial ratings for all candidates are set to R_i^{(0)} = 1500.0.
   - Match outcomes between candidate pairs (a, b) are determined probabilistically (Thurstonian Case-V) 
-    or deterministically (Bradley-Terry).
+    or deterministically (step-function match baseline).
   - Ratings are updated dynamically across rounds using a decaying K-factor schedule.
 
 Step 5: Champion Selection Logits & Softmax Draw
@@ -155,7 +155,7 @@ Round Execution (for round r = 0, 1, ..., R - 1):
          P(A beats B) toward 0.5. This increases the probability of stochastic upset wins, allowing 
          uncertain candidates to be tested thoroughly in the tournament.
 
-     (b) Bradley-Terry Sigmoid (probabilistic = False and sigmas is None):
+     (b) Deterministic Step-Function Match (probabilistic = False and sigmas is None):
          Deterministic step outcome:
            P(A beats B) = 1.0 if score_A > score_B else (0.0 if score_A < score_B else 0.5)
 

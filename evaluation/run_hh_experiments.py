@@ -246,11 +246,11 @@ def main():
 
     if args.mode == "generate":
         shard_tag = ""
+        prompt_indices = None
         if args.num_shards > 1:
-            # Split prompts into contiguous shards; each GPU process handles
-            # one shard so 8 GPUs generate in parallel instead of one GPU
-            # serially working through all 50 prompts.
-            prompts = prompts[args.shard_id::args.num_shards]
+            all_indices = list(range(len(prompts)))
+            prompt_indices = all_indices[args.shard_id::args.num_shards]
+            prompts = [prompts[i] for i in prompt_indices]
             shard_tag = f"_shard{args.shard_id}"
             logger.info(
                 "Shard %d/%d: generating for %d prompts (tag=%s)",
@@ -264,6 +264,7 @@ def main():
                 output_dir="runs/sigma_validity",
                 max_new_tokens=args.max_new_tokens,
                 shard_tag=shard_tag,
+                prompt_indices=prompt_indices,
             )
         if run_test2:
             logger.info("\n--- Executing Test 2: Tournament Value Generation ---")
@@ -272,6 +273,7 @@ def main():
                 output_dir="runs/tournament_value",
                 max_new_tokens=args.max_new_tokens,
                 shard_tag=shard_tag,
+                prompt_indices=prompt_indices,
             )
 
         print("\n" + "=" * 90)

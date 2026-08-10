@@ -101,7 +101,7 @@ def estimate_mu_sigma(
     prefix_ids: torch.Tensor,
     step_token_ids_list: List[torch.Tensor],
     blade,
-    sigma_mode: str = "none",
+    sigma_mode: str = "min_entropy",
     K: int = 5,
     dropout_p: Optional[float] = None,
     draft_logprobs: Optional[torch.Tensor] = None,
@@ -119,7 +119,7 @@ def estimate_mu_sigma(
     blade : DPOBlade
         The DPO blade containing verifier and blade models.
     sigma_mode : str
-        One of "none", "mc_dropout", or "log_ratio_proxy".
+        One of "none", "token_entropy", "min_entropy", "log_ratio_proxy", or "mc_dropout".
     K : int
         Number of forward passes for "mc_dropout".
     dropout_p : float, optional
@@ -144,7 +144,13 @@ def estimate_mu_sigma(
     if n == 0:
         return torch.tensor([], device=device), torch.tensor([], device=device)
 
-    # 1. Always compute clean mu under standard eval mode
+    # 1. Check for token_entropy / min_entropy mode to compute mu and sigma simultaneously in 0 extra forward passes
+    if sigma_mode in ("token_entropy", "token_min_entropy", "min_entropy"):
+        set_lora_dropout(blade.blade_model, training=False)
+        mu, sigma = blade.score_reasoning_steps(prefix_ids, step_token_ids_list, return_entropy=True)
+        return mu, sigma
+
+    # Always compute clean mu under standard eval mode for other modes
     # Ensure lora dropout is disabled first
     set_lora_dropout(blade.blade_model, training=False)
     mu = blade.score_reasoning_steps(prefix_ids, step_token_ids_list)

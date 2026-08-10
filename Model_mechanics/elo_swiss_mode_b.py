@@ -38,6 +38,7 @@ Pipeline — one decoding step
        Verifier log-probabilities log π_verifier(step_i).
      • Estimate DPO-Blade rewards μ_i (and optionally σ_i) via ``estimate_mu_sigma``:
          - ``sigma_mode='none'``            → σ_i = 0 for all i
+         - ``sigma_mode='token_entropy'``   → σ_i = mean Rényi min-entropy H_t^min = -log p_max over step tokens
          - ``sigma_mode='log_ratio_proxy'`` → σ_i ≈ |r_blade − (1/β)(log π_V − log π_D)|
          - ``sigma_mode='mc_dropout'``      → σ_i = std over K stochastic forward passes
      • If ``use_tilted_elo=True``, compute tilted rewards:
@@ -57,13 +58,13 @@ Pipeline — one decoding step
          making upset wins more likely — this is the justification for using a
          tournament rather than just sorting by μ.
 
-     (b) BRADLEY-TERRY sigmoid — default when ``--probabilistic`` is NOT set and
+     (b) DETERMINISTIC STEP MATCH — default when ``--probabilistic`` is NOT set and
          ``sigma_mode='none'``:
 
-             P(A beats B) = σ(score_A − score_B)
+             P(A beats B) = 1.0 if score_A > score_B else (0.0 if score_A < score_B else 0.5)
 
-         Higher score always means P > 0.5.  With many rounds, this degenerates
-         into a soft sorting mechanism and offers little stochasticity.
+         Higher scoring candidate always wins (1.0 vs 0.0).  With many rounds, this acts
+         as a greedy sorting mechanism.
 
      Elo ratings are updated after each match:
          R_new = R + K · (actual_outcome − expected_outcome)
@@ -105,7 +106,7 @@ Pipeline — one decoding step
 Key CLI flags
 ─────────────────────────────────────────────────────────────────────────────
   --probabilistic       Force Thurstonian CDF for all matches (recommended).
-  --sigma-mode          'none' | 'log_ratio_proxy' | 'mc_dropout'
+  --sigma-mode          'none' | 'token_entropy' | 'log_ratio_proxy' | 'mc_dropout'
   --hard-draw           Use hard Bernoulli flip instead of soft-P Elo update.
   --w-tournament        Weight of tournament rating in champion selection logits.
   --w-blade             Weight of blade UWO term in champion selection logits.
@@ -152,8 +153,8 @@ class EloSwissModeBGenerator(EloSwissGenerator):
         Each step:
           1. Sample n candidates from the Drafter.
           2. Score them with the DPO Blade (and estimate σ if sigma_mode != 'none').
-          3. Run a probabilistic Elo tournament (Thurstonian or Bradley-Terry depending
-             on ``--probabilistic``).
+          3. Run an Elo tournament (Thurstonian probabilistic or Deterministic step-function baseline
+             depending on ``--probabilistic``).
           4. Select champion via softmax over combined tournament + UWO logits.
           5. Accept unconditionally — no threshold, no rejection, no fallback.
 
@@ -296,7 +297,7 @@ class EloSwissModeBGenerator(EloSwissGenerator):
 
             # ── Step 2: Elo tournament ───────────────────────────────────────
             # is_probabilistic=True  → Thurstonian CDF, lower scorer CAN win
-            # is_probabilistic=False → Bradley-Terry sigmoid (default soft sort)
+            # is_probabilistic=False → Deterministic step-function match (baseline)
             selected_idx = elo_bracket(
                 draft_logprobs,
                 blade_rewards,
@@ -306,7 +307,7 @@ class EloSwissModeBGenerator(EloSwissGenerator):
                 rounds=elo_rounds,
                 beta=beta,
                 tilted_rewards=tilted_rewards,
-                sigmas=sigma if self.cfg.sigma_mode != "none" else None,
+                sigmas=sigma,
                 hard_draw=self.cfg.hard_draw,
                 w_tournament=w_tournament,
                 w_blade=w_blade,
@@ -339,6 +340,19 @@ class EloSwissModeBGenerator(EloSwissGenerator):
                     )
             kl_term = (1.0 / beta) * (winner_target_lp - winner_draft_lp)
             self.threshold_calibrator.update(selected_reward, kl_term)
+
+            stats.step_rewards.append(selected_reward)
+            stats.step_details.append({
+                "step": stats.total_steps,
+                "candidate_mus": [round(x, 6) for x in mu.tolist()],
+                "candidate_sigmas": [round(x, 6) for x in sigma.tolist()] if sigma is not None else [],
+                "mean_mu": round(float(mu.mean().item()), 6),
+                "max_mu": round(float(mu.max().item()), 6),
+                "selected_idx": int(selected_idx),
+                "champion_mu": round(selected_reward, 6),
+                "champion_sigma": round(float(sigma[selected_idx].item()), 6) if sigma is not None else 0.0,
+                "real_upset": int(selected_idx) != int(mu.argmax().item()),
+            })
 
             if verbose:
                 logger.info(
@@ -376,6 +390,9 @@ class EloSwissModeBGenerator(EloSwissGenerator):
             if eos_hit:
                 logger.info("EOS token generated. Stopping.")
                 break
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
         stats.total_time_s = __import__("time").perf_counter() - t_start
 

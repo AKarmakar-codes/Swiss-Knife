@@ -25,7 +25,7 @@ yielding π_blade.  This avoids adapter-swapping during batched scoring.
 import logging
 import os
 from functools import lru_cache
-from typing import Tuple
+from typing import Tuple, Optional, Dict, Any
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer

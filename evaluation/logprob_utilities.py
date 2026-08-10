@@ -13,9 +13,6 @@ def compute_logprob(model, prefix_ids, step_ids):
 
     Returns the **mean** (not sum) over step tokens so that the tilted reward
     penalty ``(1/β) * (qwen_lp - draft_lp)`` is independent of step length.
-    Without length normalization, long steps accumulate large negative log-prob
-    sums and are almost always rejected by the threshold, causing the override
-    rate to vary wildly with prompt difficulty regardless of β or u.
 
     Parameters
     ----------
@@ -33,24 +30,30 @@ def compute_logprob(model, prefix_ids, step_ids):
     if step_ids.shape[0] == 0:
         return 0.0
     prefix_len = prefix_ids.shape[0]
-    # Concatenate prefix and step token IDs
+    step_len = step_ids.shape[0]
     full_ids = torch.cat([prefix_ids, step_ids]).unsqueeze(0)  # [1, prefix_len + step_len]
     attention_mask = torch.ones_like(full_ids)
 
+    logits_to_keep = step_len + 1
     with torch.no_grad():
-        outputs = model(input_ids=full_ids, attention_mask=attention_mask)
-        logits = outputs.logits.squeeze(0)  # [prefix_len + step_len, vocab_size]
+        try:
+            outputs = model(input_ids=full_ids, attention_mask=attention_mask, logits_to_keep=logits_to_keep)
+            logits = outputs.logits.squeeze(0)  # [logits_to_keep, vocab_size]
+            step_logits = logits[:step_len].float()
+        except TypeError:
+            outputs = model(input_ids=full_ids, attention_mask=attention_mask)
+            logits = outputs.logits.squeeze(0)  # [prefix_len + step_len, vocab_size]
+            pred_positions = torch.arange(
+                prefix_len - 1,
+                prefix_len + step_len - 1,
+                device=prefix_ids.device
+            )
+            step_logits = logits[pred_positions].float()
 
-    # The logit at index t predicts token at index t+1.
-    pred_positions = torch.arange(
-        prefix_len - 1,
-        prefix_len + step_ids.shape[0] - 1,
-        device=prefix_ids.device
-    )
-    log_probs = torch.log_softmax(logits[pred_positions].float(), dim=-1)
-
-    # Gather step token log-probabilities and return their mean
-    step_logprobs = log_probs.gather(dim=-1, index=step_ids.unsqueeze(-1)).squeeze(-1)
+    step_logsumexp = torch.logsumexp(step_logits, dim=-1)
+    step_targets = step_logits.gather(dim=-1, index=step_ids.unsqueeze(-1)).squeeze(-1)
+    step_logprobs = step_targets - step_logsumexp
+    del logits, outputs
     return step_logprobs.mean().item()  # per-token mean, not sum
 
 
@@ -117,6 +120,7 @@ def compute_logprobs_batched(model, prefix_ids, step_ids_list, pad_token_id=0):
 
     batch_size = len(step_ids_list)
     full_len = prefix_len + max_step_len
+    logits_to_keep = max_step_len + 1
 
     # Create padded batch and attention mask
     batch_ids = torch.full((batch_size, full_len), pad_token_id, dtype=torch.long, device=device)
@@ -124,28 +128,21 @@ def compute_logprobs_batched(model, prefix_ids, step_ids_list, pad_token_id=0):
 
     for i, step_ids in enumerate(step_ids_list):
         step_len = step_ids.shape[0]
-        # Copy prefix
         batch_ids[i, :prefix_len] = prefix_ids
         attention_mask[i, :prefix_len] = 1
-        # Copy step
         if step_len > 0:
             batch_ids[i, prefix_len : prefix_len + step_len] = step_ids
             attention_mask[i, prefix_len : prefix_len + step_len] = 1
 
     with torch.no_grad():
-        outputs = model(input_ids=batch_ids, attention_mask=attention_mask)
-        logits = outputs.logits  # [batch_size, full_len, vocab_size]
-
-    # The logit at index t predicts token at index t+1.
-    pred_positions = torch.arange(
-        prefix_len - 1,
-        full_len - 1,
-        device=device
-    )
-    
-    # [batch_size, max_step_len, vocab_size]
-    step_logits = logits[:, pred_positions, :]
-    log_probs = torch.log_softmax(step_logits.float(), dim=-1)
+        try:
+            outputs = model(input_ids=batch_ids, attention_mask=attention_mask, logits_to_keep=logits_to_keep)
+            logits = outputs.logits  # [batch_size, logits_to_keep, vocab_size]
+            use_kept = True
+        except TypeError:
+            outputs = model(input_ids=batch_ids, attention_mask=attention_mask)
+            logits = outputs.logits  # [batch_size, full_len, vocab_size]
+            use_kept = False
 
     mean_logprobs = []
     for i, step_ids in enumerate(step_ids_list):
@@ -153,9 +150,21 @@ def compute_logprobs_batched(model, prefix_ids, step_ids_list, pad_token_id=0):
         if step_len == 0:
             mean_logprobs.append(0.0)
             continue
-            
-        cand_log_probs = log_probs[i, :step_len, :]
-        cand_step_logprobs = cand_log_probs.gather(dim=-1, index=step_ids.unsqueeze(-1)).squeeze(-1)
-        mean_logprobs.append(cand_step_logprobs.mean().item())
 
+        if use_kept:
+            row_logits = logits[i, :step_len, :].float()
+        else:
+            pred_positions = torch.arange(
+                prefix_len - 1,
+                prefix_len - 1 + step_len,
+                device=device
+            )
+            row_logits = logits[i, pred_positions, :].float()
+
+        row_logsumexp = torch.logsumexp(row_logits, dim=-1)
+        row_targets = row_logits.gather(dim=-1, index=step_ids.unsqueeze(-1)).squeeze(-1)
+        row_logprobs = row_targets - row_logsumexp
+        mean_logprobs.append(row_logprobs.mean().item())
+
+    del logits, outputs
     return mean_logprobs

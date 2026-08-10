@@ -16,7 +16,7 @@ Architecture:
     Base/Draft Model   : Qwen2.5 SFT-merged (frozen)
     Alignment Blades   : DPO LoRA adapters (helpfulness, harmlessness, truthfulness)
     Blade Registry     : BladeRack pointer swap, O(1), no retraining
-    Tournament Format  : Elo-rating system (Thurstonian Case-V or Bradley-Terry)
+    Tournament Format  : Elo-rating system (Thurstonian Case-V or Deterministic Baseline)
 
 Reference:
     Swiss-Knife: Elo Tournament Selection for Decoding-Time Alignment

@@ -123,6 +123,7 @@ class EloSwissStats:
     total_candidates_scored: int = 0
     total_time_s: float = 0.0
     step_rewards: List[float] = field(default_factory=list)
+    step_details: List[dict] = field(default_factory=list)
 
     @property
     def acceptance_rate(self) -> float:
@@ -404,7 +405,7 @@ class EloSwissGenerator:
                 rounds=elo_rounds,
                 beta=beta,
                 tilted_rewards=tilted_rewards,
-                sigmas=sigma if self.cfg.sigma_mode != "none" else None,
+                sigmas=sigma,
                 hard_draw=self.cfg.hard_draw,
                 w_tournament=w_tournament,
                 w_blade=w_blade,
@@ -493,7 +494,7 @@ class EloSwissGenerator:
                     rounds=elo_rounds,
                     beta=beta,
                     tilted_rewards=resample_blade if active_use_tilted_elo else None,
-                    sigmas=resample_sigma if self.cfg.sigma_mode != "none" else None,
+                    sigmas=resample_sigma,
                     hard_draw=self.cfg.hard_draw,
                     w_tournament=w_tournament,
                     w_blade=w_blade,

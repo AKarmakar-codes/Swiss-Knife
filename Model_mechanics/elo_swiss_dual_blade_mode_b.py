@@ -162,7 +162,7 @@ class EloSwissDualBladeModeBGenerator(EloSwissGenerator):
             )
 
             # ── Verifier log-probabilities ───────────────────────
-            # Must be precomputed because both blades need it for log_ratio_proxy
+            # Precompute verifier base log-probabilities for DPO reward and uncertainty calculation
             if isinstance(self.verifier_model, PeftModel):
                 with self.verifier_model.disable_adapter():
                     verifier_logprobs_list = compute_logprobs_batched(
@@ -238,7 +238,7 @@ class EloSwissDualBladeModeBGenerator(EloSwissGenerator):
                 rounds=elo_rounds,
                 beta=beta,
                 tilted_rewards=tilted_rewards,
-                sigmas=sigma_composite if self.cfg.sigma_mode != "none" else None,
+                sigmas=sigma_composite,
                 hard_draw=self.cfg.hard_draw,
                 w_tournament=w_tournament,
                 w_blade=w_blade,
@@ -268,7 +268,7 @@ class EloSwissDualBladeModeBGenerator(EloSwissGenerator):
                     gamma_help,
                     winner_text.strip()[:60],
                     selected_reward,
-                    sigma_composite[selected_idx].item() if self.cfg.sigma_mode != "none" else 0.0,
+                    sigma_composite[selected_idx].item(),
                     kl_term,
                 )
 

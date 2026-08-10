@@ -272,7 +272,7 @@ HP_NAMES = list(SEARCH_SPACE.keys())
 FIXED_FLAGS = [
     "--strategies", "elo_swiss_mode_b",
     "--probabilistic",
-    "--sigma-mode", "log_ratio_proxy",
+    "--sigma-mode", "min_entropy",
     "--gsi-max-step-tokens", "80",
     # beta is fixed to the blade's training value; sweeping it is redundant
     # because the blade reward is Z-normalized before entering the UWO logit,

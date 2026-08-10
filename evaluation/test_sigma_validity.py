@@ -65,18 +65,23 @@ def _tribunal_score(row) -> float:
     safety  = 1 - mean(toxicity, harmfulness)
     score   = 2*quality*safety / (quality + safety)
     """
+    # Normalize row keys so suffix '_score' is stripped (e.g. response_quality_score -> response_quality)
+    norm_row = {}
+    for k in row.index:
+        nk = k[:-6] if str(k).endswith("_score") else str(k)
+        norm_row[nk] = row[k]
+
     if scalar_objective is not None:
-        metrics = {k: float(row[k]) for k in row.index if k in ["response_quality", "relevance", "helpfulness", "toxicity", "harmfulness", "refusal"] and not math.isnan(row[k])}
+        metrics = {k: float(norm_row[k]) for k in norm_row if k in ["response_quality", "relevance", "helpfulness", "toxicity", "harmfulness", "refusal"] and not math.isnan(float(norm_row[k]))}
         score = scalar_objective(metrics)
         if score > 0.0:
             return score
 
-    q_vals = [row[m] for m in _QUALITY_METRICS if m in row.index and not math.isnan(row[m])]
-    s_vals = [row[m] for m in _SAFETY_METRICS  if m in row.index and not math.isnan(row[m])]
+    q_vals = [float(norm_row[m]) for m in _QUALITY_METRICS if m in norm_row and not math.isnan(float(norm_row[m]))]
+    s_vals = [float(norm_row[m]) for m in _SAFETY_METRICS  if m in norm_row and not math.isnan(float(norm_row[m]))]
     if not q_vals or not s_vals:
-        # Fall back to any available quality-like column
-        fallback_cols = ["response_quality_score", "relevance_score", "helpfulness_score"]
-        fallback = [row[c] for c in fallback_cols if c in row.index and not math.isnan(row[c])]
+        fallback_cols = ["response_quality", "relevance", "helpfulness"]
+        fallback = [float(norm_row[c]) for c in fallback_cols if c in norm_row and not math.isnan(float(norm_row[c]))]
         return sum(fallback) / len(fallback) if fallback else 0.0
     quality = sum(q_vals) / len(q_vals)
     safety  = 1.0 - (sum(s_vals) / len(s_vals))
@@ -92,20 +97,21 @@ def _tribunal_score(row) -> float:
 class ShuffledSigmaGenerator:
     """
     Thin wrapper around EloSwissModeBGenerator that monkey-patches `estimate_mu_sigma`
-    to permute the returned sigma tensor before it reaches elo_bracket.
+    in both sigma_estimator and elo_swiss_mode_b modules to permute the returned sigma tensor.
     This ensures shuffled_sigma is a genuinely separate generation (different champions
-    chosen at each step) rather than a copy of the real-sigma run.
+    chosen at each step) rather than an unpatched copy of the real-sigma run.
     """
 
     def __init__(self, base_generator, seed: int = 0):
         self._gen = base_generator
         self._seed = seed
         self._rng = None
+        from Model_mechanics import sigma_estimator as _sm
+        self._orig_fn = _sm.estimate_mu_sigma
 
     def _patched_estimate_mu_sigma(self, *args, **kwargs):
         import torch
-        from Model_mechanics.sigma_estimator import estimate_mu_sigma as _orig
-        mu, sigma = _orig(*args, **kwargs)
+        mu, sigma = self._orig_fn(*args, **kwargs)
         if sigma is not None and sigma.numel() > 1:
             perm = torch.randperm(sigma.numel(), generator=self._rng)
             sigma = sigma[perm]
@@ -114,10 +120,13 @@ class ShuffledSigmaGenerator:
     def generate(self, prompt, max_new_tokens=None, return_stats=False, use_tilted_elo=False):
         import torch
         from Model_mechanics import sigma_estimator as _sm_module
+        from Model_mechanics import elo_swiss_mode_b as _b_module
         self._rng = torch.Generator()
         self._rng.manual_seed(self._seed)
-        _orig_fn = _sm_module.estimate_mu_sigma
+        _orig_sm = getattr(_sm_module, "estimate_mu_sigma", self._orig_fn)
+        _orig_b = getattr(_b_module, "estimate_mu_sigma", self._orig_fn)
         _sm_module.estimate_mu_sigma = self._patched_estimate_mu_sigma
+        _b_module.estimate_mu_sigma = self._patched_estimate_mu_sigma
         try:
             result = self._gen.generate(
                 prompt,
@@ -126,7 +135,8 @@ class ShuffledSigmaGenerator:
                 use_tilted_elo=use_tilted_elo,
             )
         finally:
-            _sm_module.estimate_mu_sigma = _orig_fn
+            _sm_module.estimate_mu_sigma = _orig_sm
+            _b_module.estimate_mu_sigma = _orig_b
         return result
 
 
@@ -351,6 +361,7 @@ def run_sigma_validity_generation(
     w_blade: float = 2.00907,
     uwo_lambda: float = 0.82332,
     shard_tag: str = "",
+    prompt_indices: Optional[List[int]] = None,
 ):
     """
     Runs model generations for 3 sigma conditions:
@@ -402,7 +413,7 @@ def run_sigma_validity_generation(
     # 1. Real Sigma Generator
     cfg_real = SwissKnifeConfig()
     cfg_real.__dict__.update(cfg.__dict__)
-    cfg_real.sigma_mode = "log_ratio_proxy"
+    cfg_real.sigma_mode = "min_entropy"
     real_gen = EloSwissModeBGenerator(
         cfg=cfg_real,
         drafter_model=drafter_model,
@@ -436,11 +447,12 @@ def run_sigma_validity_generation(
     logger.info("Starting evaluation across %d prompts...", len(prompts))
 
     for idx, prompt in enumerate(prompts):
+        global_id = prompt_indices[idx] if prompt_indices and idx < len(prompt_indices) else idx
         prompt_snippet = prompt.replace("\n", " ").strip()
         if len(prompt_snippet) > 80:
             prompt_snippet = prompt_snippet[:77] + "..."
         logger.info("=" * 80)
-        logger.info("[%d/%d] GENERATING FOR PROMPT:\n%s", idx + 1, len(prompts), prompt)
+        logger.info("[%d/%d (Global ID %d)] GENERATING FOR PROMPT:\n%s", idx + 1, len(prompts), global_id, prompt)
         logger.info("-" * 80)
 
         # 1. Real sigma — genuine log_ratio_proxy σ drives selection
@@ -464,9 +476,9 @@ def run_sigma_validity_generation(
         )
         logger.info("  ✓ Zero Sigma completed (%d steps).\n  OUTPUT: %s\n", zero_stats.total_steps, zero_text.strip())
 
-        real_responses.append({"prompt_idx": idx, "prompt": prompt, "generated": real_text})
-        shuffled_responses.append({"prompt_idx": idx, "prompt": prompt, "generated": shuffled_text})
-        zero_responses.append({"prompt_idx": idx, "prompt": prompt, "generated": zero_text})
+        real_responses.append({"prompt_idx": global_id, "prompt": prompt, "generated": real_text})
+        shuffled_responses.append({"prompt_idx": global_id, "prompt": prompt, "generated": shuffled_text})
+        zero_responses.append({"prompt_idx": global_id, "prompt": prompt, "generated": zero_text})
 
         # ── Aggregate per-step diagnostic stats ───────────────────────────────
         # Pull step-level diagnostics from generation stats if available.
@@ -507,8 +519,8 @@ def run_sigma_validity_generation(
         response_length_delta = len(real_text) - len(zero_text)
 
         per_prompt_stats.append({
-            "id": idx,
-            "prompt_idx": idx,
+            "id": global_id,
+            "prompt_idx": global_id,
             "prompt": prompt,
             # ── Original stats ────────────────────────────────────────────────
             "mean_sigma":                      round(mean_sigma_val, 6),
