@@ -341,6 +341,22 @@ class EloSwissModeBGenerator(EloSwissGenerator):
             kl_term = (1.0 / beta) * (winner_target_lp - winner_draft_lp)
             self.threshold_calibrator.update(selected_reward, kl_term)
 
+            # ── Diagnostic step stats ─────────────────────────────────────────
+            if len(mu) >= 2:
+                top2 = mu.topk(2).values
+                delta_mu_val = float((top2[0] - top2[1]).item())
+            else:
+                delta_mu_val = 0.0
+
+            mean_sigma_val = float(sigma.mean().item()) if sigma is not None and len(sigma) > 0 else 0.0
+            sigma_spread_val = float(sigma.std().item()) if sigma is not None and len(sigma) > 1 else 0.0
+            champion_sigma_val = float(sigma[selected_idx].item()) if sigma is not None and len(sigma) > 0 else 0.0
+
+            if sigma is not None and len(sigma) > 0:
+                champion_sigma_rank_val = int((sigma.argsort(descending=False) == selected_idx).nonzero(as_tuple=True)[0].item())
+            else:
+                champion_sigma_rank_val = 0
+
             stats.step_rewards.append(selected_reward)
             stats.step_details.append({
                 "step": stats.total_steps,
@@ -348,9 +364,15 @@ class EloSwissModeBGenerator(EloSwissGenerator):
                 "candidate_sigmas": [round(x, 6) for x in sigma.tolist()] if sigma is not None else [],
                 "mean_mu": round(float(mu.mean().item()), 6),
                 "max_mu": round(float(mu.max().item()), 6),
+                "delta_mu": round(delta_mu_val, 6),
+                "mean_sigma": round(mean_sigma_val, 6),
+                "sigma_spread": round(sigma_spread_val, 6),
                 "selected_idx": int(selected_idx),
                 "champion_mu": round(selected_reward, 6),
-                "champion_sigma": round(float(sigma[selected_idx].item()), 6) if sigma is not None else 0.0,
+                "champion_sigma": round(champion_sigma_val, 6),
+                "champion_sigma_rank": champion_sigma_rank_val,
+                "real_champion_sigma_rank": champion_sigma_rank_val,
+                "thurstonian_champion_sigma_rank": champion_sigma_rank_val,
                 "real_upset": int(selected_idx) != int(mu.argmax().item()),
             })
 

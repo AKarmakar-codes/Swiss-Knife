@@ -15795,3 +15795,27 @@ The best way forward is likely to practice self-love through affirming your intr
 2026-08-10 20:44:02 | INFO | HTTP Request: HEAD https://huggingface.co/datasets/Anthropic/hh-rlhf/resolve/09be8c5bbc57cb3887f3a9732ad6aa7ec602a1fa/dataset_infos.json "HTTP/1.1 404 Not Found"
 2026-08-10 20:44:03 | INFO | Successfully fetched 2312 raw prompts from HuggingFace.
 2026-08-10 20:44:03 | INFO | Selected 50 prompts in sequential dataset order (seed=42).
+2026-08-11 04:19:51 | INFO | Executing Test 1 Dry-Run (Log-Proxy Sigma Validity)...
+2026-08-11 04:19:51 | INFO | Running Test 1 Dry-Run Simulation (Sigma Validity)...
+2026-08-11 04:19:54 | INFO | Note: NumExpr detected 16 cores but "NUMEXPR_MAX_THREADS" not set, so enforcing safe limit of 8.
+2026-08-11 04:19:54 | INFO | NumExpr defaulting to 8 threads.
+2026-08-11 04:19:54 | INFO | ✓ Mock data generation complete. Running analysis...
+2026-08-11 04:19:54 | INFO | --- Feature Correlation with ΔQuality (Real σ − Shuffled σ) ---
+2026-08-11 04:19:54 | INFO |   mean_sigma                     : Spearman r = +0.6578 (p = 0.0001)
+2026-08-11 04:19:54 | INFO |   mean_delta_mu                  : Spearman r = -0.0403 (p = 0.8327)
+2026-08-11 04:19:54 | INFO | Saved summary CSV to: runs/sigma_validity/sigma_validity_summary.csv
+2026-08-11 04:19:54 | INFO | Saved bar-chart plot to: runs/tribunal_plots/sigma_validity/sigma_validity_gap.png
+2026-08-11 04:19:55 | INFO | Saved scatter plot to: runs/tribunal_plots/sigma_validity/sigma_validity_scatter.png
+2026-08-11 04:19:55 | INFO | ✓ Test 1 Dry-Run completed successfully!
+2026-08-11 04:19:55 | INFO | 
+Executing Test 2 Dry-Run (Thurstonian Tournament Value)...
+2026-08-11 04:19:55 | INFO | Running Test 2 Dry-Run Simulation (Thurstonian Tournament Value)...
+2026-08-11 04:19:55 | INFO | ✓ Mock data generation complete. Running offline analysis...
+2026-08-11 04:19:55 | INFO | --- Data-Driven Feature Correlation with ΔQuality (Thurstonian − Elo Baseline) ---
+2026-08-11 04:19:55 | INFO |   mean_delta_mu                    : Spearman r = -0.4345 (p = 0.0164)
+2026-08-11 04:19:55 | INFO |   mean_sigma                       : Spearman r = +0.4247 (p = 0.0193)
+2026-08-11 04:19:55 | INFO |   disagreement_rate                : Spearman r = +0.4443 (p = 0.0139)
+2026-08-11 04:19:55 | INFO | Saved post-hoc confident subset prompts to: runs/tournament_value/confident_subset.csv
+2026-08-11 04:19:55 | INFO | Saved bar-chart plot to: runs/tribunal_plots/tournament_value/tournament_value_gap.png
+2026-08-11 04:19:55 | INFO | Saved scatter plot to: runs/tribunal_plots/tournament_value/delta_quality_vs_delta_mu_scatter.png
+2026-08-11 04:19:55 | INFO | ✓ Test 2 Dry-Run finished successfully!

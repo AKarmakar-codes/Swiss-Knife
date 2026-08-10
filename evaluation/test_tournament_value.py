@@ -399,17 +399,19 @@ def run_tournament_value_generation(
 
         # ── Aggregate per-step diagnostic stats ───────────────────────────────
         t_step_diags = getattr(t_stats, "step_details", []) or []
+        base_step_diags = getattr(base_stats, "step_details", []) or []
         n_steps = max(t_stats.total_steps, 1)
 
-        # t_base_disagreement_rate: fraction of steps where Thurstonian ≠ Elo Baseline champion
-        # This is the PRIMARY activation signal for Test 2 — it directly measures how
-        # often the probabilistic Thurstonian tournament makes a DIFFERENT pick than
-        # the deterministic Elo baseline. If near zero, Thurstonian never intervenes.
-        t_base_disagree_flags = [d.get("disagree_T_vs_Base", False) for d in t_step_diags]
+        # Compare Thurstonian vs Elo Baseline across steps to compute divergence:
+        min_steps = min(len(t_step_diags), len(base_step_diags))
+        t_base_disagree_flags = [
+            t_step_diags[i]["selected_idx"] != base_step_diags[i]["selected_idx"]
+            for i in range(min_steps)
+        ]
         t_base_disagreement_rate = sum(t_base_disagree_flags) / n_steps if t_base_disagree_flags else 0.0
 
         # mean_champion_sigma_rank: lower = less uncertain champion chosen by Thurstonian
-        t_sigma_ranks = [d.get("thurstonian_champion_sigma_rank", 0) for d in t_step_diags]
+        t_sigma_ranks = [d.get("thurstonian_champion_sigma_rank", d.get("champion_sigma_rank", 0)) for d in t_step_diags]
         mean_champion_sigma_rank = sum(t_sigma_ranks) / n_steps if t_sigma_ranks else 0.0
 
         # mean_sigma_spread: std(σ) across candidates per step, averaged
@@ -417,21 +419,17 @@ def run_tournament_value_generation(
         mean_sigma_spread = sum(sigma_spreads) / n_steps if sigma_spreads else 0.0
 
         # base_greedy_agreement_rate: fraction of steps where Elo Baseline == argmax(μ)
-        # (Sanity check: Baseline should almost always agree with greedy-μ since it has no σ weighting)
-        base_greedy_flags = [d.get("elo_baseline_agrees_greedy", True) for d in t_step_diags]
-        base_greedy_agreement_rate = sum(base_greedy_flags) / n_steps if base_greedy_flags else 1.0
+        base_greedy_flags = [not d.get("real_upset", False) for d in base_step_diags]
+        base_greedy_agreement_rate = sum(base_greedy_flags) / max(len(base_greedy_flags), 1) if base_greedy_flags else 1.0
 
         # mean_sigma and mean_delta_mu from step diagnostics
         mean_sigma_val    = sum(d.get("mean_sigma", 0.0) for d in t_step_diags) / n_steps if t_step_diags else 0.0
         mean_delta_mu_val = sum(d.get("delta_mu",   0.0) for d in t_step_diags) / n_steps if t_step_diags else 0.0
 
         # first_divergence_step: first step where Thurstonian ≠ Elo Baseline
-        first_div = next(
-            (i for i, d in enumerate(t_step_diags) if d.get("disagree_T_vs_Base", False)),
-            n_steps
-        )
+        first_div = next((i for i, d in enumerate(t_base_disagree_flags) if d), n_steps)
         # total_divergence_steps: absolute count of steps where T ≠ Elo Baseline
-        total_div = sum(1 for d in t_step_diags if d.get("disagree_T_vs_Base", False))
+        total_div = sum(1 for d in t_base_disagree_flags if d)
 
         # response_length_delta: character-length proxy for token length difference
         response_length_delta = len(t_text) - len(base_text)
@@ -565,6 +563,8 @@ def analyze_tournament_value_results(
         for rubric in _ALL_RUBRICS:
             if rubric in df.columns:
                 cols[f"{prefix}_{rubric}"] = df[rubric]
+            elif f"{rubric}_score" in df.columns:
+                cols[f"{prefix}_{rubric}"] = df[f"{rubric}_score"]
         return pd.DataFrame(cols)
 
     # Merge on prompt id

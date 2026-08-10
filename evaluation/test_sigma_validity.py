@@ -506,13 +506,16 @@ def run_sigma_validity_generation(
         mean_sigma_val   = sum(d.get("mean_sigma",  0.0) for d in real_step_diags) / n_steps if real_step_diags else 0.0
         mean_delta_mu_val = sum(d.get("delta_mu",   0.0) for d in real_step_diags) / n_steps if real_step_diags else 0.0
 
+        # Compare real vs zero across steps to compute divergence:
+        min_steps = min(len(real_step_diags), len(zero_step_diags))
+        disagree_flags = [
+            real_step_diags[i]["selected_idx"] != zero_step_diags[i]["selected_idx"]
+            for i in range(min_steps)
+        ]
         # first_divergence_step: first step where real ≠ zero champion
-        first_div = next(
-            (i for i, d in enumerate(real_step_diags) if d.get("disagree_real_vs_zero", False)),
-            n_steps  # no divergence found
-        )
+        first_div = next((i for i, d in enumerate(disagree_flags) if d), n_steps)
         # total_divergence_steps: absolute count of steps where real ≠ zero
-        total_div = sum(1 for d in real_step_diags if d.get("disagree_real_vs_zero", False))
+        total_div = sum(1 for d in disagree_flags if d)
 
         # response_length_delta: real response token count minus zero response token count
         # Use character length as proxy (tokens unavailable without tokenizer here)
@@ -644,6 +647,8 @@ def analyze_sigma_validity_results(
         for rubric in _ALL_RUBRICS:
             if rubric in df.columns:
                 cols[f"{prefix}_{rubric}"] = df[rubric]
+            elif f"{rubric}_score" in df.columns:
+                cols[f"{prefix}_{rubric}"] = df[f"{rubric}_score"]
         return pd.DataFrame(cols)
 
     df_merged = df_stats.merge(_metric_cols(df_real,     "real"),     on="id", how="inner"
