@@ -15819,3 +15819,23 @@ Executing Test 2 Dry-Run (Thurstonian Tournament Value)...
 2026-08-11 04:19:55 | INFO | Saved bar-chart plot to: runs/tribunal_plots/tournament_value/tournament_value_gap.png
 2026-08-11 04:19:55 | INFO | Saved scatter plot to: runs/tribunal_plots/tournament_value/delta_quality_vs_delta_mu_scatter.png
 2026-08-11 04:19:55 | INFO | ✓ Test 2 Dry-Run finished successfully!
+2026-08-11 14:48:52 | WARNING | Could not load dataset via HuggingFace (`No module named 'datasets'`). Using standard fallback prompts.
+2026-08-11 14:48:52 | INFO | Using standard curated HH-RLHF Harmlessness prompt pool.
+2026-08-11 14:48:52 | INFO | Selected 30 prompts in sequential dataset order (seed=42).
+2026-08-11 14:48:52 | INFO | --- Executing Test 1: Sigma Validity Offline Analysis ---
+2026-08-11 14:48:52 | INFO | Note: NumExpr detected 16 cores but "NUMEXPR_MAX_THREADS" not set, so enforcing safe limit of 8.
+2026-08-11 14:48:52 | INFO | NumExpr defaulting to 8 threads.
+2026-08-11 14:48:53 | INFO | --- Feature Correlation with ΔQuality (Real σ − Shuffled σ) ---
+2026-08-11 14:48:53 | INFO |   first_divergence_step          : Spearman r = -0.1165 (p = 0.4202)
+2026-08-11 14:48:53 | INFO |   response_length_delta          : Spearman r = -0.0546 (p = 0.7067)
+2026-08-11 14:48:53 | INFO | Saved summary CSV to: runs/sigma_validity/sigma_validity_summary.csv
+2026-08-11 14:48:53 | INFO | Saved bar-chart plot to: runs/tribunal_plots/sigma_validity/sigma_validity_gap.png
+2026-08-11 14:48:53 | INFO | Saved scatter plot to: runs/tribunal_plots/sigma_validity/sigma_validity_scatter.png
+2026-08-11 14:48:53 | INFO | 
+--- Executing Test 2: Tournament Value Offline Analysis ---
+2026-08-11 14:48:53 | INFO | --- Data-Driven Feature Correlation with ΔQuality (Thurstonian − Elo Baseline) ---
+2026-08-11 14:48:53 | INFO |   first_divergence_step            : Spearman r = -0.1487 (p = 0.3028)
+2026-08-11 14:48:53 | INFO |   response_length_delta            : Spearman r = +0.0508 (p = 0.7261)
+2026-08-11 14:48:53 | INFO | Saved post-hoc confident subset prompts to: runs/tournament_value/confident_subset.csv
+2026-08-11 14:48:53 | INFO | Saved bar-chart plot to: runs/tribunal_plots/tournament_value/tournament_value_gap.png
+2026-08-11 14:48:53 | INFO | Saved scatter plot to: runs/tribunal_plots/tournament_value/delta_quality_vs_delta_mu_scatter.png

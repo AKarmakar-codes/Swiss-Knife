@@ -263,7 +263,7 @@ SEARCH_SPACE: Dict[str, Tuple[str, float, float, str, float]] = {
     "elo_temperature": ("--elo-temperature", 1.0,  40.0, "float", 15.0),
     "w_tournament":    ("--w-tournament",     0.0,  3.0,  "float", 1.0),
     "w_blade":         ("--w-blade",          0.0,  3.0,  "float", 1.0),
-    "uwo_lambda":      ("--uwo-lambda",       0.0,  1.0,  "float", 0.5),
+    "uwo_lambda":      ("--uwo-lambda",       0.0,  1.0,  "float", 0.2),  # clamped for min_entropy: znorm(mu)-lambda*znorm(sigma), lambda>0.5 gives sigma >50% influence
     "elo_rounds":      ("--elo-rounds",       2,    10,   "int",   6),
     "gsi_n":           ("--gsi-n",            3,    16,   "int",   8),
 }

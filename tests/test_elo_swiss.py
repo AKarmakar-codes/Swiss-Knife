@@ -60,6 +60,11 @@ def test_elo_swiss_stats():
     assert d["avg_step_tokens"] == 4.0
     print("  ✓ EloSwissStats works correctly")
 
+def _mock_score_steps(prefix_ids, step_token_ids_list, return_entropy=False):
+    r = torch.tensor([0.2, 0.4, 0.1, 0.3])
+    e = torch.tensor([0.1, 0.1, 0.1, 0.1])
+    return (r, e) if return_entropy else r
+
 def test_elo_swiss_generator():
     cfg = SwissKnifeConfig(
         generation_mode="elo_swiss",
@@ -93,8 +98,11 @@ def test_elo_swiss_generator():
             ["Step 1\n\n", "Step 2\n\n", "Step 3\n\n", "Step 4\n\n"]
         ))
         
-        # Mock DPOBlade score_reasoning_steps and compute_step_draft_logprobs
-        generator.blade.score_reasoning_steps = MagicMock(return_value=torch.tensor([0.2, 0.4, 0.1, 0.3]))
+        def _mock_score_steps(prefix_ids, step_token_ids_list, return_entropy=False):
+            r = torch.tensor([0.2, 0.4, 0.1, 0.3])
+            e = torch.tensor([0.1, 0.1, 0.1, 0.1])
+            return (r, e) if return_entropy else r
+        generator.blade.score_reasoning_steps = MagicMock(side_effect=_mock_score_steps)
         generator.blade.compute_step_draft_logprobs = MagicMock(return_value=torch.tensor([-0.1, -0.2, -0.05, -0.15]))
         
         output, stats = generator.generate("Mock prompt.", max_new_tokens=15, return_stats=True)
@@ -138,8 +146,7 @@ def test_elo_swiss_generator_tilted():
             ["Step 1\n\n", "Step 2\n\n", "Step 3\n\n", "Step 4\n\n"]
         ))
         
-        # Mock DPOBlade score_reasoning_steps and compute_step_draft_logprobs
-        generator.blade.score_reasoning_steps = MagicMock(return_value=torch.tensor([0.2, 0.4, 0.1, 0.3]))
+        generator.blade.score_reasoning_steps = MagicMock(side_effect=_mock_score_steps)
         generator.blade.compute_step_draft_logprobs = MagicMock(return_value=torch.tensor([-0.1, -0.2, -0.05, -0.15]))
         
         output, stats = generator.generate("Mock prompt.", max_new_tokens=15, return_stats=True)
@@ -184,7 +191,7 @@ def test_elo_swiss_mode_b_generator():
             ["Step 1\n\n", "Step 2\n\n", "Step 3\n\n", "Step 4\n\n"]
         ))
         
-        generator.blade.score_reasoning_steps = MagicMock(return_value=torch.tensor([0.2, 0.4, 0.1, 0.3]))
+        generator.blade.score_reasoning_steps = MagicMock(side_effect=_mock_score_steps)
         generator.blade.compute_step_draft_logprobs = MagicMock(return_value=torch.tensor([-0.1, -0.2, -0.05, -0.15]))
         
         output, stats = generator.generate("Mock prompt.", max_new_tokens=15, return_stats=True)

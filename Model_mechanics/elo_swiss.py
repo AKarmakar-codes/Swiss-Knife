@@ -184,38 +184,51 @@ class EloSwissGenerator:
 
     def __init__(
         self,
-        cfg: SwissKnifeConfig,
-        drafter_model: PreTrainedModel,
-        drafter_tokenizer: PreTrainedTokenizer,
-        verifier_model: PreTrainedModel,
-        verifier_tokenizer: PreTrainedTokenizer,
-        blade_model: PeftModel,
+        cfg: Optional[SwissKnifeConfig] = None,
+        drafter_model: Optional[PreTrainedModel] = None,
+        drafter_tokenizer: Optional[PreTrainedTokenizer] = None,
+        verifier_model: Optional[PreTrainedModel] = None,
+        verifier_tokenizer: Optional[PreTrainedTokenizer] = None,
+        blade_model: Optional[PeftModel] = None,
+        config: Optional[SwissKnifeConfig] = None,
+        dpo_blade: Optional[object] = None,
     ):
-        self.cfg = cfg
+        active_cfg = cfg if cfg is not None else config
+        if active_cfg is None:
+            raise ValueError("Must provide 'cfg' or 'config' to EloSwissGenerator.")
+        self.cfg = active_cfg
         self.drafter_model = drafter_model
         self.drafter_tokenizer = drafter_tokenizer
         self.verifier_model = verifier_model
         self.verifier_tokenizer = verifier_tokenizer
-        self.blade_model = blade_model
-        self.blade = DPOBlade(cfg, verifier_model, blade_model, verifier_tokenizer)
+
+        if dpo_blade is not None and isinstance(dpo_blade, DPOBlade):
+            self.blade = dpo_blade
+            self.blade_model = dpo_blade.blade_model
+        elif dpo_blade is not None:
+            self.blade = dpo_blade
+            self.blade_model = getattr(dpo_blade, "blade_model", blade_model)
+        else:
+            self.blade_model = blade_model
+            self.blade = DPOBlade(active_cfg, verifier_model, blade_model, verifier_tokenizer) if (verifier_model is not None and blade_model is not None) else None
 
         # Set devices
-        self.drafter_device = next(drafter_model.parameters()).device
-        self.verifier_device = next(verifier_model.parameters()).device
+        self.drafter_device = next(drafter_model.parameters()).device if drafter_model is not None else None
+        self.verifier_device = next(verifier_model.parameters()).device if verifier_model is not None else None
 
         # Initialize threshold calibrator
         from .sigma_estimator import RunningPercentileThreshold
         self.threshold_calibrator = RunningPercentileThreshold(
-            percentile=cfg.threshold_percentile,
-            buffer_size=cfg.threshold_buffer_size,
+            percentile=self.cfg.threshold_percentile,
+            buffer_size=self.cfg.threshold_buffer_size,
         )
 
         logger.info(
             "EloSwissGenerator initialized: n=%d, α=%.2f, β=%.3f, "
             "elo_rounds=%d, elo_temp=%.3f, threshold=%.3f, sigma_mode=%s, probabilistic=%s",
-            cfg.gsi_n, cfg.alpha, cfg.beta, cfg.elo_rounds,
-            cfg.elo_temperature, cfg.gsi_threshold, cfg.sigma_mode,
-            getattr(cfg, 'probabilistic', False),
+            self.cfg.gsi_n, self.cfg.alpha, self.cfg.beta, self.cfg.elo_rounds,
+            self.cfg.elo_temperature, self.cfg.gsi_threshold, self.cfg.sigma_mode,
+            getattr(self.cfg, 'probabilistic', False),
         )
 
     # ── Step sampling ────────────────────────────────────────────────────
@@ -513,8 +526,6 @@ class EloSwissGenerator:
 
             # ── Step 5: Commit ──────────────────────────────────────────
             winner_tokens = winner_verifier_step_ids.tolist()
-            remaining = max_tokens - len(generated_tokens)
-            winner_tokens = winner_tokens[:remaining]
 
             eos_hit = False
             clean_tokens = []

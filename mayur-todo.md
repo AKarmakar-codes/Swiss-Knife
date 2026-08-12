@@ -30,3 +30,14 @@ For the **Helpfulness** blade configuration, use **Round 1 Config 8** (`r1config
 - `--elo-rounds`: `7`
 - `--gsi-n`: `13`
 
+use bfloat16 for everything
+
+Daywise Plan:
+Sunday :
+    1. Mayur: Complete training Honesty blade
+    2. Agnibh: Logit mixing experiment with helpfulness and harmfulness
+    3. Shreyash : Start Bayesian Search on Honesty 
+Monday :
+    1. Agnibh: Benchmark Mode B on HarmfulQ
+    2. 
+    3. 

@@ -235,6 +235,10 @@ class EloSwissModeBGenerator(EloSwissGenerator):
                 if len(ids) > 0
             ]
             if not non_empty:
+                # Don't count this as a "step" — no candidate was ever selected.
+                # Decrement to keep acceptance_rate = accepted_steps / total_steps
+                # accurate (Mode B always accepts; empty-EOS is just a stop signal).
+                stats.total_steps -= 1
                 logger.info("All candidate steps empty (EOS). Stopping.")
                 break
             draft_step_ids_list = [x[0] for x in non_empty]
@@ -248,6 +252,7 @@ class EloSwissModeBGenerator(EloSwissGenerator):
             verifier_step_ids_list = [ids.to(self.verifier_device) for ids in draft_step_ids_list]
 
             if not draft_logprobs_list:
+                stats.total_steps -= 1
                 logger.info("All candidate steps empty after logprob computation. Stopping.")
                 break
 
@@ -391,8 +396,6 @@ class EloSwissModeBGenerator(EloSwissGenerator):
             # ── Commit step tokens ───────────────────────────────────────────
             prefix_text += winner_text
             step_tokens_list = winner_verifier_step_ids.tolist()
-            remaining = max_tokens - len(generated_tokens)
-            step_tokens_list = step_tokens_list[:remaining]
 
             eos_hit = False
             clean_tokens = []

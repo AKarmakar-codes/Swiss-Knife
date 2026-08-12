@@ -66,16 +66,22 @@ class SwissKnifeConfig:
             "subfolder":  "dpo_out/truthfulness/final_adapter",
         },
         "humour": {
-            # Locally-trained DPO adapter (2 epochs, 39.5k Reddit+NYCC samples).
-            # repo_type='local' bypasses the HF Hub entirely — path is resolved
-            # relative to the project root at load time.
-            "repo_id":    "dpo training/dpo_out/humour/final_adapter",
-            "repo_type":  "local",
-            "subfolder":  "",
+            "repo_id":    "rik-codes/dpo_humour",
+            "repo_type":  "model",
+            "subfolder":  "dpo_out/humour/final_adapter",
+        },
+        "honesty": {
+            "repo_id":    "ShreyashDhoot/honesty_blade",
+            "repo_type":  "model",
+            "subfolder":  "dpo_out/honesty/final_adapter",
         },
     })
     """Per-blade source descriptor: (repo_id, repo_type, subfolder).
     repo_type ∈ {"model", "dataset"} — controls which Hub API is used."""
+
+    blade_coefficients: Dict[str, float] = field(default_factory=dict)
+    """Map of blade name to weight coefficient (e.g. {'helpfulness': 0.5, 'harmlessness': 0.3}). Unspecified blades default to 0.0."""
+
 
     # ── Tournament hyperparameters ──────────────────────────────────────
     K: int = 8

@@ -147,16 +147,30 @@ def compute_response_blade_reward(
     generated_text: str,
     device,
 ) -> float:
-    """Score a finished response with the DPO implicit reward."""
-    prompt_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
-    gen_ids = tokenizer(
-        generated_text, return_tensors="pt", add_special_tokens=False
+    """Score a finished response with the DPO implicit reward.
+
+    We score only the *generated* portion (not the prompt) as a step.
+    To avoid character-slice misalignment, we tokenize the full
+    (prompt + generated) string and take the suffix beyond prompt_len
+    as the step token IDs, which exactly mirrors the token IDs that
+    were accumulated during generation.
+    """
+    full_text = prompt + " " + generated_text
+    full_ids = tokenizer(
+        full_text, return_tensors="pt", add_special_tokens=True
     ).input_ids.to(device)
-    if gen_ids.shape[1] == 0:
+    prompt_ids = tokenizer(
+        prompt, return_tensors="pt", add_special_tokens=True
+    ).input_ids.to(device)
+    prompt_len = prompt_ids.shape[1]
+    if full_ids.shape[1] <= prompt_len:
+        return 0.0
+    gen_ids = full_ids[0, prompt_len:]  # [step_len]
+    if gen_ids.shape[0] == 0:
         return 0.0
     reward_tensor = dpo_blade.score_reasoning_steps(
         prefix_ids=prompt_ids,
-        step_token_ids_list=[gen_ids.squeeze(0)],
+        step_token_ids_list=[gen_ids],
     )
     return float(reward_tensor[0].item())
 
@@ -283,7 +297,12 @@ def run_single_strategy(
             verbose=verbose,
             return_stats=True,
         )
-        generated = output[len(prompt):].strip()
+        # Decode only the generated portion — joint decode with skip_special_tokens
+        # can shift the prompt text, making character-slicing unreliable.
+        # Instead take the full output string (which equals prompt + continuation)
+        # and pass it directly; compute_response_blade_reward tokenizes correctly.
+        generated = output[len(prompt):].strip() if output.startswith(prompt) else output
+
         stats_dict = stats.to_dict() if hasattr(stats, "to_dict") else {}
 
         blade_reward = compute_response_blade_reward(
@@ -294,7 +313,7 @@ def run_single_strategy(
 
         all_responses.append({
             "prompt_idx": idx,
-            "prompt": prompt[:200],
+            "prompt": prompt,
             "generated": generated,
             "blade_reward": round(blade_reward, 6),
             "override_rate": override_rate,
@@ -350,7 +369,7 @@ def parse_args():
     p.add_argument("--top-p", type=float, default=0.95)
     p.add_argument("--top-k", type=int, default=50)
     p.add_argument("--blade", type=str, default="humour",
-                    choices=["humour", "helpfulness", "harmlessness", "truthfulness"])
+                    choices=["humour", "helpfulness", "harmlessness", "truthfulness", "honesty"])
     p.add_argument("--gsi-n", type=int, default=8)
     p.add_argument("--alpha", type=float, default=0.5)
     p.add_argument("--beta", type=float, default=0.2)
@@ -376,7 +395,7 @@ def parse_args():
         choices=["baseline", "baseline_adapter", "baseline_adapter_softmax", "gsi_softmax", "swiss", "elo_swiss", "swiss_mode_b", "elo_swiss_mode_b"],
     )
     p.add_argument("--no-fallback", action="store_true", help="Disable verifier fallback, running in Mode B.")
-    p.add_argument("--sigma-mode", type=str, default="none", choices=["none", "mc_dropout", "log_ratio_proxy"])
+    p.add_argument("--sigma-mode", type=str, default="none", choices=["none", "min_entropy", "mc_dropout", "log_ratio_proxy"])
     p.add_argument("--w-tournament", type=float, default=1.0)
     p.add_argument("--w-blade", type=float, default=1.0)
     p.add_argument("--uwo-lambda", type=float, default=0.5)
@@ -442,7 +461,7 @@ def main():
     logger.info("Loading shared verifier base model + Humour Blade...")
     tokenizer = load_tokenizer(base_cfg)
     base_model = load_base_model(base_cfg)
-    blade_model = load_blade_model(base_cfg, args.blade)
+    blade_model = load_blade_model(base_cfg, args.blade, base_model=base_model)
 
     logger.info("Loading drafter model...")
     drafter_tokenizer = load_drafter_tokenizer(base_cfg)
@@ -454,7 +473,7 @@ def main():
     all_results = {}
 
     strategy_generators = {
-        "baseline": lambda cfg: BaselineGreedyGenerator(tokenizer, blade_model, "baseline"),
+        "baseline": lambda cfg: BaselineSoftmaxGenerator(tokenizer, base_model, "baseline", cfg),
         "baseline_adapter": lambda cfg: BaselineGreedyGenerator(tokenizer, blade_model, "baseline_adapter"),
         "baseline_adapter_softmax": lambda cfg: BaselineSoftmaxGenerator(tokenizer, blade_model, "baseline_adapter_softmax", cfg),
         "elo_swiss": lambda cfg: EloSwissGenerator(cfg, drafter_model, drafter_tokenizer, base_model, tokenizer, blade_model),
@@ -538,7 +557,7 @@ def main():
                 "elapsed_s": result["elapsed_s"],
                 "responses": result["responses"],
                 "stats": result["stats"],
-            }, f, indent=2)
+            }, f, indent=2, ensure_ascii=False)
         logger.info("Saved %s results → %s", strat_name, out_file)
 
     # ── Summary JSON ──────────────────────────────────────────────────
@@ -559,7 +578,7 @@ def main():
     }
     summary_file = os.path.join(args.output_dir, "gsi_humour_benchmark_summary.json")
     with open(summary_file, "w") as f:
-        json.dump(summary, f, indent=2)
+        json.dump(summary, f, indent=2, ensure_ascii=False)
 
     print(f"\n  Summary saved to: {summary_file}")
     print("=" * 70)

@@ -20,6 +20,7 @@ def parse_args():
     p.add_argument("--sample-size", type=int, help="Max records to score per file.")
     p.add_argument("--judge-url", help="vLLM server URL (default http://localhost:8000/v1).")
     p.add_argument("--no-detoxify", action="store_true", help="Skip the Detoxify cross-check.")
+    p.add_argument("--include-humour", action="store_true", help="Include humour rubrics in evaluation.")
     return p.parse_args()
 
 
@@ -43,6 +44,8 @@ def main():
         CONFIG["vllm_url"] = args.judge_url
     if args.no_detoxify:
         CONFIG["use_detoxify"] = False
+    if args.include_humour:
+        CONFIG["include_humour"] = True
 
     pipeline.run(CONFIG)
 

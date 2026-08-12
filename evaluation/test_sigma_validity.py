@@ -1,13 +1,13 @@
 """
-Swiss Knife — Test 1: Log-Proxy Sigma Validity Test
-====================================================
+Swiss Knife — Test 1: Min-Entropy Sigma Validity Test
+=====================================================
 
-This script evaluates whether the `log_ratio_proxy` uncertainty estimator (sigma)
+This script evaluates whether the `min_entropy` uncertainty estimator (sigma)
 measures genuine candidate uncertainty or functions as random noise.
 
 3 Sigma Conditions Compared:
 ----------------------------
-  1. `real_sigma`     : Genuine log_ratio_proxy sigma values estimated per candidate step.
+  1. `real_sigma`     : Genuine min_entropy sigma values estimated per candidate step.
   2. `shuffled_sigma` : Permuted sigma values (same distribution/scale, random candidate assignment).
   3. `zero_sigma`     : Sigma set to 0.0 for all candidates (collapses to standard Bradley-Terry Elo).
 
@@ -365,11 +365,11 @@ def run_sigma_validity_generation(
 ):
     """
     Runs model generations for 3 sigma conditions:
-      1. Real Sigma (log_ratio_proxy)
+      1. Real Sigma (min_entropy)
       2. Shuffled Sigma
       3. Zero Sigma
     """
-    logger.info("Initializing models for Test 1: Log-Proxy Sigma Validity Generation...")
+    logger.info("Initializing models for Test 1: Min-Entropy Sigma Validity Generation...")
     import torch
     from Model_mechanics.config import SwissKnifeConfig
     from Model_mechanics.elo_swiss_mode_b import EloSwissModeBGenerator
@@ -455,7 +455,7 @@ def run_sigma_validity_generation(
         logger.info("[%d/%d (Global ID %d)] GENERATING FOR PROMPT:\n%s", idx + 1, len(prompts), global_id, prompt)
         logger.info("-" * 80)
 
-        # 1. Real sigma — genuine log_ratio_proxy σ drives selection
+        # 1. Real sigma — genuine min_entropy σ drives selection
         logger.info("[%d/%d] Step 1/3: Running Real Sigma generation...", idx + 1, len(prompts))
         real_text, real_stats = real_gen.generate(
             prompt, max_new_tokens=max_new_tokens, return_stats=True, use_tilted_elo=False
@@ -748,7 +748,7 @@ def analyze_sigma_validity_results(
     df_summary = pd.DataFrame(summary_rows)
 
     print("\n" + "=" * 100)
-    print(" TEST 1: LOG-PROXY SIGMA VALIDITY SUMMARY (STRATIFIED BY MEAN SIGMA)")
+    print(" TEST 1: MIN-ENTROPY SIGMA VALIDITY SUMMARY (STRATIFIED BY MEAN SIGMA)")
     print("=" * 100)
     print(df_summary.to_string(index=False))
     print("=" * 100 + "\n")
@@ -799,7 +799,7 @@ def analyze_sigma_validity_results(
     axes[0].set_xticks(x)
     axes[0].set_xticklabels(df_summary["Uncertainty Tier"], fontsize=9)
     axes[0].set_ylabel("Quality Delta (Real σ − Baseline)", fontsize=10)
-    axes[0].set_title("Quality Advantage of Log-Proxy Sigma across Uncertainty Tiers", fontsize=11, fontweight="bold")
+    axes[0].set_title("Quality Advantage of Min-Entropy Sigma across Uncertainty Tiers", fontsize=11, fontweight="bold")
     axes[0].legend(loc="upper left")
 
     rects3 = axes[1].bar(x - width/2, df_summary["Win % (vs Shuffled)"], width, label="vs Shuffled σ", color="#2ca02c")
@@ -845,7 +845,7 @@ def analyze_sigma_validity_results(
             linewidths=0.3,
         )
         ax2.axhline(0, color="black", linestyle="--", linewidth=0.8)
-        ax2.set_xlabel("Mean σ per prompt (log_ratio_proxy uncertainty)", fontsize=10)
+        ax2.set_xlabel("Mean σ per prompt (min_entropy uncertainty)", fontsize=10)
         ax2.set_ylabel("ΔQuality (Real σ − Shuffled σ)", fontsize=10)
         ax2.set_title("σ Signal Validity: Quality Gain vs Uncertainty Level\n(size = disagreement rate; colour = Δμ ambiguity)", fontsize=11, fontweight="bold")
         if "mean_delta_mu" in df_merged.columns:
