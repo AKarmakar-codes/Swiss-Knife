@@ -17,7 +17,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 import plotly.graph_objects as go
 
-from .config import QUALITY_METRICS
+from .config import QUALITY_METRICS, SAFETY_METRICS, HUMOUR_METRICS, HONESTY_METRICS
 
 # --- design tokens ---------------------------------------------------------
 # A deliberate, harmonious qualitative palette (not Plotly's defaults), chosen
@@ -41,8 +41,19 @@ RUBRIC_LABEL = {
     "toxicity": "Toxicity",
     "harmfulness": "Harmfulness",
     "refusal": "Refusal",
+    "humour": "Humour (Craft)",
+    "humour_originality": "Humour Originality",
+    "humour_appropriateness": "Humour Appropriateness",
+    "truthfulness": "Truthfulness",
+    "non_deception": "Non-Deception",
+    "epistemic_honesty": "Epistemic Honesty",
 }
-RUBRICS = ["response_quality", "relevance", "helpfulness", "toxicity", "harmfulness", "refusal"]
+RUBRICS = [
+    "response_quality", "relevance", "helpfulness",
+    "toxicity", "harmfulness", "refusal",
+    "humour", "humour_originality", "humour_appropriateness",
+    "truthfulness", "non_deception", "epistemic_honesty",
+]
 
 PLOTLY_CONFIG = {
     "displaylogo": False,
@@ -54,7 +65,7 @@ PLOTLY_CONFIG = {
 # --- aggregation -----------------------------------------------------------
 def aggregate_by_model(combined: pd.DataFrame) -> pd.DataFrame:
     """One row per model: mean of each rubric (abstentions already excluded as
-    NaN), plus the safety and response-quality axes."""
+    NaN), plus composite axis metrics."""
     if "model" not in combined.columns:
         raise ValueError("combined results must have a 'model' column")
 
@@ -67,8 +78,22 @@ def aggregate_by_model(combined: pd.DataFrame) -> pd.DataFrame:
     rename["toxicity_detoxify_score"] = "toxicity_detoxify"
     agg = agg.rename(columns={k: v for k, v in rename.items() if k in agg.columns})
 
-    agg["quality_axis"] = agg[QUALITY_METRICS].mean(axis=1)
-    agg["safety_axis"] = 1 - agg[["toxicity", "harmfulness"]].mean(axis=1)
+    q_cols = [c for c in QUALITY_METRICS if c in agg.columns]
+    if q_cols:
+        agg["quality_axis"] = agg[q_cols].mean(axis=1)
+
+    s_cols = [c for c in ["toxicity", "harmfulness"] if c in agg.columns]
+    if s_cols:
+        agg["safety_axis"] = 1 - agg[s_cols].mean(axis=1)
+
+    h_cols = [c for c in HUMOUR_METRICS if c in agg.columns]
+    if h_cols:
+        agg["humour_axis"] = agg[h_cols].mean(axis=1)
+
+    t_cols = [c for c in HONESTY_METRICS if c in agg.columns]
+    if t_cols:
+        agg["honesty_axis"] = agg[t_cols].mean(axis=1)
+
     return agg.sort_values("model").reset_index(drop=True)
 
 

@@ -18,6 +18,7 @@ Option B adds two key methods:
 """
 
 import logging
+from contextlib import nullcontext
 from typing import List, Optional
 
 import torch
@@ -66,6 +67,14 @@ class DPOBlade:
             elif hasattr(blade_model, "peft_config") and blade_model.peft_config:
                 blade_name = next(iter(blade_model.peft_config.keys()))
         self.blade_name = blade_name
+
+    def _disable_adapter_context(self):
+        """Context manager to disable PEFT LoRA adapter for reference (π_ref) forward passes."""
+        if isinstance(self.base_model, PeftModel):
+            return self.base_model.disable_adapter()
+        elif isinstance(self.blade_model, PeftModel):
+            return self.blade_model.disable_adapter()
+        return nullcontext()
 
     # ── Core computation ───────────────────────────────────────────────
 
@@ -187,12 +196,7 @@ class DPOBlade:
         # For the log-prob computation, we use per-row computation.
 
         # Compute ref scores
-        if isinstance(self.base_model, PeftModel):
-            with self.base_model.disable_adapter():
-                ref_scores = self._logprobs_over_span(
-                    self.base_model, padded_ids, padded_mask, span_start=max_len - (max_len - prompt_len),
-                )
-        else:
+        with self._disable_adapter_context():
             ref_scores = self._logprobs_over_span(
                 self.base_model, padded_ids, padded_mask, span_start=max_len - (max_len - prompt_len),
             )
@@ -258,12 +262,7 @@ class DPOBlade:
             padded_ids[i, offset:] = ids
             padded_mask[i, offset:] = mask
 
-        if isinstance(self.base_model, PeftModel):
-            with self.base_model.disable_adapter():
-                draft_scores = self._logprobs_over_span(
-                    self.base_model, padded_ids, padded_mask, span_start=prompt_len,
-                )
-        else:
+        with self._disable_adapter_context():
             draft_scores = self._logprobs_over_span(
                 self.base_model, padded_ids, padded_mask, span_start=prompt_len,
             )
@@ -328,12 +327,7 @@ class DPOBlade:
             input_ids=full_ids, attention_mask=full_mask
         ).logits.squeeze(0)  # [context_len + gamma, vocab_size]
 
-        if isinstance(self.base_model, PeftModel):
-            with self.base_model.disable_adapter():
-                ref_logits = self.base_model(
-                    input_ids=full_ids, attention_mask=full_mask
-                ).logits.squeeze(0)  # [context_len + gamma, vocab_size]
-        else:
+        with self._disable_adapter_context():
             ref_logits = self.base_model(
                 input_ids=full_ids, attention_mask=full_mask
             ).logits.squeeze(0)  # [context_len + gamma, vocab_size]
@@ -571,9 +565,10 @@ class DPOBlade:
                 )
             del blade_logits
 
-            ref_logits = self.base_model(
-                input_ids=padded_ids, attention_mask=padded_mask
-            ).logits  # [m, max_len, V]
+            with self._disable_adapter_context():
+                ref_logits = self.base_model(
+                    input_ids=padded_ids, attention_mask=padded_mask
+                ).logits  # [m, max_len, V]
             ref_lp_sum = self._step_logprob_sum(
                 ref_logits, padded_ids, prefix_len, chunk, device
             )
@@ -639,9 +634,10 @@ class DPOBlade:
             padded_ids[i, :ids.shape[0]] = ids
             padded_mask[i, :mask.shape[0]] = mask
 
-        draft_logits = self.base_model(
-            input_ids=padded_ids, attention_mask=padded_mask
-        ).logits
+        with self._disable_adapter_context():
+            draft_logits = self.base_model(
+                input_ids=padded_ids, attention_mask=padded_mask
+            ).logits
         scores = self._step_logprob_sum(
             draft_logits, padded_ids, prefix_len, step_token_ids_list, device
         )

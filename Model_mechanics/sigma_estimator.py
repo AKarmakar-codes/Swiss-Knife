@@ -11,6 +11,7 @@ Implements:
 
 import math
 import logging
+from contextlib import nullcontext
 import torch
 import numpy as np
 from typing import List, Tuple, Optional
@@ -167,12 +168,8 @@ def estimate_mu_sigma(
         if verifier_logprobs is None:
             # Guard: if the base model is a shared PeftModel, disable adapters so we
             # get pi_ref (base weights), not pi_blade (LoRA-adapted weights).
-            if isinstance(blade.base_model, PeftModel):
-                with blade.base_model.disable_adapter():
-                    verifier_logprobs_list = compute_logprobs_batched(
-                        blade.base_model, prefix_ids_squeezed, step_token_ids_list
-                    )
-            else:
+            disable_ctx = blade._disable_adapter_context() if hasattr(blade, "_disable_adapter_context") else (blade.base_model.disable_adapter() if isinstance(blade.base_model, PeftModel) else nullcontext())
+            with disable_ctx:
                 verifier_logprobs_list = compute_logprobs_batched(
                     blade.base_model, prefix_ids_squeezed, step_token_ids_list
                 )

@@ -5,8 +5,8 @@ Swiss Knife — Merge Sharded Generation Outputs
 After running generation across N GPUs with:
 
     for i in 0..N-1:
-        CUDA_VISIBLE_DEVICES=<gpu_i> python evaluation/run_hh_experiments.py \\
-            --test all --mode generate --num_samples 50 --max_new_tokens 768 \\
+        CUDA_VISIBLE_DEVICES=<gpu_i> python evaluation/run_hh_experiments.py \
+            --test all --mode generate --num_samples 50 --max_new_tokens 768 \
             --num-shards N --shard-id i
 
 ...each shard writes its own suffixed files (e.g. elo_real_sigma_shard3.jsonl,
@@ -26,10 +26,6 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
-# (glob_pattern_without_shard_tag, merged_output_path, kind)
-# kind: "jsonl_by_id" = list of {"id": ..., ...} lines, re-sorted by id
-#       "results_json" = {"responses": [...]}, concatenated + sorted by prompt_idx
-#       "stats_json"   = {"prompt_stats": [...]}, concatenated (order doesn't matter)
 _JSONL_TARGETS = [
     ("tribunal/inputs/sigma_validity/elo_real_sigma", ".jsonl"),
     ("tribunal/inputs/sigma_validity/elo_shuffled_sigma", ".jsonl"),
@@ -51,6 +47,15 @@ _RESULTS_JSON_TARGETS = [
 _STATS_JSON_TARGETS = [
     ("runs/sigma_validity/step_sigma_stats", ".json"),
     ("runs/tournament_value/step_tournament_stats", ".json"),
+]
+
+_CSV_EVAL_TARGETS = [
+    ("tribunal/outputs/sigma_validity/elo_real_sigma", "_eval.csv"),
+    ("tribunal/outputs/sigma_validity/elo_shuffled_sigma", "_eval.csv"),
+    ("tribunal/outputs/sigma_validity/elo_zero_sigma", "_eval.csv"),
+    ("tribunal/outputs/tournament_value/gsi_elo_thurstonian", "_eval.csv"),
+    ("tribunal/outputs/tournament_value/gsi_elo_bt_w0", "_eval.csv"),
+    ("tribunal/outputs/tournament_value/gsi_elo_softmax_blade", "_eval.csv"),
 ]
 
 
@@ -108,6 +113,32 @@ def merge_stats_json(base: str, ext: str, num_shards: int):
     logger.info("Merged %d shard file(s) -> %s (%d prompt entries)", len(paths), out_path, len(prompt_stats))
 
 
+def merge_csv_shards(base: str, ext: str, num_shards: int):
+    try:
+        import pandas as pd
+    except ImportError:
+        logger.warning("pandas not available for merging CSV shards.")
+        return
+
+    shard_paths = []
+    for i in range(num_shards):
+        p = f"{base}_shard{i}{ext}"
+        if os.path.exists(p):
+            shard_paths.append(p)
+    if not shard_paths:
+        return
+
+    dfs = [pd.read_csv(p) for p in shard_paths]
+    merged = pd.concat(dfs, ignore_index=True)
+    if "id" in merged.columns:
+        merged.sort_values(by="id", inplace=True)
+        merged.drop_duplicates(subset=["id"], inplace=True)
+
+    out_path = f"{base}{ext}"
+    merged.to_csv(out_path, index=False)
+    logger.info("Merged %d shard CSV file(s) -> %s (%d rows)", len(shard_paths), out_path, len(merged))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Merge sharded generation outputs")
     parser.add_argument("--num-shards", type=int, required=True)
@@ -119,6 +150,8 @@ def main():
         merge_results_json(base, ext, args.num_shards)
     for base, ext in _STATS_JSON_TARGETS:
         merge_stats_json(base, ext, args.num_shards)
+    for base, ext in _CSV_EVAL_TARGETS:
+        merge_csv_shards(base, ext, args.num_shards)
 
     logger.info("Done. You can now run: python evaluation/run_hh_experiments.py --test all --mode analyze")
 

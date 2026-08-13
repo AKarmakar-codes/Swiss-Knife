@@ -199,15 +199,34 @@ def load_blade_model(
     PeftModel
         Base model + LoRA adapter. Forward passes yield π_blade.
     """
-    if blade_name not in cfg.blade_sources:
+    # Check if blade_name is a direct local filesystem path or if a local trained adapter exists
+    local_candidates = [
+        blade_name,
+        os.path.join("dpo_out", blade_name, "final_adapter"),
+        os.path.join("dpo_out", blade_name),
+        os.path.join("dpo_out", f"hh_{blade_name}", "final_adapter"),
+    ]
+    local_adapter_dir = None
+    for cand in local_candidates:
+        if os.path.exists(os.path.join(cand, "adapter_config.json")):
+            local_adapter_dir = os.path.abspath(cand)
+            break
+
+    if local_adapter_dir:
+        logger.info("Found local trained adapter for '%s' at: %s", blade_name, local_adapter_dir)
+        repo_id = local_adapter_dir
+        repo_type = "local"
+        subfolder = ""
+    elif blade_name in cfg.blade_sources:
+        source = cfg.blade_sources[blade_name]
+        repo_id   = source["repo_id"]
+        repo_type = source["repo_type"]
+        subfolder = source["subfolder"]
+    else:
         raise ValueError(
-            f"Unknown blade '{blade_name}'. "
-            f"Available: {list(cfg.blade_sources)}"
+            f"Unknown blade '{blade_name}' and no local adapter found at {[c for c in local_candidates]}. "
+            f"Available configured blades: {list(cfg.blade_sources)}"
         )
-    source = cfg.blade_sources[blade_name]
-    repo_id   = source["repo_id"]
-    repo_type = source["repo_type"]
-    subfolder = source["subfolder"]
 
     model_path = _download_base_model(cfg)
     dtype = _resolve_dtype(cfg)
@@ -252,21 +271,25 @@ def load_blade_model(
             f"Expected 'model', 'dataset', or 'local'."
         )
 
-    if isinstance(base_for_blade, PeftModel):
-        base_for_blade.load_adapter(
-            adapter_path_resolved,
-            adapter_name=blade_name,
-            subfolder=subfolder if repo_type == "model" else None
-        )
-        blade_model = base_for_blade
-    else:
-        blade_model = PeftModel.from_pretrained(
-            base_for_blade,
-            adapter_path_resolved,
-            subfolder=subfolder if repo_type == "model" else None,
-            adapter_name=blade_name,
-            torch_dtype=dtype,
-        )
+    try:
+        if isinstance(base_for_blade, PeftModel):
+            base_for_blade.load_adapter(
+                adapter_path_resolved,
+                adapter_name=blade_name,
+                subfolder=subfolder if repo_type == "model" and subfolder else None
+            )
+            blade_model = base_for_blade
+        else:
+            blade_model = PeftModel.from_pretrained(
+                base_for_blade,
+                adapter_path_resolved,
+                subfolder=subfolder if repo_type == "model" and subfolder else None,
+                adapter_name=blade_name,
+                torch_dtype=dtype,
+            )
+    except Exception as err:
+        logger.error("Failed to load adapter '%s' from %s: %s", blade_name, adapter_path_resolved, err)
+        raise err
 
     blade_model.eval()
     for param in blade_model.parameters():

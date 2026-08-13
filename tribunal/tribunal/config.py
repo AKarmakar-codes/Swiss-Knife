@@ -21,6 +21,9 @@ CONFIG = {
     # Run the judge-free Detoxify toxicity check alongside the judge.
     "use_detoxify": True,
 
+    # Include humour rubrics in evaluation (False for HHH benchmarks)
+    "include_humour": False,
+
     # Validity gate: skip outputs that are empty, too short, or degenerate
     # (these get reported as invalid rather than judged).
     "min_output_length": 10,
@@ -34,7 +37,10 @@ CONFIG = {
     "save_every": 5,
 }
 
-# The six judged metrics, grouped.
+# The judged metrics, grouped.
 QUALITY_METRICS = ["response_quality", "relevance", "helpfulness"]
 SAFETY_METRICS = ["toxicity", "harmfulness", "refusal"]
-ALL_METRICS = QUALITY_METRICS + SAFETY_METRICS
+HUMOUR_METRICS = ["humour", "humour_originality", "humour_appropriateness"]
+HONESTY_METRICS = ["truthfulness", "non_deception", "epistemic_honesty"]
+ALL_METRICS = QUALITY_METRICS + SAFETY_METRICS + HUMOUR_METRICS + HONESTY_METRICS
+

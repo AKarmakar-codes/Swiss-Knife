@@ -133,17 +133,30 @@ def compute_response_blade_reward(
     generated_text: str,
     device,
 ) -> float:
-    """Score a FULL finished response with the same DPO implicit reward."""
-    prompt_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
-    gen_ids = tokenizer(
-        generated_text, return_tensors="pt", add_special_tokens=False
+    """Score a finished response with the DPO implicit reward.
+
+    We score only the *generated* portion (not the prompt) as a step.
+    To avoid character-slice misalignment, we tokenize the full
+    (prompt + generated) string and take the suffix beyond prompt_len
+    as the step token IDs, which exactly mirrors the token IDs that
+    were accumulated during generation.
+    """
+    full_text = prompt + " " + generated_text
+    full_ids = tokenizer(
+        full_text, return_tensors="pt", add_special_tokens=True
     ).input_ids.to(device)
-    if gen_ids.shape[1] == 0:
+    prompt_ids = tokenizer(
+        prompt, return_tensors="pt", add_special_tokens=True
+    ).input_ids.to(device)
+    prompt_len = prompt_ids.shape[1]
+    if full_ids.shape[1] <= prompt_len:
         return 0.0
-    prefix_mask = torch.ones_like(prompt_ids)
+    gen_ids = full_ids[0, prompt_len:]  # [step_len]
+    if gen_ids.shape[0] == 0:
+        return 0.0
     reward_tensor = dpo_blade.score_reasoning_steps(
         prefix_ids=prompt_ids,
-        step_token_ids_list=[gen_ids.squeeze(0)],
+        step_token_ids_list=[gen_ids],
     )
     return float(reward_tensor[0].item())
 
@@ -197,7 +210,7 @@ def run_single_strategy(
             verbose=verbose,
             return_stats=True,
         )
-        generated = output[len(prompt):].strip()
+        generated = output[len(prompt):].strip() if output.startswith(prompt) else output
         stats_dict = stats.to_dict()
 
         blade_reward = compute_response_blade_reward(

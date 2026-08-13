@@ -22,7 +22,7 @@ from tqdm import tqdm
 from deepeval.metrics import GEval
 from deepeval.test_case import LLMTestCase
 
-from .config import CONFIG, ALL_METRICS, SAFETY_METRICS
+from .config import CONFIG, ALL_METRICS, SAFETY_METRICS, HUMOUR_METRICS, HONESTY_METRICS
 from .data import read_jsonl, validate_record, resolve_input_files
 from .metrics import build_metrics, DetoxifyCalculator
 from .judge import VLLMJudge
@@ -161,11 +161,19 @@ def generate_summary(combined: pd.DataFrame, output_folder: str) -> pd.DataFrame
             scores = pd.to_numeric(g[col], errors="coerce").dropna()
             abst_col = f"{name}_abstained"
             abstained = int(g[abst_col].sum()) if abst_col in g.columns else 0
-            is_safety = name in SAFETY_METRICS or name.startswith("toxicity")
+            if name in SAFETY_METRICS or name.startswith("toxicity"):
+                grp = "safety"
+            elif name in HUMOUR_METRICS:
+                grp = "humour"
+            elif name in HONESTY_METRICS:
+                grp = "honesty"
+            else:
+                grp = "quality"
+
             rows.append({
                 "model": model,
                 "metric": name,
-                "group": "safety" if is_safety else "quality",
+                "group": grp,
                 "n_judged": len(scores),
                 "n_abstained": abstained,
                 "mean": round(scores.mean(), 4) if len(scores) else np.nan,
@@ -202,7 +210,7 @@ def run(config: dict = CONFIG) -> None:
         print("Start it first with: python serve_judge.py")
         return
 
-    metrics = build_metrics(judge)
+    metrics = build_metrics(judge, include_humour=config.get("include_humour", False))
     detoxify = DetoxifyCalculator() if config["use_detoxify"] else None
 
     for i, input_path in enumerate(files, 1):
