@@ -353,7 +353,7 @@ def parse_args():
                     help="Candidates per position (gsi_gumbel only, default: 8).")
     # Phase 1 & 2 arguments
     p.add_argument("--no-fallback", action="store_true", help="Disable verifier fallback, running in Mode B.")
-    p.add_argument("--sigma-mode", type=str, default="none", choices=["none", "mc_dropout", "log_ratio_proxy"])
+    p.add_argument("--sigma-mode", type=str, default="none", choices=["none", "mc_dropout", "log_ratio_proxy","min_entropy"])
     p.add_argument("--sigma-mc-samples", type=int, default=10)
     p.add_argument("--sigma-dropout-p", type=float, default=0.1)
     p.add_argument("--w-tournament", type=float, default=1.0)

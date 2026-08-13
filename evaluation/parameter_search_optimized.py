@@ -1405,7 +1405,7 @@ def run_round_on_gpu_pool(
 
 
 BENCHMARK_SCRIPTS = {
-    "harmlessness": "benchmark_gsi_strategies_harmlessness.py",
+    "harmlessness": "benchmark_HH_harmlessness.py",
     "helpfulness": "benchmark_gsi_strategies_helpfulness.py",
     "truthfulness": "benchmark_gsi_strategies_truthfulness.py",
 }
@@ -1605,7 +1605,7 @@ def run_search_for_benchmark(benchmark_type: str, args, gpu_ids: List[int], repo
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--repo-root", default=".", help="Path to repo root.")
-    p.add_argument("--configs-per-round", type=int, default=16,
+    p.add_argument("--configs-per-round", type=int, default=8,
                     help="Number of configs evaluated in each round FROM ROUND 1 ONWARD. "
                          "Round 0 uses --initial-round-size instead (much larger, for "
                          "dense initial space-filling coverage). Raised from the original "
@@ -1631,7 +1631,7 @@ def main():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--output-root", default=None)
     p.add_argument("--extra-flag", action="append", default=[], help="Extra flag for generation.")
-    p.add_argument("--min-expected-improvement", type=float, default=0.001,
+    p.add_argument("--min-expected-improvement", type=float, default=0.01,
                     help="EI threshold to stop search early.")
     p.add_argument("--cooldown-seconds", type=int, default=900,
                     help="Pause time in seconds after each round completion (default 1 hour).")
