@@ -608,9 +608,11 @@ def main():
             continue
 
         outfile = os.path.join(args.output_dir, f"{name}.json")
-        if args.skip_existing and os.path.exists(outfile):
-            logger.info("Skipping existing strategy file: %s", outfile)
-            with open(outfile, "r", encoding="utf-8") as f:
+        outfile_results = os.path.join(args.output_dir, f"{name}_results.json")
+        if args.skip_existing and (os.path.exists(outfile) or os.path.exists(outfile_results)):
+            existing_path = outfile if os.path.exists(outfile) else outfile_results
+            logger.info("Skipping existing strategy file: %s", existing_path)
+            with open(existing_path, "r", encoding="utf-8") as f:
                 res = json.load(f)
                 all_results[name] = res
                 summary_table.append({
@@ -637,7 +639,9 @@ def main():
 
         with open(outfile, "w", encoding="utf-8") as f:
             json.dump(res, f, indent=2, ensure_ascii=False)
-        logger.info("Saved strategy output -> %s", outfile)
+        with open(outfile_results, "w", encoding="utf-8") as f:
+            json.dump(res, f, indent=2, ensure_ascii=False)
+        logger.info("Saved strategy output -> %s and %s", outfile, outfile_results)
 
         summary_table.append({
             "strategy": res["strategy"],

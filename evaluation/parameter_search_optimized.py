@@ -283,7 +283,8 @@ FIXED_FLAGS = [
 STRATEGY_NAME = "elo_swiss_mode_b"
 
 _QUALITY_METRICS = ["response_quality", "relevance"]
-_SAFETY_METRICS = ["toxicity", "harmfulness"]
+_SAFETY_METRICS  = ["toxicity", "harmfulness"]
+_HONESTY_METRICS = ["truthfulness", "non_deception", "epistemic_honesty"]
 
 JUDGE_API_KEY = "EMPTY"
 
@@ -351,8 +352,12 @@ def build_round0_configs(num_configs: int, seed: int) -> List[HPConfig]:
 def convert_json_to_jsonl(results_dir: str, tribunal_inputs_dir: str, model_name: str) -> Optional[str]:
     src = os.path.join(results_dir, f"{STRATEGY_NAME}_results.json")
     if not os.path.exists(src):
-        logger.error("No results file at %s -- generation likely failed.", src)
-        return None
+        alt_src = os.path.join(results_dir, f"{STRATEGY_NAME}.json")
+        if os.path.exists(alt_src):
+            src = alt_src
+        else:
+            logger.error("No results file at %s or %s -- generation likely failed.", src, alt_src)
+            return None
     with open(src) as f:
         data = json.load(f)
     responses = data.get("responses", [])
@@ -457,36 +462,64 @@ def read_metrics(results_dir: str, model_label: str) -> Optional[Dict[str, float
         return None
     row = row.iloc[0]
     metrics = {}
-    for m in ["response_quality", "relevance", "helpfulness", "toxicity", "harmfulness", "refusal"]:
-        if m in row:
+    # Read all known rubric columns; honesty rubrics may only be present for the
+    # honesty benchmark (benchmark_honesty.py includes them in tribunal output).
+    all_known = [
+        "response_quality", "relevance", "helpfulness",
+        "toxicity", "harmfulness", "refusal",
+        "truthfulness", "non_deception", "epistemic_honesty",
+    ]
+    for m in all_known:
+        if m in row and pd.notna(row[m]):
             metrics[m] = float(row[m])
     return metrics
 
 
-def scalar_objective(metrics: Dict[str, float]) -> float:
+def scalar_objective(metrics: Dict[str, float], benchmark_type: str = "harmlessness") -> float:
     """
-    Harmonic mean (F1-style) of Quality axis and Safety axis.
+    Harmonic mean (F1-style) objective — axes adapt per benchmark type.
 
-    quality = mean(response_quality, relevance)
-    safety  = 1 - mean(toxicity, harmfulness)
+    harmlessness / helpfulness:
+        X-axis (quality) = mean(response_quality, relevance)
+        Y-axis (safety)  = 1 - mean(toxicity, harmfulness)
+        → Pareto plot: Quality vs Safety  (same as existing runs)
 
-    Helpfulness and refusal are intentionally excluded:
-      - Helpfulness penalises safe refusals on sensitive/adversarial prompts and duplicates quality/relevance.
-      - Refusal is a diagnostic metric, not an optimization target.
+    honesty:
+        X-axis (quality) = mean(response_quality, relevance)
+        Y-axis (honesty) = mean(truthfulness, non_deception, epistemic_honesty)
+        → Pareto plot: Quality vs Honesty
+
+    Why keep harmonic mean for honesty?
+      The harmonic mean penalises extreme imbalance: a config that maximises
+      honesty at the cost of producing incoherent responses is no better than
+      a fluent-but-dishonest one. This mirrors the safety/quality tension used
+      for the other blades and keeps the objective function family uniform.
+
+    Why drop Safety for the honesty axis?
+      TruthfulQA has no adversarial harm-elicitation prompts, so toxicity and
+      harmfulness are near-constant across configs (all near zero). Including
+      them would add a near-constant scale factor to the objective, providing
+      no discriminative signal to the GP and obscuring the actual optimisation
+      target. Safety is implicitly ensured by the base model + refusal behaviour.
     """
     q_vals = [metrics[m] for m in _QUALITY_METRICS if m in metrics]
-    s_vals = [metrics[m] for m in _SAFETY_METRICS if m in metrics]
 
-    if not q_vals or not s_vals:
-        return 0.0
+    if benchmark_type == "honesty":
+        h_vals = [metrics[m] for m in _HONESTY_METRICS if m in metrics]
+        if not q_vals or not h_vals:
+            return 0.0
+        axis_a = sum(q_vals) / len(q_vals)          # X: quality
+        axis_b = sum(h_vals) / len(h_vals)          # Y: honesty
+    else:
+        s_vals = [metrics[m] for m in _SAFETY_METRICS if m in metrics]
+        if not q_vals or not s_vals:
+            return 0.0
+        axis_a = sum(q_vals) / len(q_vals)          # X: quality
+        axis_b = 1.0 - (sum(s_vals) / len(s_vals)) # Y: safety
 
-    quality = sum(q_vals) / len(q_vals)
-    safety = 1.0 - (sum(s_vals) / len(s_vals))
-
-    quality = max(quality, 1e-6)
-    safety = max(safety, 1e-6)
-
-    return (2.0 * quality * safety) / (quality + safety)
+    axis_a = max(axis_a, 1e-6)
+    axis_b = max(axis_b, 1e-6)
+    return (2.0 * axis_a * axis_b) / (axis_a + axis_b)
 
 
 def _normalize(X: np.ndarray) -> np.ndarray:
@@ -1274,7 +1307,7 @@ def process_config_on_gpu(
         if metrics is None:
             raise RuntimeError(f"Could not read model_summary.csv for {cfg.label()}.")
 
-        obj = scalar_objective(metrics)
+        obj = scalar_objective(metrics, benchmark_type=shared["benchmark_type"])
         metrics_rec = {
             "cfg_label": cfg.label(),
             "round": round_idx,
@@ -1406,8 +1439,9 @@ def run_round_on_gpu_pool(
 
 BENCHMARK_SCRIPTS = {
     "harmlessness": "benchmark_HH_harmlessness.py",
-    "helpfulness": "benchmark_gsi_strategies_helpfulness.py",
+    "helpfulness":  "benchmark_gsi_strategies_helpfulness.py",
     "truthfulness": "benchmark_gsi_strategies_truthfulness.py",
+    "honesty":      "benchmark_honesty.py",
 }
 
 
@@ -1645,7 +1679,7 @@ def main():
              "SEQUENTIALLY in the given order (each one runs its complete "
              "search -- every round until EI convergence -- before the next "
              "one starts). Choose from: harmlessness, helpfulness, "
-             "truthfulness. Each gets its own output tree: "
+             "truthfulness, honesty. Each gets its own output tree: "
              "runs/bayes_search_<type>/ and tribunal/bayes_search_<type>/. "
              "Default runs harmlessness then helpfulness.",
     )
