@@ -140,6 +140,45 @@ class ShuffledSigmaGenerator:
         return result
 
 
+class ZeroSigmaGenerator:
+    """
+    Wrapper around EloSwissModeBGenerator that monkey-patches `estimate_mu_sigma`
+    to return a zero tensor for sigma while keeping sigma_mode='min_entropy'.
+    This fixes Defect D7 by ensuring zero_sigma traverses the identical Thurstonian code path.
+    """
+
+    def __init__(self, base_generator):
+        self._gen = base_generator
+        from Model_mechanics import sigma_estimator as _sm
+        self._orig_fn = _sm.estimate_mu_sigma
+
+    def _patched_estimate_mu_sigma(self, *args, **kwargs):
+        import torch
+        mu, sigma = self._orig_fn(*args, **kwargs)
+        if sigma is not None:
+            sigma = torch.zeros_like(sigma)
+        return mu, sigma
+
+    def generate(self, prompt, max_new_tokens=None, return_stats=False, use_tilted_elo=False):
+        from Model_mechanics import sigma_estimator as _sm_module
+        from Model_mechanics import elo_swiss_mode_b as _b_module
+        _orig_sm = getattr(_sm_module, "estimate_mu_sigma", self._orig_fn)
+        _orig_b = getattr(_b_module, "estimate_mu_sigma", self._orig_fn)
+        _sm_module.estimate_mu_sigma = self._patched_estimate_mu_sigma
+        _b_module.estimate_mu_sigma = self._patched_estimate_mu_sigma
+        try:
+            result = self._gen.generate(
+                prompt,
+                max_new_tokens=max_new_tokens,
+                return_stats=return_stats,
+                use_tilted_elo=use_tilted_elo,
+            )
+        finally:
+            _sm_module.estimate_mu_sigma = _orig_sm
+            _b_module.estimate_mu_sigma = _orig_b
+        return result
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Step-Level Diagnostic Helper for Sigma Conditions
 # ─────────────────────────────────────────────────────────────────────────────
@@ -423,20 +462,10 @@ def run_sigma_validity_generation(
         blade_model=blade_model,
     )
 
-    # 2. Zero Sigma Generator
-    cfg_zero = SwissKnifeConfig()
-    cfg_zero.__dict__.update(cfg.__dict__)
-    cfg_zero.sigma_mode = "none"
-    zero_gen = EloSwissModeBGenerator(
-        cfg=cfg_zero,
-        drafter_model=drafter_model,
-        drafter_tokenizer=drafter_tokenizer,
-        verifier_model=verifier_model,
-        verifier_tokenizer=verifier_tokenizer,
-        blade_model=blade_model,
-    )
+    # 2. Zero Sigma Generator (Fix D7: stays on sigma_mode='min_entropy' Thurstonian code path)
+    zero_gen = ZeroSigmaGenerator(real_gen)
 
-    # Wrap real_gen with shuffled-sigma monkey-patch
+    # 3. Shuffled Sigma Generator
     shuffled_gen = ShuffledSigmaGenerator(real_gen, seed=42)
 
     real_responses = []
@@ -787,7 +816,87 @@ def analyze_sigma_validity_results(
     df_summary.to_csv(summary_path, index=False)
     logger.info("Saved summary CSV to: %s", summary_path)
 
-    # Visualization Plot
+    # ── Pre-Registered Prompt Category Breakdown (Primary AAAI Benchmark) ────
+    if "category" not in df_merged.columns and "prompt" in df_merged.columns:
+        from evaluation.classify_prompts import classify_prompt
+        df_merged["category"] = df_merged["prompt"].map(classify_prompt)
+
+    prereg_categories = [
+        ("boundary_dual_use", "Boundary / Technical Dual-Use"),
+        ("adversarial_identity", "Adversarial & Identity Spoofing"),
+        ("unambiguous_harmful", "Unambiguous Harmful Requests"),
+        ("benign_informational", "Benign Informational Queries"),
+    ]
+
+    prereg_rows = []
+    for cat_id, cat_name in prereg_categories + [("overall", "[OVERALL] All Categories")]:
+        if cat_id == "overall":
+            sub_cat = df_merged
+        else:
+            sub_cat = df_merged[df_merged.get("category", "") == cat_id]
+
+        if len(sub_cat) == 0:
+            continue
+
+        real_q = sub_cat["real_quality"].mean()
+        shuf_q = sub_cat["shuffled_quality"].mean()
+        zero_q = sub_cat["zero_quality"].mean()
+        win_shuf = sub_cat["win_vs_shuffled"].mean() * 100
+        win_zero = sub_cat["win_vs_zero"].mean() * 100
+
+        # Disagreement rate
+        disagree_shuf = (sub_cat["delta_q_vs_shuffled"].abs() > 1e-4).mean() * 100
+        disagree_zero = (sub_cat["delta_q_vs_zero"].abs() > 1e-4).mean() * 100
+
+        prow = {
+            "Category ID": cat_id,
+            "Category Name": cat_name,
+            "N": len(sub_cat),
+            "Disagreement Rate % (vs Zero)": round(disagree_zero, 1),
+            "Real σ Sobj (Quality)": round(real_q, 4),
+            "ΔQ (vs Shuffled)": round(real_q - shuf_q, 4),
+            "Win % (vs Shuffled)": round(win_shuf, 1),
+            "ΔQ (vs Zero)": round(real_q - zero_q, 4),
+            "Win % (vs Zero)": round(win_zero, 1),
+        }
+        if "real_refusal" in sub_cat.columns:
+            prow["Real Refusal %"] = round(sub_cat["real_refusal"].mean() * 100, 1)
+        if "real_toxicity" in sub_cat.columns:
+            prow["Real Toxicity"] = round(sub_cat["real_toxicity"].mean(), 4)
+
+        prereg_rows.append(prow)
+
+    df_prereg = pd.DataFrame(prereg_rows)
+    prereg_path = os.path.join(output_dir, "preregistered_category_summary.csv")
+    df_prereg.to_csv(prereg_path, index=False)
+
+    print("\n" + "=" * 100)
+    print(" PRE-REGISTERED SAFETY PROMPT CATEGORY BREAKDOWN (PRIMARY AAAI SUBSET BENCHMARK)")
+    print("=" * 100)
+    print(df_prereg.to_string(index=False))
+    print("=" * 100 + "\n")
+
+    # ── Pre-Registered Categories Plot ───────────────────────────────────────
+    if len(df_prereg) > 0:
+        fig_cat, ax_cat = plt.subplots(figsize=(10, 5))
+        cats = df_prereg["Category Name"].tolist()
+        x_c = np.arange(len(cats))
+        w_c = 0.35
+        ax_cat.bar(x_c - w_c/2, df_prereg["ΔQ (vs Shuffled)"], w_c, label="ΔQ vs Shuffled σ", color="#1f77b4")
+        ax_cat.bar(x_c + w_c/2, df_prereg["ΔQ (vs Zero)"], w_c, label="ΔQ vs Zero σ", color="#2ca02c")
+        ax_cat.axhline(0, color="black", linestyle="--", linewidth=0.8)
+        ax_cat.set_xticks(x_c)
+        ax_cat.set_xticklabels(cats, rotation=15, ha="right", fontsize=9)
+        ax_cat.set_ylabel("Quality Delta (Sobj)", fontsize=10)
+        ax_cat.set_title("Test 1: Min-Entropy Sigma Validity Across Pre-Registered Safety Categories", fontsize=11, fontweight="bold")
+        ax_cat.legend()
+        fig_cat.tight_layout()
+        cat_plot_path = os.path.join(plot_dir, "preregistered_categories_sigma.png")
+        fig_cat.savefig(cat_plot_path, dpi=150, bbox_inches="tight")
+        plt.close(fig_cat)
+        logger.info("Saved pre-registered categories plot to: %s", cat_plot_path)
+
+    # Visualization Plot: Uncertainty Tiers
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
     x = np.arange(len(df_summary))

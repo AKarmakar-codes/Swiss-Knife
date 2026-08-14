@@ -54,6 +54,15 @@ except ImportError:
     except ImportError:
         scalar_objective = None
 
+try:
+    from evaluation.classify_prompts import classify_prompt
+except ImportError:
+    try:
+        from classify_prompts import classify_prompt
+    except ImportError:
+        def classify_prompt(p):
+            return "benign_informational"
+
 # Tribunal metric column names (matching parameter_search_optimized.py)
 _QUALITY_METRICS = ["response_quality", "relevance"]
 _SAFETY_METRICS  = ["toxicity", "harmfulness"]
@@ -640,7 +649,86 @@ def analyze_tournament_value_results(
                 print(f"   Δ{rubric:<22}: {df_agree[dcol].mean():+.4f}")
     print("=" * 100 + "\n")
 
-    # 3. Post-Hoc Confident Subset Discovery (Top Quartile Thurstonian Gain)
+    # ── Pre-Registered Prompt Category Breakdown (Primary AAAI Benchmark) ────
+    if "category" not in df_merged.columns and "prompt" in df_merged.columns:
+        df_merged["category"] = df_merged["prompt"].map(classify_prompt)
+
+    prereg_categories = [
+        ("boundary_dual_use", "Boundary / Technical Dual-Use"),
+        ("adversarial_identity", "Adversarial & Identity Spoofing"),
+        ("unambiguous_harmful", "Unambiguous Harmful Requests"),
+        ("benign_informational", "Benign Informational Queries"),
+    ]
+
+    prereg_rows = []
+    for cat_id, cat_name in prereg_categories + [("overall", "[OVERALL] All Categories")]:
+        if cat_id == "overall":
+            sub_cat = df_merged
+        else:
+            sub_cat = df_merged[df_merged.get("category", "") == cat_id]
+
+        if len(sub_cat) == 0:
+            continue
+
+        t_q = sub_cat["t_quality"].mean()
+        base_q = sub_cat["base_quality"].mean()
+        sm_q = sub_cat["sm_quality"].mean()
+        win_base = sub_cat["win_vs_base"].mean() * 100
+        win_sm = sub_cat["win_vs_sm"].mean() * 100
+
+        disagree_base = (sub_cat["delta_q_vs_base"].abs() > 1e-4).mean() * 100
+
+        prow = {
+            "Category ID": cat_id,
+            "Category Name": cat_name,
+            "N": len(sub_cat),
+            "Disagreement Rate % (vs Base)": round(disagree_base, 1),
+            "Thurstonian Sobj (Quality)": round(t_q, 4),
+            "ΔQ (vs Elo Base)": round(t_q - base_q, 4),
+            "Win % (vs Elo Base)": round(win_base, 1),
+            "ΔQ (vs Softmax)": round(t_q - sm_q, 4),
+            "Win % (vs Softmax)": round(win_sm, 1),
+        }
+        if "t_refusal" in sub_cat.columns:
+            prow["Thurstonian Refusal %"] = round(sub_cat["t_refusal"].mean() * 100, 1)
+        if "t_toxicity" in sub_cat.columns:
+            prow["Thurstonian Toxicity"] = round(sub_cat["t_toxicity"].mean(), 4)
+
+        prereg_rows.append(prow)
+
+    df_prereg = pd.DataFrame(prereg_rows)
+    prereg_path = os.path.join(output_dir, "preregistered_category_summary.csv")
+    df_prereg.to_csv(prereg_path, index=False)
+
+    print("\n" + "=" * 100)
+    print(" PRE-REGISTERED SAFETY PROMPT CATEGORY BREAKDOWN (PRIMARY AAAI SUBSET BENCHMARK)")
+    print("=" * 100)
+    print(df_prereg.to_string(index=False))
+    print("=" * 100 + "\n")
+
+    # ── Pre-Registered Categories Plot ───────────────────────────────────────
+    if len(df_prereg) > 0:
+        import matplotlib.pyplot as plt
+        import numpy as np
+        fig_cat, ax_cat = plt.subplots(figsize=(10, 5))
+        cats = df_prereg["Category Name"].tolist()
+        x_c = np.arange(len(cats))
+        w_c = 0.35
+        ax_cat.bar(x_c - w_c/2, df_prereg["ΔQ (vs Elo Base)"], w_c, label="ΔQ vs Elo Baseline", color="#1f77b4")
+        ax_cat.bar(x_c + w_c/2, df_prereg["ΔQ (vs Softmax)"], w_c, label="ΔQ vs Softmax Blade", color="#ff7f0e")
+        ax_cat.axhline(0, color="black", linestyle="--", linewidth=0.8)
+        ax_cat.set_xticks(x_c)
+        ax_cat.set_xticklabels(cats, rotation=15, ha="right", fontsize=9)
+        ax_cat.set_ylabel("Quality Delta (Sobj)", fontsize=10)
+        ax_cat.set_title("Test 2: Thurstonian Tournament Value Across Pre-Registered Safety Categories", fontsize=11, fontweight="bold")
+        ax_cat.legend()
+        fig_cat.tight_layout()
+        cat_plot_path = os.path.join(plot_dir, "preregistered_categories_tournament.png")
+        fig_cat.savefig(cat_plot_path, dpi=150, bbox_inches="tight")
+        plt.close(fig_cat)
+        logger.info("Saved pre-registered categories plot to: %s", cat_plot_path)
+
+    # 3. Post-Hoc Confident Subset Discovery (Exploratory Analysis)
     q75_gain = df_merged["delta_q_vs_bt"].quantile(0.75)
     df_top_subset = df_merged[df_merged["delta_q_vs_bt"] >= q75_gain]
 
@@ -649,7 +737,7 @@ def analyze_tournament_value_results(
     logger.info("Saved post-hoc confident subset prompts to: %s", subset_path)
 
     print("=" * 100)
-    print(" DATA-DRIVEN THURSTONIAN ADVANTAGE REGIME (TOP QUARTILE PERFORMANCE GAINS)")
+    print(" EXPLORATORY POST-HOC SUBSET DISCOVERY (TOP QUARTILE PERFORMANCE GAINS - UNVALIDATED)")
     print("=" * 100)
     print(f" Subset Size N                    : {len(df_top_subset)} / {len(df_merged)} ({len(df_top_subset)/len(df_merged)*100:.1f}%)")
     print(f" Subset Mean ΔQuality (vs BT_w0)  : {df_top_subset['delta_q_vs_bt'].mean():+.3f}")

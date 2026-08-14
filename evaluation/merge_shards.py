@@ -68,17 +68,37 @@ def _shard_paths(base: str, ext: str, num_shards: int):
     return paths
 
 
+def _prompt_key(item: dict) -> str:
+    """Extract a unique prompt identifier key (prompt_idx or hash of prompt text)."""
+    if "prompt_idx" in item:
+        return f"idx_{item['prompt_idx']:06d}"
+    if "id" in item:
+        return f"idx_{item['id']:06d}"
+    prompt_str = item.get("prompt", "")
+    if prompt_str:
+        import hashlib
+        return "hash_" + hashlib.md5(prompt_str.encode("utf-8")).hexdigest()
+    return "unknown"
+
+
 def merge_jsonl(base: str, ext: str, num_shards: int):
     paths = _shard_paths(base, ext, num_shards)
     if not paths:
         return
     rows = []
+    seen_keys = set()
     for p in paths:
-        with open(p) as f:
-            rows.extend(json.loads(line) for line in f if line.strip())
-    rows.sort(key=lambda r: r.get("id", 0))
+        with open(p, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    item = json.loads(line)
+                    key = _prompt_key(item)
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        rows.append(item)
+    rows.sort(key=lambda r: (r.get("prompt_idx", r.get("id", 0)), r.get("prompt", "")))
     out_path = f"{base}{ext}"
-    with open(out_path, "w") as f:
+    with open(out_path, "w", encoding="utf-8") as f:
         for r in rows:
             f.write(json.dumps(r) + "\n")
     logger.info("Merged %d shard file(s) -> %s (%d rows)", len(paths), out_path, len(rows))
@@ -89,12 +109,18 @@ def merge_results_json(base: str, ext: str, num_shards: int):
     if not paths:
         return
     responses = []
+    seen_keys = set()
     for p in paths:
-        with open(p) as f:
-            responses.extend(json.load(f).get("responses", []))
-    responses.sort(key=lambda r: r.get("prompt_idx", 0))
+        with open(p, "r", encoding="utf-8") as f:
+            items = json.load(f).get("responses", [])
+            for item in items:
+                key = _prompt_key(item)
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    responses.append(item)
+    responses.sort(key=lambda r: (r.get("prompt_idx", r.get("id", 0)), r.get("prompt", "")))
     out_path = f"{base}{ext}"
-    with open(out_path, "w") as f:
+    with open(out_path, "w", encoding="utf-8") as f:
         json.dump({"responses": responses}, f, indent=2)
     logger.info("Merged %d shard file(s) -> %s (%d responses)", len(paths), out_path, len(responses))
 
@@ -104,11 +130,18 @@ def merge_stats_json(base: str, ext: str, num_shards: int):
     if not paths:
         return
     prompt_stats = []
+    seen_keys = set()
     for p in paths:
-        with open(p) as f:
-            prompt_stats.extend(json.load(f).get("prompt_stats", []))
+        with open(p, "r", encoding="utf-8") as f:
+            items = json.load(f).get("prompt_stats", [])
+            for item in items:
+                key = _prompt_key(item)
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    prompt_stats.append(item)
+    prompt_stats.sort(key=lambda r: (r.get("prompt_idx", r.get("id", 0)), r.get("prompt", "")))
     out_path = f"{base}{ext}"
-    with open(out_path, "w") as f:
+    with open(out_path, "w", encoding="utf-8") as f:
         json.dump({"prompt_stats": prompt_stats}, f, indent=2)
     logger.info("Merged %d shard file(s) -> %s (%d prompt entries)", len(paths), out_path, len(prompt_stats))
 
@@ -130,7 +163,10 @@ def merge_csv_shards(base: str, ext: str, num_shards: int):
 
     dfs = [pd.read_csv(p) for p in shard_paths]
     merged = pd.concat(dfs, ignore_index=True)
-    if "id" in merged.columns:
+    if "prompt_idx" in merged.columns:
+        merged.sort_values(by="prompt_idx", inplace=True)
+        merged.drop_duplicates(subset=["prompt_idx"], inplace=True)
+    elif "id" in merged.columns:
         merged.sort_values(by="id", inplace=True)
         merged.drop_duplicates(subset=["id"], inplace=True)
 
