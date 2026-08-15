@@ -394,7 +394,6 @@ def run_token_entropy_trial_generation(
     w_tournament: float = 0.74063,
     w_blade: float = 2.00907,
     uwo_lambda: float = 0.82332,
-    shard_tag: str = "",
 ):
     """
     Runs model generations comparing token_entropy vs log_ratio_proxy vs zero_sigma using r0config22 parameters.
@@ -496,17 +495,15 @@ def run_token_entropy_trial_generation(
         "overall_tokens_per_second": round(avg_throughput, 2),
     }
 
-    tag = shard_tag or ""
-
     # Save output JSON files
-    with open(os.path.join(output_dir, f"token_entropy_results{tag}.json"), "w") as f:
+    with open(os.path.join(output_dir, "token_entropy_results.json"), "w") as f:
         json.dump({"responses": entropy_responses}, f, indent=2)
-    with open(os.path.join(output_dir, f"step_entropy_stats{tag}.json"), "w") as f:
+    with open(os.path.join(output_dir, "step_entropy_stats.json"), "w") as f:
         json.dump({"overall_summary": overall_summary, "prompt_stats": per_prompt_stats}, f, indent=2)
 
     logger.info("✓ Token Entropy Generation Complete!")
     logger.info("  ├─ Latency Summary: %.2fs total (mean %.2fs/prompt | %.2f tok/s)", total_execution_time_s, avg_latency, avg_throughput)
-    logger.info("  └─ Saved token_entropy_results%s.json and step_entropy_stats%s.json to %s", tag, tag, output_dir)
+    logger.info("  └─ Saved token_entropy_results.json and step_entropy_stats.json to %s", output_dir)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -639,8 +636,6 @@ def parse_args():
     parser.add_argument("--prompts-file", default=None, help="Path to custom trial prompts text file")
     parser.add_argument("--num-samples", type=int, default=50, help="Number of HH-RLHF prompts to sample (default: 50)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for sampling (default: 42)")
-    parser.add_argument("--num-shards", type=int, default=1, help="Total shards for parallel run")
-    parser.add_argument("--shard-id", type=int, default=0, help="Shard index (0-indexed)")
     parser.add_argument("--gsi-n", type=int, default=11, help="Pool size n (r0config22=11)")
     parser.add_argument("--elo-rounds", type=int, default=9, help="Elo rounds (r0config22=9)")
     parser.add_argument("--elo-temp", type=float, default=28.57587, help="Elo temperature (r0config22=28.57587)")
@@ -663,12 +658,6 @@ def main():
             local_jsonl_path=args.prompts_file,
         )
 
-        shard_tag = ""
-        if args.num_shards > 1:
-            prompts = prompts[args.shard_id::args.num_shards]
-            shard_tag = f"_shard{args.shard_id}"
-            logger.info("Shard %d/%d: loaded %d prompts (tag=%s)", args.shard_id, args.num_shards, len(prompts), shard_tag)
-
         run_token_entropy_trial_generation(
             prompts=prompts,
             output_dir=args.output_dir,
@@ -679,7 +668,6 @@ def main():
             w_tournament=args.w_tournament,
             w_blade=args.w_blade,
             uwo_lambda=args.uwo_lambda,
-            shard_tag=shard_tag,
         )
     elif args.mode == "analyze":
         stats_file = os.path.join(args.output_dir, "step_entropy_stats.json")
