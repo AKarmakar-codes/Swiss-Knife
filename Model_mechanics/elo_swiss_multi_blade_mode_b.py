@@ -386,9 +386,6 @@ class EloSwissMultiBladeModeBGenerator(EloSwissGenerator):
                 logger.info("EOS token generated. Stopping.")
                 break
 
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-
         stats.total_time_s = time.perf_counter() - t_start
 
         all_ids = initial_prefix_ids + generated_tokens

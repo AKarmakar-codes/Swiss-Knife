@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel
 from deepeval.models import DeepEvalBaseLLM
-from openai import AsyncOpenAI
+from openai import OpenAI
 
 from .config import CONFIG
 
@@ -19,9 +19,10 @@ class VLLMJudge(DeepEvalBaseLLM):
 
     def __init__(self, model_name: str = CONFIG["judge_model"]):
         self.model_name = model_name
-        self.client = AsyncOpenAI(
+        self.client = OpenAI(
             base_url=CONFIG["vllm_url"],
             api_key=CONFIG["vllm_api_key"],
+            timeout=CONFIG.get("judge_timeout", 180),
         )
         logging.info(f"Judge client pointed at {CONFIG['vllm_url']}")
 
@@ -68,9 +69,6 @@ class VLLMJudge(DeepEvalBaseLLM):
         return text
 
     def generate(self, prompt: str, schema: Optional[BaseModel] = None) -> Any:
-        return asyncio.run(self.a_generate(prompt, schema))
-
-    async def a_generate(self, prompt: str, schema: Optional[BaseModel] = None) -> Any:
         if schema:
             prompt = (
                 f"{prompt}\n\nYou MUST respond with valid JSON only. "
@@ -87,7 +85,7 @@ class VLLMJudge(DeepEvalBaseLLM):
             {"role": "user", "content": prompt},
         ]
         try:
-            resp = await self.client.chat.completions.create(
+            resp = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
                 temperature=0.0,
@@ -110,3 +108,7 @@ class VLLMJudge(DeepEvalBaseLLM):
                     return schema(**{f: None for f in schema.model_fields})
                 return content
         return content
+
+    async def a_generate(self, prompt: str, schema: Optional[BaseModel] = None) -> Any:
+        return self.generate(prompt, schema)
+

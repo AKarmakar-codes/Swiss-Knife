@@ -22,7 +22,7 @@ from tqdm import tqdm
 from deepeval.metrics import GEval
 from deepeval.test_case import LLMTestCase
 
-from .config import CONFIG, ALL_METRICS, SAFETY_METRICS, HUMOUR_METRICS, HONESTY_METRICS
+from .config import CONFIG, ALL_METRICS, QUALITY_METRICS, SAFETY_METRICS, HUMOUR_METRICS, HONESTY_METRICS
 from .data import read_jsonl, validate_record, resolve_input_files
 from .metrics import build_metrics, DetoxifyCalculator
 from .judge import VLLMJudge
@@ -44,9 +44,15 @@ def setup_logging(output_folder: str) -> logging.Logger:
 
 def evaluate_single_record(
     record: Dict[str, Any],
-    metrics: Dict[str, GEval],
+    judge: VLLMJudge,
+    config: Dict[str, Any],
     detoxify: Optional[DetoxifyCalculator],
 ) -> Dict[str, Any]:
+    metrics = build_metrics(
+        judge,
+        include_humour=config.get("include_humour", False),
+        include_honesty=config.get("include_honesty", True),
+    )
     result = {
         "id": record["id"],
         "prompt": record["prompt"],
@@ -84,7 +90,8 @@ def run_evaluation_single_file(
     input_path: str,
     output_path: str,
     model_name: str,
-    metrics: Dict[str, GEval],
+    judge: VLLMJudge,
+    config: Dict[str, Any],
     detoxify: Optional[DetoxifyCalculator],
     sample_size: Optional[int] = None,
 ) -> Dict[str, Any]:
@@ -95,13 +102,17 @@ def run_evaluation_single_file(
         records = records[:sample_size]
 
     processed_ids = set()
-    file_exists = os.path.exists(output_path)
+    existing_cols = None
+    file_exists = os.path.exists(output_path) and os.path.getsize(output_path) > 0
     if file_exists:
         try:
-            processed_ids = set(pd.read_csv(output_path, usecols=["id"])["id"].astype(str))
+            df_existing = pd.read_csv(output_path, usecols=["id"], dtype={"id": str})
+            processed_ids = set(df_existing["id"].dropna().str.strip())
+            existing_cols = list(pd.read_csv(output_path, nrows=0).columns)
             logging.info(f"Resuming {filename}: {len(processed_ids)} already scored")
         except Exception as e:
             logging.warning(f"Could not read existing results for resume: {e}")
+
 
     stats = {"total": len(records), "valid": 0, "invalid": {}}
     todo = []
@@ -109,7 +120,7 @@ def run_evaluation_single_file(
         ok, reason = validate_record(r)
         if ok:
             stats["valid"] += 1
-            if str(r["id"]) not in processed_ids:
+            if str(r["id"]).strip() not in processed_ids:
                 todo.append(r)
         else:
             stats["invalid"][reason] = stats["invalid"].get(reason, 0) + 1
@@ -118,17 +129,72 @@ def run_evaluation_single_file(
         logging.info(f"Nothing new to score in {filename}")
         return stats
 
-    print(f"  scoring {len(todo)} records ({len(records) - len(todo)} skipped or cached)")
+    max_workers = config.get("max_workers", 4)
+    save_every = config.get("save_every", 5)
+    print(f"  scoring {len(todo)} records ({len(records) - len(todo)} skipped or cached) [workers={max_workers}]")
     write_mode = "a" if file_exists else "w"
     write_header = not file_exists
-    buffer = []
-    for idx, record in enumerate(tqdm(todo, desc=model_name)):
-        row = {"model": model_name, **evaluate_single_record(record, metrics, detoxify)}
-        buffer.append(row)
-        if (idx + 1) % CONFIG["save_every"] == 0 or (idx + 1) == len(todo):
-            pd.DataFrame(buffer).to_csv(output_path, mode=write_mode, header=write_header, index=False)
-            buffer, write_mode, write_header = [], "a", False
-            gc.collect()
+
+    def _flush_buffer(buf: list, path: str, mode: str, header: bool, cols: Optional[list]) -> None:
+        if not buf:
+            return
+        df_buf = pd.DataFrame(buf)
+        if cols and mode == "a":
+            for c in cols:
+                if c not in df_buf.columns:
+                    df_buf[c] = None
+            extra_cols = [c for c in df_buf.columns if c not in cols]
+            df_buf = df_buf[cols + extra_cols]
+        df_buf.to_csv(path, mode=mode, header=header, index=False)
+
+    if max_workers > 1:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        pbar = tqdm(total=len(todo), desc=model_name)
+        results_dict = {}
+        next_write_idx = 0
+        buffer_to_write = []
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_idx = {
+                executor.submit(evaluate_single_record, r, judge, config, detoxify): idx
+                for idx, r in enumerate(todo)
+            }
+            for fut in as_completed(future_to_idx):
+                idx = future_to_idx[fut]
+                rec_result = fut.result()
+                results_dict[idx] = {"model": model_name, **rec_result}
+                pbar.update(1)
+
+                while next_write_idx in results_dict:
+                    buffer_to_write.append(results_dict.pop(next_write_idx))
+                    next_write_idx += 1
+
+                if len(buffer_to_write) >= save_every:
+                    _flush_buffer(buffer_to_write, output_path, write_mode, write_header, existing_cols)
+                    if write_header:
+                        existing_cols = list(pd.read_csv(output_path, nrows=0).columns)
+                    write_mode, write_header = "a", False
+                    buffer_to_write = []
+                    gc.collect()
+
+            if buffer_to_write:
+                _flush_buffer(buffer_to_write, output_path, write_mode, write_header, existing_cols)
+                buffer_to_write = []
+                gc.collect()
+
+        pbar.close()
+    else:
+        buffer = []
+        for idx, record in enumerate(tqdm(todo, desc=model_name)):
+            row = {"model": model_name, **evaluate_single_record(record, judge, config, detoxify)}
+            buffer.append(row)
+            if (idx + 1) % save_every == 0 or (idx + 1) == len(todo):
+                _flush_buffer(buffer, output_path, write_mode, write_header, existing_cols)
+                if write_header:
+                    existing_cols = list(pd.read_csv(output_path, nrows=0).columns)
+                buffer, write_mode, write_header = [], "a", False
+                gc.collect()
+
 
     return stats
 
@@ -146,10 +212,17 @@ def combine_results(output_folder: str) -> Optional[pd.DataFrame]:
     return combined
 
 
-def generate_summary(combined: pd.DataFrame, output_folder: str) -> pd.DataFrame:
+def generate_summary(combined: pd.DataFrame, output_folder: str, config: Dict[str, Any] = CONFIG) -> pd.DataFrame:
     """Per-model, per-metric statistics, including abstention counts."""
-    metric_names = list(ALL_METRICS)
-    if CONFIG["use_detoxify"]:
+    include_humour = config.get("include_humour", False)
+    include_honesty = config.get("include_honesty", True)
+
+    metric_names = list(QUALITY_METRICS + SAFETY_METRICS)
+    if include_humour:
+        metric_names.extend(HUMOUR_METRICS)
+    if include_honesty:
+        metric_names.extend(HONESTY_METRICS)
+    if config.get("use_detoxify", True):
         metric_names.append("toxicity_detoxify")
 
     rows = []
@@ -210,7 +283,11 @@ def run(config: dict = CONFIG) -> None:
         print("Start it first with: python serve_judge.py")
         return
 
-    metrics = build_metrics(judge, include_humour=config.get("include_humour", False))
+    metrics = build_metrics(
+        judge,
+        include_humour=config.get("include_humour", False),
+        include_honesty=config.get("include_honesty", True),
+    )
     detoxify = DetoxifyCalculator() if config["use_detoxify"] else None
 
     for i, input_path in enumerate(files, 1):
@@ -220,7 +297,7 @@ def run(config: dict = CONFIG) -> None:
         start = time.time()
         try:
             stats = run_evaluation_single_file(
-                input_path, output_path, model_name, metrics, detoxify, config["sample_size"]
+                input_path, output_path, model_name, judge, config, detoxify, config["sample_size"]
             )
             print(f"  done in {time.time() - start:.1f}s "
                   f"(valid {stats['valid']}/{stats['total']}, invalid {stats['invalid']})")
@@ -234,7 +311,7 @@ def run(config: dict = CONFIG) -> None:
         print("\nNo results to summarize.")
         return
 
-    generate_summary(combined, out)
+    generate_summary(combined, out, config)
     agg = aggregate_by_model(combined)
     agg.round(4).to_csv(os.path.join(out, "model_summary.csv"), index=False)
     report_dir = os.path.join(out, "report")
@@ -243,3 +320,4 @@ def run(config: dict = CONFIG) -> None:
     print(f"\nScored {len(agg)} model/s.")
     print(f"Report:  {os.path.join(report_dir, 'index.html')}")
     print(f"Tables:  {os.path.join(out, 'model_summary.csv')}, {os.path.join(out, 'summary.csv')}")
+

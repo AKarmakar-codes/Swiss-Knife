@@ -159,7 +159,7 @@ def load_base_model(cfg: SwissKnifeConfig) -> PreTrainedModel:
             import flash_attn
             attn_kwargs["attn_implementation"] = "flash_attention_2"
         except ImportError:
-            pass
+            attn_kwargs["attn_implementation"] = "sdpa"
 
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
@@ -243,7 +243,7 @@ def load_blade_model(
                 import flash_attn
                 attn_kwargs["attn_implementation"] = "flash_attention_2"
             except ImportError:
-                pass
+                attn_kwargs["attn_implementation"] = "sdpa"
 
         base_for_blade = AutoModelForCausalLM.from_pretrained(
             model_path,
@@ -402,11 +402,20 @@ def load_drafter_model(cfg: SwissKnifeConfig) -> PreTrainedModel:
     dtype = _resolve_dtype(cfg)
     device = _resolve_device(cfg)
     logger.info("Loading drafter model: %s  [dtype=%s, device=%s]", cfg.drafter_model_id, dtype, device)
+    attn_kwargs = {}
+    if dtype in [torch.float16, torch.bfloat16] and torch.cuda.is_available():
+        try:
+            import flash_attn
+            attn_kwargs["attn_implementation"] = "flash_attention_2"
+        except ImportError:
+            attn_kwargs["attn_implementation"] = "sdpa"
+
     model = AutoModelForCausalLM.from_pretrained(
         cfg.drafter_model_id,
         torch_dtype=dtype,
         device_map=device,
         trust_remote_code=True,
+        **attn_kwargs,
     )
     model.eval()
     for param in model.parameters():
@@ -446,7 +455,7 @@ def load_rrm_model(cfg: SwissKnifeConfig) -> PreTrainedModel:
             import flash_attn
             attn_kwargs["attn_implementation"] = "flash_attention_2"
         except ImportError:
-            pass
+            attn_kwargs["attn_implementation"] = "sdpa"
 
     model = AutoModelForCausalLM.from_pretrained(
         cfg.rrm_model_id,

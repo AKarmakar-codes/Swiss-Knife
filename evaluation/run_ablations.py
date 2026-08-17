@@ -355,10 +355,12 @@ def run_ablation_generations(
     w_tournament: float = 0.5044748512019058,
     w_blade: float = 1.483182944050084,
     uwo_lambda: float = 0.10924080014274543,
+    resume: bool = True,
 ):
     """
     Executes model generations for both AAAI ablation tests across 5 unique conditions per prompt.
     Fills output JSON files and Tribunal input JSONL files for Test 1 and Test 2.
+    Supports automatic checkpointing and resuming from intermediate manifest CSVs.
     """
     logger.info("Initializing models for Swiss-Knife Consolidated Ablation Runs (r4_cfg1 hyperparams)...")
     import torch
@@ -456,9 +458,42 @@ def run_ablation_generations(
     test1_stats = []
     test2_stats = []
 
+    # Automatic Resume Logic: Load existing completed prompts from manifest CSV if available
+    manifest_path = "runs/generated_responses_manifest.csv"
+    if resume and os.path.exists(manifest_path):
+        import pandas as pd
+        try:
+            df_exist = pd.read_csv(manifest_path)
+            if len(df_exist) > 0 and "response_thurstonian_real_sigma" in df_exist.columns:
+                logger.info("Found existing manifest CSV at %s with %d completed prompts. Pre-loading completed results...", manifest_path, len(df_exist))
+                for i_m, row_m in df_exist.iterrows():
+                    p_m = str(row_m.get("prompt", ""))
+                    c_m = str(row_m.get("category", "benign_informational"))
+                    real_responses.append({"prompt_idx": i_m, "prompt": p_m, "category": c_m, "generated": str(row_m.get("response_thurstonian_real_sigma", ""))})
+                    shuffled_responses.append({"prompt_idx": i_m, "prompt": p_m, "category": c_m, "generated": str(row_m.get("response_shuffled_sigma", ""))})
+                    zero_responses.append({"prompt_idx": i_m, "prompt": p_m, "category": c_m, "generated": str(row_m.get("response_zero_sigma", ""))})
+                    base_responses.append({"prompt_idx": i_m, "prompt": p_m, "category": c_m, "generated": str(row_m.get("response_elo_baseline", ""))})
+                    sm_responses.append({"prompt_idx": i_m, "prompt": p_m, "category": c_m, "generated": str(row_m.get("response_softmax_blade", ""))})
+
+                s1_file = os.path.join(output_dir_test1, "step_sigma_stats.json")
+                if os.path.exists(s1_file):
+                    with open(s1_file, "r", encoding="utf-8") as f:
+                        test1_stats = json.load(f).get("prompt_stats", [])
+                s2_file = os.path.join(output_dir_test2, "step_tournament_stats.json")
+                if os.path.exists(s2_file):
+                    with open(s2_file, "r", encoding="utf-8") as f:
+                        test2_stats = json.load(f).get("prompt_stats", [])
+                logger.info("✓ Successfully pre-loaded %d prompts. Generation will resume starting from prompt index %d.", len(real_responses), len(real_responses))
+        except Exception as e:
+            logger.warning("Could not parse existing manifest for resume (%e). Starting fresh.", e)
+
     logger.info("Starting ablation generation across %d prompts (5 passes/prompt)...", len(prompts))
 
     for idx, record in enumerate(prompts):
+        if idx < len(real_responses):
+            logger.info("[%d/%d] Prompt already generated in prior session. Skipping...", idx + 1, len(prompts))
+            continue
+
         prompt   = record["prompt"]
         category = record.get("category", "benign_informational")
         logger.info("=" * 80)
@@ -523,6 +558,15 @@ def run_ablation_generations(
         total_div1 = sum(1 for d in disagree_flags1 if d)
         len_delta1 = len(sk_text) - len(zero_text)
 
+        sk_time = getattr(sk_stats, "total_time_s", 0.0) or 0.0
+        shuffled_time = getattr(shuffled_stats, "total_time_s", 0.0) or 0.0
+        zero_time = getattr(zero_stats, "total_time_s", 0.0) or 0.0
+        base_time = getattr(base_stats, "total_time_s", 0.0) or 0.0
+        sm_time = getattr(sm_stats, "total_time_s", 0.0) or 0.0
+
+        sk_tps = sk_stats.total_steps / max(sk_time, 1e-6) if sk_time > 0 else 0.0
+        base_tps = base_stats.total_steps / max(base_time, 1e-6) if base_time > 0 else 0.0
+
         test1_stats.append({
             "id": idx,
             "prompt_idx": idx,
@@ -534,6 +578,8 @@ def run_ablation_generations(
             "real_total_steps": sk_stats.total_steps,
             "shuffled_total_steps": shuffled_stats.total_steps,
             "zero_total_steps": zero_stats.total_steps,
+            "sk_latency_s": round(sk_time, 3),
+            "sk_tok_per_sec": round(sk_tps, 2),
             "upset_rate": round(upset_rate1, 4),
             "mean_champion_sigma_rank": round(mean_sigma_rank1, 4),
             "mean_sigma_spread": round(mean_sigma_spread1, 6),
@@ -568,6 +614,10 @@ def run_ablation_generations(
             "t_total_steps": sk_stats.total_steps,
             "base_total_steps": base_stats.total_steps,
             "sm_total_steps": sm_stats.total_steps,
+            "sk_latency_s": round(sk_time, 3),
+            "sk_tok_per_sec": round(sk_tps, 2),
+            "base_latency_s": round(base_time, 3),
+            "base_tok_per_sec": round(base_tps, 2),
             "t_bt_disagreement_rate": round(t_bt_disagree_rate2, 4),
             "mean_champion_sigma_rank": round(mean_sigma_rank1, 4),
             "mean_sigma_spread": round(mean_sigma_spread1, 6),
@@ -577,7 +627,35 @@ def run_ablation_generations(
             "response_length_delta": int(len_delta2),
         })
 
-    # Save output JSON files for Test 1
+        # Save live incremental manifest CSV & JSON stats after every completed prompt
+        import pandas as pd
+        os.makedirs("runs", exist_ok=True)
+        os.makedirs(output_dir_test1, exist_ok=True)
+        os.makedirs(output_dir_test2, exist_ok=True)
+
+        manifest_rows_live = []
+        for i_m in range(len(real_responses)):
+            p_m = prompts[i_m]["prompt"]
+            c_m = prompts[i_m].get("category", "benign_informational")
+            cl_m = prompts[i_m].get("category_label", CATEGORY_LABELS.get(c_m, c_m))
+            manifest_rows_live.append({
+                "prompt_idx": i_m,
+                "category": c_m,
+                "category_label": cl_m,
+                "prompt": p_m,
+                "response_thurstonian_real_sigma": real_responses[i_m]["generated"],
+                "response_shuffled_sigma": shuffled_responses[i_m]["generated"],
+                "response_zero_sigma": zero_responses[i_m]["generated"],
+                "response_elo_baseline": base_responses[i_m]["generated"],
+                "response_softmax_blade": sm_responses[i_m]["generated"],
+            })
+        pd.DataFrame(manifest_rows_live).to_csv("runs/generated_responses_manifest.csv", index=False)
+        with open(os.path.join(output_dir_test1, "step_sigma_stats.json"), "w") as f:
+            json.dump({"prompt_stats": test1_stats}, f, indent=2)
+        with open(os.path.join(output_dir_test2, "step_tournament_stats.json"), "w") as f:
+            json.dump({"prompt_stats": test2_stats}, f, indent=2)
+
+        logger.info("  ✓ Saved live progress to runs/generated_responses_manifest.csv (%d/%d prompts)", idx + 1, len(prompts))
     with open(os.path.join(output_dir_test1, "elo_real_sigma_results.json"), "w") as f:
         json.dump({"responses": real_responses}, f, indent=2)
     with open(os.path.join(output_dir_test1, "elo_shuffled_sigma_results.json"), "w") as f:
@@ -766,7 +844,7 @@ def export_master_ablation_results(
             "category_label": cat_lbl,
             "prompt": prompt_str,
 
-            # Model Diagnostics
+            # Model Diagnostics & Performance Latency
             "mean_mu": s1.get("mean_mu", s2.get("mean_mu", 0.0)),
             "mean_sigma": s1.get("mean_sigma", s2.get("mean_sigma", 0.0)),
             "mean_delta_mu": s1.get("mean_delta_mu", s2.get("mean_delta_mu", 0.0)),
@@ -774,6 +852,10 @@ def export_master_ablation_results(
             "upset_rate": s1.get("upset_rate", 0.0),
             "t_bt_disagreement_rate": s2.get("t_bt_disagreement_rate", 0.0),
             "bt_greedy_agreement_rate": s2.get("bt_greedy_agreement_rate", 0.0),
+            "sk_latency_s": s1.get("sk_latency_s", s2.get("sk_latency_s", 0.0)),
+            "sk_tok_per_sec": s1.get("sk_tok_per_sec", s2.get("sk_tok_per_sec", 0.0)),
+            "base_latency_s": s2.get("base_latency_s", 0.0),
+            "base_tok_per_sec": s2.get("base_tok_per_sec", 0.0),
 
             # Test 1 Composite Scores & Gaps
             "test1_real_sigma_sobj": round(c_real, 4),

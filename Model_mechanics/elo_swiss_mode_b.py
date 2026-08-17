@@ -416,9 +416,6 @@ class EloSwissModeBGenerator(EloSwissGenerator):
                 logger.info("EOS token generated. Stopping.")
                 break
 
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-
         stats.total_time_s = __import__("time").perf_counter() - t_start
 
         # Decode full output from initial prefix + generated tokens

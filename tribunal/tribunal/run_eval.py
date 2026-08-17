@@ -21,6 +21,14 @@ def parse_args():
     p.add_argument("--judge-url", help="vLLM server URL (default http://localhost:8000/v1).")
     p.add_argument("--no-detoxify", action="store_true", help="Skip the Detoxify cross-check.")
     p.add_argument("--include-humour", action="store_true", help="Include humour rubrics in evaluation.")
+    
+    honesty_group = p.add_mutually_exclusive_group()
+    honesty_group.add_argument("--no-honesty", dest="include_honesty", action="store_false",
+                               default=None, help="Skip honesty rubrics (truthfulness, non_deception, epistemic_honesty).")
+    honesty_group.add_argument("--include-honesty", dest="include_honesty", action="store_true",
+                               default=None, help="Include honesty rubrics in evaluation.")
+
+    p.add_argument("--max-workers", type=int, default=4, help="Number of parallel worker threads sending requests to vLLM (default: 4).")
     return p.parse_args()
 
 
@@ -46,8 +54,13 @@ def main():
         CONFIG["use_detoxify"] = False
     if args.include_humour:
         CONFIG["include_humour"] = True
+    if args.include_honesty is not None:
+        CONFIG["include_honesty"] = args.include_honesty
+    if args.max_workers is not None:
+        CONFIG["max_workers"] = args.max_workers
 
     pipeline.run(CONFIG)
+
 
 
 if __name__ == "__main__":

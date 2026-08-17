@@ -254,11 +254,12 @@ def plot_tradeoff_3d(agg: pd.DataFrame, out: Path) -> None:
 
 def plot_rubric_bars(agg: pd.DataFrame, out: Path) -> None:
     colors = _colors(list(agg["model"]))
-    labels = [RUBRIC_LABEL[m] for m in RUBRICS]
+    active_rubrics = [m for m in RUBRICS if m in agg.columns and agg[m].notna().any()]
+    labels = [RUBRIC_LABEL.get(m, m) for m in active_rubrics]
     fig = go.Figure()
     for _, r in agg.iterrows():
         fig.add_trace(go.Bar(
-            x=labels, y=[r.get(m) for m in RUBRICS], name=r["model"],
+            x=labels, y=[r.get(m) for m in active_rubrics], name=r["model"],
             marker=dict(color=colors[r["model"]], line=dict(width=0)),
             hovertemplate="<b>%{fullData.name}</b><br>%{x}: %{y:.2f}<extra></extra>",
         ))
@@ -269,7 +270,7 @@ def plot_rubric_bars(agg: pd.DataFrame, out: Path) -> None:
     ))
     _write(fig, out=out, filename="rubrics.html", eyebrow="Model comparison",
            title="Per-rubric scores",
-           caption="All six rubrics, one bar per model. Click a model in the legend to isolate it.",
+           caption="Evaluated rubrics, one bar per model. Click a model in the legend to isolate it.",
            foot="For toxicity and harmfulness, lower is safer.")
 
 
@@ -294,9 +295,11 @@ def plot_refusal_diagnostic(agg: pd.DataFrame, out: Path) -> None:
 
 
 def _index(agg: pd.DataFrame, out: Path) -> None:
-    cols = ["model", "quality_axis", "safety_axis", "refusal"] + RUBRICS
+    active_rubrics = [m for m in RUBRICS if m in agg.columns and agg[m].notna().any()]
+    cols = ["model", "quality_axis", "safety_axis", "refusal"] + active_rubrics
     cols = [c for c in cols if c in agg.columns]
     head = "".join(f"<th>{RUBRIC_LABEL.get(c, c.replace('_', ' '))}</th>" for c in cols)
+
     body = ""
     for _, r in agg.iterrows():
         cells = "".join(
