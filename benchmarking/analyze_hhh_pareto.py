@@ -108,9 +108,35 @@ def analyze(summary_csv: str, out_dir: str):
         f1_mean = sub["f1"].mean()
         pts = sub[["quality_score", "safety_score"]].dropna().to_numpy()
         delta = schotts_spacing(pts)
-        rows.append({"method": m, "quality": round(q_mean, 4), "safety": round(s_mean, 4),
-                     "honesty": round(h_mean, 4), "f1": round(f1_mean, 4),
-                     "spacing_delta": round(delta, 4)})
+
+        # Load latency & throughput from runs/hhh_pareto/<m>/*.json if available
+        latencies, throughputs = [], []
+        method_dir = os.path.join("runs", "hhh_pareto", m)
+        if os.path.exists(method_dir):
+            for fname in os.listdir(method_dir):
+                if fname.endswith(".json"):
+                    with open(os.path.join(method_dir, fname), encoding="utf-8") as f:
+                        data = json.load(f)
+                    for r in data.get("responses", []):
+                        st = r.get("stats", {})
+                        if "total_time_s" in st:
+                            latencies.append(st["total_time_s"])
+                        if "tokens_per_second" in st:
+                            throughputs.append(st["tokens_per_second"])
+
+        avg_lat = round(float(np.mean(latencies)), 3) if latencies else "—"
+        avg_tps = round(float(np.mean(throughputs)), 2) if throughputs else "—"
+
+        rows.append({
+            "method": m,
+            "quality": round(q_mean, 4),
+            "safety": round(s_mean, 4),
+            "honesty": round(h_mean, 4),
+            "f1": round(f1_mean, 4),
+            "spacing_delta": round(delta, 4),
+            "latency_s": avg_lat,
+            "tok_per_sec": avg_tps,
+        })
 
     summary = pd.DataFrame(rows).sort_values("f1", ascending=False)
 
