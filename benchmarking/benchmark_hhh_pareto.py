@@ -25,15 +25,15 @@ Usage:
   # Single-GPU run:
   python benchmarking/benchmark_hhh_pareto.py --methods swiss mod rs args bon base --grid edges
 
-  # 6-GPU parallel:
-  for i in $(seq 0 5); do
-    CUDA_VISIBLE_DEVICES=$i python benchmarking/benchmark_hhh_pareto.py \\
-      --methods swiss mod rs args bon base \\
-      --grid edges --num-shards 6 --shard-id $i \\
+  # 8-GPU parallel:
+  for i in $(seq 0 7); do
+    CUDA_VISIBLE_DEVICES=$i python benchmarking/benchmark_hhh_pareto.py \
+      --methods swiss mod rs args bon base \
+      --grid edges --num-shards 8 --shard-id $i \
       > runs/logs/pareto_shard_$i.log 2>&1 &
   done; wait
-  python benchmarking/benchmark_hhh_pareto.py \\
-    --methods swiss mod rs args bon base --grid edges --merge-shards
+  python benchmarking/benchmark_hhh_pareto.py \
+    --methods swiss mod rs args bon base --grid edges --num-shards 8 --merge-shards
 """
 
 import os
