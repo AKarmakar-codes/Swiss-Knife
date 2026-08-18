@@ -97,6 +97,46 @@ python benchmarking/analyze_hhh_pareto.py \
 
 ---
 
+## Step 6: Logit Mixing Component Ablations Suite (Optional / Appendix)
+
+Executes component-level ablations to isolate the individual contributions of:
+1. **Candidate-Batch Normalization (CBN)** (`swiss_no_cbn`)
+2. **Thurstonian Elo Tournament Selection** (`swiss_no_elo`)
+3. **Uncertainty-Weighted Objective (UWO)** (`swiss_no_uwo`)
+
+```bash
+# 1. Parallel 8-GPU Ablation Generation:
+for i in $(seq 0 7); do
+  CUDA_VISIBLE_DEVICES=$i python benchmarking/benchmark_hhh_ablations.py \
+    --prompts data/hhh_eval_prompts.jsonl \
+    --variants swiss_full swiss_no_cbn swiss_no_elo swiss_no_uwo \
+    --grid symmetric7 \
+    --num-shards 8 \
+    --shard-id $i \
+    > runs/logs/ablation_shard_$i.log 2>&1 &
+done; wait
+
+# 2. Merge Shards:
+python benchmarking/benchmark_hhh_ablations.py \
+  --prompts data/hhh_eval_prompts.jsonl \
+  --variants swiss_full swiss_no_cbn swiss_no_elo swiss_no_uwo \
+  --grid symmetric7 \
+  --num-shards 8 \
+  --merge-shards
+
+# 3. Judge & Analyze:
+python tribunal/run_tribunal_eval.py \
+  --input-dir tribunal/inputs/hhh_ablations \
+  --output-dir tribunal/eval_results/hhh_ablations \
+  --parallel
+
+python benchmarking/analyze_hhh_pareto.py \
+  --summary tribunal/eval_results/hhh_ablations/model_summary.csv \
+  --out-dir runs/hhh_ablations/plots
+```
+
+---
+
 ## Key Output Locations
 
 - **Merged Benchmark Responses**: `runs/hhh_pareto/<method>/w_*.json`
@@ -104,3 +144,4 @@ python benchmarking/analyze_hhh_pareto.py \
 - **Judge Evaluation Output**: `tribunal/eval_results/hhh_pareto/model_summary.csv`
 - **Summary Table CSV**: `runs/hhh_pareto/plots/summary_table.csv`
 - **Pareto Projection Plot**: `runs/hhh_pareto/plots/pareto_2d_projections.png`
+- **Ablation Outputs**: `runs/hhh_ablations/` & `tribunal/eval_results/hhh_ablations/`
