@@ -1,0 +1,142 @@
+2026-08-14 00:43:31,711 | INFO | __main__ | Loading HH-RLHF helpful-base dataset...
+2026-08-14 00:43:32,014 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/Anthropic/hh-rlhf/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-08-14 00:43:32,015 | WARNING | huggingface_hub.utils._http | Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-08-14 00:43:32,024 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/Anthropic/hh-rlhf/09be8c5bbc57cb3887f3a9732ad6aa7ec602a1fa/README.md "HTTP/1.1 200 OK"
+2026-08-14 00:43:32,229 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/Anthropic/hh-rlhf/resolve/09be8c5bbc57cb3887f3a9732ad6aa7ec602a1fa/hh-rlhf.py "HTTP/1.1 404 Not Found"
+2026-08-14 00:43:32,869 | INFO | httpx | HTTP Request: HEAD https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/Anthropic/hh-rlhf/Anthropic/hh-rlhf.py "HTTP/1.1 404 Not Found"
+2026-08-14 00:43:33,080 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/Anthropic/hh-rlhf/revision/09be8c5bbc57cb3887f3a9732ad6aa7ec602a1fa "HTTP/1.1 200 OK"
+2026-08-14 00:43:33,290 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/Anthropic/hh-rlhf/resolve/09be8c5bbc57cb3887f3a9732ad6aa7ec602a1fa/.huggingface.yaml "HTTP/1.1 404 Not Found"
+2026-08-14 00:43:33,505 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/Anthropic/hh-rlhf/tree/09be8c5bbc57cb3887f3a9732ad6aa7ec602a1fa/helpful-base%2Fdata?recursive=true&expand=false "HTTP/1.1 404 Not Found"
+2026-08-14 00:43:33,718 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/Anthropic/hh-rlhf/tree/09be8c5bbc57cb3887f3a9732ad6aa7ec602a1fa/helpful-base?recursive=false&expand=false "HTTP/1.1 200 OK"
+2026-08-14 00:43:33,930 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/Anthropic/hh-rlhf/tree/09be8c5bbc57cb3887f3a9732ad6aa7ec602a1fa?recursive=false&expand=false "HTTP/1.1 200 OK"
+2026-08-14 00:43:34,171 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/datasets/Anthropic/hh-rlhf/resolve/09be8c5bbc57cb3887f3a9732ad6aa7ec602a1fa/dataset_infos.json "HTTP/1.1 404 Not Found"
+2026-08-14 00:43:34,243 | INFO | __main__ | Sampled 50 prompts.
+2026-08-14 00:43:34,244 | INFO | __main__ | Loading shared verifier base model (Qwen 2.5 7B) + blade...
+2026-08-14 00:43:34,244 | INFO | Model_mechanics.models | Downloading base model from dataset repo: divyajot5005/ndna / SFT/Qwen_SFT_merged
+2026-08-14 00:43:34,453 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/revision/main "HTTP/1.1 200 OK"
+2026-08-14 00:43:34,675 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-08-14 00:43:34,927 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D "HTTP/1.1 200 OK"
+======================================================================
+  Swiss Knife — GSI Helpfulness Benchmark (no judge)
+======================================================================
+  Strategies    : ['elo_swiss_mode_b']
+  Blade         : helpfulness
+  n (candidates): 7
+  α (mix)       : 0.5
+  β (DPO)       : 0.1
+  threshold     : -5.0
+  # prompts     : 50
+  max tokens    : 512
+  dtype         : bfloat16
+======================================================================
+Fetching ... files: 0it [00:00, ?it/s]Fetching ... files: 14it [00:00, 74707.70it/s]
+2026-08-14 00:43:34,976 | INFO | Model_mechanics.models | Base model cached at: /root/.cache/huggingface/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+2026-08-14 00:43:34,977 | INFO | Model_mechanics.models | Loading tokenizer from: /root/.cache/huggingface/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+2026-08-14 00:43:36,296 | INFO | Model_mechanics.models | CUDA GPU detected — pinning model to cuda:0
+2026-08-14 00:43:36,297 | INFO | Model_mechanics.models | Loading base model (draft + ref): /root/.cache/huggingface/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged  [dtype=torch.bfloat16, device={'': 0}]
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/339 [00:00<?, ?it/s]Loading weights:   0%|          | 1/339 [00:01<08:45,  1.56s/it]Loading weights:   1%|          | 2/339 [00:02<07:28,  1.33s/it]Loading weights:   2%|▏         | 6/339 [00:03<01:59,  2.80it/s]Loading weights:   5%|▍         | 16/339 [00:03<00:37,  8.69it/s]Loading weights:   5%|▌         | 18/339 [00:03<00:37,  8.48it/s]Loading weights:   8%|▊         | 28/339 [00:03<00:20, 15.09it/s]Loading weights:   9%|▉         | 31/339 [00:04<00:25, 11.88it/s]Loading weights:  12%|█▏        | 40/339 [00:04<00:17, 17.24it/s]Loading weights:  13%|█▎        | 43/339 [00:04<00:19, 15.15it/s]Loading weights:  15%|█▌        | 52/339 [00:05<00:16, 17.31it/s]Loading weights:  16%|█▌        | 55/339 [00:06<00:27, 10.32it/s]Loading weights:  18%|█▊        | 60/339 [00:06<00:21, 12.89it/s]Loading weights:  19%|█▉        | 64/339 [00:06<00:20, 13.48it/s]Loading weights:  19%|█▉        | 66/339 [00:07<00:27,  9.76it/s]Loading weights:  22%|██▏       | 76/339 [00:07<00:23, 11.12it/s]Loading weights:  26%|██▌       | 88/339 [00:08<00:14, 16.92it/s]Loading weights:  27%|██▋       | 91/339 [00:08<00:17, 14.25it/s]Loading weights:  29%|██▉       | 100/339 [00:09<00:19, 12.34it/s]Loading weights:  33%|███▎      | 112/339 [00:09<00:13, 17.34it/s]Loading weights:  34%|███▍      | 115/339 [00:10<00:14, 15.76it/s]Loading weights:  37%|███▋      | 124/339 [00:10<00:11, 18.09it/s]Loading weights:  37%|███▋      | 127/339 [00:10<00:13, 15.29it/s]Loading weights:  40%|████      | 136/339 [00:11<00:10, 19.32it/s]Loading weights:  41%|████      | 139/339 [00:11<00:11, 16.69it/s]Loading weights:  44%|████▎     | 148/339 [00:11<00:10, 18.96it/s]Loading weights:  44%|████▍     | 150/339 [00:12<00:13, 13.75it/s]Loading weights:  47%|████▋     | 160/339 [00:12<00:11, 15.92it/s]Loading weights:  48%|████▊     | 162/339 [00:12<00:12, 14.64it/s]Loading weights:  51%|█████     | 172/339 [00:13<00:08, 19.66it/s]Loading weights:  52%|█████▏    | 175/339 [00:13<00:11, 13.94it/s]Loading weights:  54%|█████▍    | 184/339 [00:14<00:08, 18.19it/s]Loading weights:  55%|█████▌    | 187/339 [00:14<00:09, 16.11it/s]Loading weights:  58%|█████▊    | 196/339 [00:14<00:06, 22.35it/s]Loading weights:  59%|█████▊    | 199/339 [00:14<00:07, 19.02it/s]Loading weights:  61%|██████▏   | 208/339 [00:15<00:05, 23.34it/s]Loading weights:  62%|██████▏   | 211/339 [00:15<00:06, 19.86it/s]Loading weights:  65%|██████▍   | 220/339 [00:15<00:04, 25.46it/s]Loading weights:  66%|██████▌   | 223/339 [00:15<00:06, 18.03it/s]Loading weights:  68%|██████▊   | 232/339 [00:16<00:04, 21.53it/s]Loading weights:  69%|██████▉   | 235/339 [00:16<00:05, 17.58it/s]Loading weights:  72%|███████▏  | 244/339 [00:17<00:05, 17.43it/s]Loading weights:  73%|███████▎  | 246/339 [00:17<00:05, 16.87it/s]Loading weights:  76%|███████▌  | 256/339 [00:17<00:03, 22.23it/s]Loading weights:  76%|███████▋  | 259/339 [00:17<00:04, 18.30it/s]Loading weights:  79%|███████▉  | 268/339 [00:18<00:03, 22.35it/s]Loading weights:  80%|███████▉  | 271/339 [00:18<00:03, 22.39it/s]Loading weights:  83%|████████▎ | 280/339 [00:18<00:02, 21.02it/s]Loading weights:  86%|████████▌ | 292/339 [00:18<00:01, 29.07it/s]Loading weights:  87%|████████▋ | 296/339 [00:19<00:02, 19.90it/s]Loading weights:  90%|████████▉ | 304/339 [00:19<00:01, 19.21it/s]Loading weights:  91%|█████████ | 307/339 [00:20<00:01, 17.57it/s]Loading weights:  93%|█████████▎| 316/339 [00:20<00:01, 22.28it/s]Loading weights:  94%|█████████▍| 319/339 [00:20<00:01, 17.88it/s]Loading weights:  97%|█████████▋| 328/339 [00:20<00:00, 24.47it/s]Loading weights:  98%|█████████▊| 332/339 [00:21<00:00, 22.54it/s]Loading weights: 100%|██████████| 339/339 [00:21<00:00, 16.09it/s]
+2026-08-14 00:43:59,740 | INFO | Model_mechanics.models | Base model loaded and frozen. Params: 7,615,616,512
+2026-08-14 00:43:59,741 | INFO | Model_mechanics.models | CUDA GPU detected — pinning model to cuda:0
+2026-08-14 00:43:59,741 | INFO | Model_mechanics.models | Loading blade 'helpfulness' base copy [dtype=torch.bfloat16, device={'': 0}]...
+Loading weights:   0%|          | 0/339 [00:00<?, ?it/s]Loading weights:   0%|          | 1/339 [00:02<12:08,  2.15s/it]Loading weights:   1%|          | 2/339 [00:03<09:39,  1.72s/it]Loading weights:   3%|▎         | 10/339 [00:03<01:17,  4.27it/s]Loading weights:   5%|▍         | 16/339 [00:03<00:46,  7.01it/s]Loading weights:   6%|▌         | 19/339 [00:04<00:43,  7.29it/s]Loading weights:   8%|▊         | 28/339 [00:04<00:26, 11.86it/s]Loading weights:   9%|▉         | 31/339 [00:05<00:32,  9.41it/s]Loading weights:  12%|█▏        | 40/339 [00:05<00:21, 13.74it/s]Loading weights:  13%|█▎        | 43/339 [00:05<00:24, 12.14it/s]Loading weights:  15%|█▌        | 52/339 [00:06<00:24, 11.72it/s]Loading weights:  19%|█▉        | 64/339 [00:06<00:14, 18.75it/s]Loading weights:  20%|██        | 68/339 [00:07<00:16, 16.36it/s]Loading weights:  22%|██▏       | 76/339 [00:07<00:12, 21.15it/s]Loading weights:  24%|██▎       | 80/339 [00:07<00:13, 19.59it/s]Loading weights:  26%|██▌       | 88/339 [00:07<00:10, 23.00it/s]Loading weights:  27%|██▋       | 91/339 [00:08<00:12, 19.53it/s]Loading weights:  29%|██▉       | 100/339 [00:08<00:09, 24.73it/s]Loading weights:  30%|███       | 103/339 [00:08<00:13, 18.15it/s]Loading weights:  33%|███▎      | 112/339 [00:09<00:09, 22.93it/s]Loading weights:  34%|███▍      | 115/339 [00:09<00:11, 19.39it/s]Loading weights:  37%|███▋      | 124/339 [00:09<00:09, 23.07it/s]Loading weights:  37%|███▋      | 127/339 [00:09<00:10, 19.44it/s]Loading weights:  40%|████      | 136/339 [00:10<00:07, 26.11it/s]Loading weights:  41%|████      | 139/339 [00:10<00:08, 23.14it/s]Loading weights:  44%|████▎     | 148/339 [00:10<00:06, 29.10it/s]Loading weights:  45%|████▍     | 152/339 [00:10<00:06, 29.37it/s]Loading weights:  47%|████▋     | 160/339 [00:10<00:06, 28.52it/s]Loading weights:  50%|████▉     | 168/339 [00:11<00:04, 35.36it/s]Loading weights:  51%|█████     | 173/339 [00:11<00:05, 29.27it/s]Loading weights:  52%|█████▏    | 177/339 [00:11<00:05, 31.02it/s]Loading weights:  54%|█████▍    | 184/339 [00:11<00:04, 35.63it/s]Loading weights:  55%|█████▌    | 188/339 [00:11<00:04, 34.31it/s]Loading weights:  58%|█████▊    | 196/339 [00:11<00:04, 33.06it/s]Loading weights:  61%|██████▏   | 208/339 [00:12<00:02, 44.32it/s]Loading weights:  63%|██████▎   | 213/339 [00:12<00:03, 37.69it/s]Loading weights:  65%|██████▍   | 220/339 [00:12<00:03, 33.94it/s]Loading weights:  68%|██████▊   | 232/339 [00:12<00:02, 37.59it/s]Loading weights:  72%|███████▏  | 244/339 [00:12<00:01, 49.60it/s]Loading weights:  74%|███████▎  | 250/339 [00:13<00:01, 46.96it/s]Loading weights:  76%|███████▌  | 257/339 [00:13<00:01, 42.36it/s]Loading weights:  79%|███████▉  | 269/339 [00:13<00:01, 53.43it/s]Loading weights:  83%|████████▎ | 280/339 [00:13<00:00, 59.26it/s]Loading weights:  85%|████████▍ | 287/339 [00:13<00:00, 61.30it/s]Loading weights:  87%|████████▋ | 294/339 [00:13<00:00, 53.04it/s]Loading weights:  90%|████████▉ | 305/339 [00:13<00:00, 64.30it/s]Loading weights:  93%|█████████▎| 316/339 [00:14<00:00, 70.94it/s]Loading weights:  97%|█████████▋| 328/339 [00:14<00:00, 71.50it/s]Loading weights: 100%|██████████| 339/339 [00:14<00:00, 23.68it/s]
+2026-08-14 00:44:14,973 | INFO | Model_mechanics.models | Attaching LoRA adapter from model repo MGPGRAD/Swiss-Knife / dpo_out/hh_helpfulness/final_adapter ...
+2026-08-14 00:44:15,209 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-14 00:44:15,219 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/MGPGRAD/Swiss-Knife/46005ae68cad67650a494a7ab2507bf733545f13/dpo_out%2Fhh_helpfulness%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+2026-08-14 00:44:15,424 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-14 00:44:15,435 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/MGPGRAD/Swiss-Knife/46005ae68cad67650a494a7ab2507bf733545f13/dpo_out%2Fhh_helpfulness%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+2026-08-14 00:44:28,549 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+2026-08-14 00:44:28,760 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+2026-08-14 00:44:28,895 | INFO | Model_mechanics.models | Blade 'helpfulness' loaded. LoRA params: 40,370,176
+2026-08-14 00:44:28,895 | INFO | __main__ | Loading drafter...
+2026-08-14 00:44:28,895 | INFO | Model_mechanics.models | Loading drafter tokenizer from: Qwen/Qwen2.5-3B-Instruct
+2026-08-14 00:44:29,100 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-14 00:44:29,109 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-3B-Instruct/aa8e72537993ba99e69dfaafa59ed015b17504d1/config.json "HTTP/1.1 200 OK"
+2026-08-14 00:44:29,323 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-14 00:44:29,334 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-3B-Instruct/aa8e72537993ba99e69dfaafa59ed015b17504d1/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-08-14 00:44:29,543 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen2.5-3B-Instruct/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-08-14 00:44:29,755 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen2.5-3B-Instruct/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-08-14 00:44:30,432 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen2.5-3B-Instruct "HTTP/1.1 200 OK"
+2026-08-14 00:44:30,434 | INFO | Model_mechanics.models | CUDA GPU detected — pinning model to cuda:0
+2026-08-14 00:44:30,434 | INFO | Model_mechanics.models | Loading drafter model: Qwen/Qwen2.5-3B-Instruct  [dtype=torch.bfloat16, device={'': 0}]
+2026-08-14 00:44:30,639 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-14 00:44:30,650 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-3B-Instruct/aa8e72537993ba99e69dfaafa59ed015b17504d1/config.json "HTTP/1.1 200 OK"
+2026-08-14 00:44:30,858 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-14 00:44:30,869 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-3B-Instruct/aa8e72537993ba99e69dfaafa59ed015b17504d1/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/434 [00:00<?, ?it/s]Loading weights:   4%|▎         | 16/434 [00:00<00:02, 148.28it/s]Loading weights:   9%|▉         | 39/434 [00:00<00:02, 178.63it/s]Loading weights:  13%|█▎        | 57/434 [00:00<00:02, 175.86it/s]Loading weights:  18%|█▊        | 76/434 [00:00<00:02, 177.34it/s]Loading weights:  23%|██▎       | 99/434 [00:00<00:01, 190.45it/s]Loading weights:  27%|██▋       | 119/434 [00:00<00:01, 188.36it/s]Loading weights:  32%|███▏      | 138/434 [00:00<00:01, 187.79it/s]Loading weights:  37%|███▋      | 160/434 [00:00<00:01, 195.69it/s]Loading weights:  44%|████▍     | 191/434 [00:00<00:01, 228.75it/s]Loading weights:  49%|████▉     | 214/434 [00:01<00:00, 228.51it/s]Loading weights:  56%|█████▌    | 243/434 [00:01<00:00, 244.55it/s]Loading weights:  62%|██████▏   | 268/434 [00:01<00:00, 228.55it/s]Loading weights:  70%|██████▉   | 303/434 [00:01<00:00, 253.52it/s]Loading weights:  76%|███████▌  | 329/434 [00:01<00:00, 238.70it/s]Loading weights:  82%|████████▏ | 357/434 [00:01<00:00, 249.07it/s]Loading weights:  89%|████████▉ | 387/434 [00:01<00:00, 259.31it/s]Loading weights:  95%|█████████▌| 414/434 [00:01<00:00, 249.53it/s]Loading weights: 100%|██████████| 434/434 [00:01<00:00, 228.45it/s]
+2026-08-14 00:44:33,987 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-14 00:44:33,999 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-3B-Instruct/aa8e72537993ba99e69dfaafa59ed015b17504d1/generation_config.json "HTTP/1.1 200 OK"
+2026-08-14 00:44:34,205 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/resolve/main/custom_generate/generate.py "HTTP/1.1 404 Not Found"
+2026-08-14 00:44:34,212 | INFO | Model_mechanics.elo_swiss | EloSwissGenerator initialized: n=7, α=0.50, β=0.100, elo_rounds=8, elo_temp=5.768, threshold=-5.000, sigma_mode=min_entropy, probabilistic=True
+2026-08-14 00:45:21,187 | INFO | __main__ | [elo_swiss_mode_b] 1/50 | avg_blade_reward=-0.00161 | last_blade_reward=-0.00160 | avg_override=0.0000
+2026-08-14 00:46:02,118 | INFO | __main__ | [elo_swiss_mode_b] 2/50 | avg_blade_reward=-0.00189 | last_blade_reward=-0.00218 | avg_override=0.0000
+2026-08-14 00:47:06,392 | INFO | __main__ | [elo_swiss_mode_b] 3/50 | avg_blade_reward=-0.00303 | last_blade_reward=-0.00531 | avg_override=0.0000
+2026-08-14 00:48:32,121 | INFO | __main__ | [elo_swiss_mode_b] 4/50 | avg_blade_reward=-0.00260 | last_blade_reward=-0.00131 | avg_override=0.0000
+2026-08-14 00:49:27,090 | INFO | __main__ | [elo_swiss_mode_b] 5/50 | avg_blade_reward=-0.00270 | last_blade_reward=-0.00310 | avg_override=0.0000
+2026-08-14 00:50:24,762 | INFO | __main__ | [elo_swiss_mode_b] 6/50 | avg_blade_reward=-0.00224 | last_blade_reward=0.00008 | avg_override=0.0000
+2026-08-14 00:51:52,852 | INFO | __main__ | [elo_swiss_mode_b] 7/50 | avg_blade_reward=-0.00222 | last_blade_reward=-0.00214 | avg_override=0.0000
+2026-08-14 00:52:52,504 | INFO | __main__ | [elo_swiss_mode_b] 8/50 | avg_blade_reward=-0.00231 | last_blade_reward=-0.00291 | avg_override=0.0000
+2026-08-14 00:53:41,138 | INFO | __main__ | [elo_swiss_mode_b] 9/50 | avg_blade_reward=-0.00243 | last_blade_reward=-0.00337 | avg_override=0.0000
+2026-08-14 00:54:44,944 | INFO | __main__ | [elo_swiss_mode_b] 10/50 | avg_blade_reward=-0.00254 | last_blade_reward=-0.00353 | avg_override=0.0000
+2026-08-14 00:55:38,325 | INFO | __main__ | [elo_swiss_mode_b] 11/50 | avg_blade_reward=-0.00220 | last_blade_reward=0.00120 | avg_override=0.0000
+2026-08-14 00:56:56,102 | INFO | __main__ | [elo_swiss_mode_b] 12/50 | avg_blade_reward=-0.00204 | last_blade_reward=-0.00029 | avg_override=0.0000
+2026-08-14 00:57:44,762 | INFO | __main__ | [elo_swiss_mode_b] 13/50 | avg_blade_reward=-0.00198 | last_blade_reward=-0.00127 | avg_override=0.0000
+2026-08-14 00:58:55,350 | INFO | __main__ | [elo_swiss_mode_b] 14/50 | avg_blade_reward=-0.00193 | last_blade_reward=-0.00131 | avg_override=0.0000
+2026-08-14 01:00:12,938 | INFO | __main__ | [elo_swiss_mode_b] 15/50 | avg_blade_reward=-0.00183 | last_blade_reward=-0.00034 | avg_override=0.0000
+2026-08-14 01:01:03,433 | INFO | __main__ | [elo_swiss_mode_b] 16/50 | avg_blade_reward=-0.00176 | last_blade_reward=-0.00083 | avg_override=0.0000
+2026-08-14 01:01:11,510 | INFO | Model_mechanics.elo_swiss_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-14 01:01:11,676 | INFO | __main__ | [elo_swiss_mode_b] 17/50 | avg_blade_reward=-0.00213 | last_blade_reward=-0.00793 | avg_override=0.0000
+2026-08-14 01:02:25,089 | INFO | __main__ | [elo_swiss_mode_b] 18/50 | avg_blade_reward=-0.00207 | last_blade_reward=-0.00104 | avg_override=0.0000
+2026-08-14 01:03:31,087 | INFO | __main__ | [elo_swiss_mode_b] 19/50 | avg_blade_reward=-0.00208 | last_blade_reward=-0.00242 | avg_override=0.0000
+2026-08-14 01:04:40,219 | INFO | __main__ | [elo_swiss_mode_b] 20/50 | avg_blade_reward=-0.00204 | last_blade_reward=-0.00109 | avg_override=0.0000
+2026-08-14 01:05:42,183 | INFO | __main__ | [elo_swiss_mode_b] 21/50 | avg_blade_reward=-0.00197 | last_blade_reward=-0.00066 | avg_override=0.0000
+2026-08-14 01:06:57,469 | INFO | __main__ | [elo_swiss_mode_b] 22/50 | avg_blade_reward=-0.00212 | last_blade_reward=-0.00527 | avg_override=0.0000
+2026-08-14 01:07:56,111 | INFO | __main__ | [elo_swiss_mode_b] 23/50 | avg_blade_reward=-0.00220 | last_blade_reward=-0.00397 | avg_override=0.0000
+2026-08-14 01:08:47,961 | INFO | __main__ | [elo_swiss_mode_b] 24/50 | avg_blade_reward=-0.00219 | last_blade_reward=-0.00191 | avg_override=0.0000
+2026-08-14 01:10:00,452 | INFO | __main__ | [elo_swiss_mode_b] 25/50 | avg_blade_reward=-0.00220 | last_blade_reward=-0.00253 | avg_override=0.0000
+2026-08-14 01:11:08,357 | INFO | Model_mechanics.elo_swiss_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-14 01:11:08,668 | INFO | __main__ | [elo_swiss_mode_b] 26/50 | avg_blade_reward=-0.00220 | last_blade_reward=-0.00224 | avg_override=0.0000
+2026-08-14 01:12:00,593 | INFO | __main__ | [elo_swiss_mode_b] 27/50 | avg_blade_reward=-0.00214 | last_blade_reward=-0.00048 | avg_override=0.0000
+2026-08-14 01:13:17,369 | INFO | __main__ | [elo_swiss_mode_b] 28/50 | avg_blade_reward=-0.00209 | last_blade_reward=-0.00062 | avg_override=0.0000
+2026-08-14 01:14:01,514 | INFO | __main__ | [elo_swiss_mode_b] 29/50 | avg_blade_reward=-0.00205 | last_blade_reward=-0.00120 | avg_override=0.0000
+2026-08-14 01:15:24,265 | INFO | __main__ | [elo_swiss_mode_b] 30/50 | avg_blade_reward=-0.00215 | last_blade_reward=-0.00478 | avg_override=0.0000
+2026-08-14 01:16:18,344 | INFO | __main__ | [elo_swiss_mode_b] 31/50 | avg_blade_reward=-0.00215 | last_blade_reward=-0.00215 | avg_override=0.0000
+2026-08-14 01:17:12,769 | INFO | __main__ | [elo_swiss_mode_b] 32/50 | avg_blade_reward=-0.00227 | last_blade_reward=-0.00627 | avg_override=0.0000
+2026-08-14 01:18:18,784 | INFO | __main__ | [elo_swiss_mode_b] 33/50 | avg_blade_reward=-0.00234 | last_blade_reward=-0.00436 | avg_override=0.0000
+2026-08-14 01:18:58,320 | INFO | __main__ | [elo_swiss_mode_b] 34/50 | avg_blade_reward=-0.00231 | last_blade_reward=-0.00129 | avg_override=0.0000
+2026-08-14 01:20:14,237 | INFO | __main__ | [elo_swiss_mode_b] 35/50 | avg_blade_reward=-0.00226 | last_blade_reward=-0.00078 | avg_override=0.0000
+2026-08-14 01:20:57,075 | INFO | __main__ | [elo_swiss_mode_b] 36/50 | avg_blade_reward=-0.00219 | last_blade_reward=0.00035 | avg_override=0.0000
+2026-08-14 01:21:52,958 | INFO | __main__ | [elo_swiss_mode_b] 37/50 | avg_blade_reward=-0.00213 | last_blade_reward=0.00022 | avg_override=0.0000
+2026-08-14 01:23:05,520 | INFO | __main__ | [elo_swiss_mode_b] 38/50 | avg_blade_reward=-0.00212 | last_blade_reward=-0.00202 | avg_override=0.0000
+2026-08-14 01:23:20,110 | INFO | Model_mechanics.elo_swiss_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-14 01:23:20,280 | INFO | __main__ | [elo_swiss_mode_b] 39/50 | avg_blade_reward=-0.00223 | last_blade_reward=-0.00617 | avg_override=0.0000
+2026-08-14 01:24:23,379 | INFO | __main__ | [elo_swiss_mode_b] 40/50 | avg_blade_reward=-0.00224 | last_blade_reward=-0.00264 | avg_override=0.0000
+2026-08-14 01:25:20,335 | INFO | __main__ | [elo_swiss_mode_b] 41/50 | avg_blade_reward=-0.00236 | last_blade_reward=-0.00733 | avg_override=0.0000
+2026-08-14 01:26:17,391 | INFO | __main__ | [elo_swiss_mode_b] 42/50 | avg_blade_reward=-0.00237 | last_blade_reward=-0.00263 | avg_override=0.0000
+2026-08-14 01:27:55,953 | INFO | __main__ | [elo_swiss_mode_b] 43/50 | avg_blade_reward=-0.00243 | last_blade_reward=-0.00520 | avg_override=0.0000
+2026-08-14 01:28:53,523 | INFO | __main__ | [elo_swiss_mode_b] 44/50 | avg_blade_reward=-0.00243 | last_blade_reward=-0.00207 | avg_override=0.0000
+2026-08-14 01:29:57,790 | INFO | __main__ | [elo_swiss_mode_b] 45/50 | avg_blade_reward=-0.00242 | last_blade_reward=-0.00211 | avg_override=0.0000
+2026-08-14 01:30:53,116 | INFO | __main__ | [elo_swiss_mode_b] 46/50 | avg_blade_reward=-0.00242 | last_blade_reward=-0.00243 | avg_override=0.0000
+2026-08-14 01:31:47,557 | INFO | __main__ | [elo_swiss_mode_b] 47/50 | avg_blade_reward=-0.00245 | last_blade_reward=-0.00406 | avg_override=0.0000
+2026-08-14 01:32:35,558 | INFO | __main__ | [elo_swiss_mode_b] 48/50 | avg_blade_reward=-0.00245 | last_blade_reward=-0.00234 | avg_override=0.0000
+2026-08-14 01:34:05,059 | INFO | __main__ | [elo_swiss_mode_b] 49/50 | avg_blade_reward=-0.00252 | last_blade_reward=-0.00577 | avg_override=0.0000
+2026-08-14 01:35:09,050 | INFO | __main__ | [elo_swiss_mode_b] 50/50 | avg_blade_reward=-0.00256 | last_blade_reward=-0.00454 | avg_override=0.0000
+2026-08-14 01:35:09,053 | INFO | __main__ | Saved elo_swiss_mode_b results → /LAB/Swiss-Knife/runs/bayes_search_helpfulness/round6/r6_cfg2/elo_swiss_mode_b_results.json
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Strategy: elo_swiss_mode_b
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+======================================================================
+  GSI Helpfulness Benchmark — Steering Diagnostics
+======================================================================
+
+  Strategy                BladeReward      Std  OverrideRate     Time
+  ────────────────────── ──────────── ──────── ───────────── ────────
+  elo_swiss_mode_b           -0.00256   0.0020        0.0000  3034.8s
+
+  Highest avg blade reward: elo_swiss_mode_b (-0.00256)
+
+  Results saved to: /LAB/Swiss-Knife/runs/bayes_search_helpfulness/round6/r6_cfg2/
+======================================================================

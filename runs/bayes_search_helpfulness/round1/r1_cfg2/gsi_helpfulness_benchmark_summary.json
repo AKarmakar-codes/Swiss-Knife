@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-08-13T16:42:58.206699",
+  "config": {
+    "num_prompts": 50,
+    "seed": 42,
+    "blade": "helpfulness",
+    "alpha": 0.5,
+    "beta": 0.1,
+    "gsi_n": 9,
+    "gsi_threshold": -5.0,
+    "swiss_rounds": 6,
+    "elo_rounds": 5,
+    "elo_temperature": 11.726431812354376,
+    "max_tokens": 512,
+    "dataset": "Anthropic/hh-rlhf:helpful-base"
+  },
+  "results": {
+    "elo_swiss_mode_b": {
+      "avg_blade_reward": -0.002527,
+      "std_blade_reward": 0.001451,
+      "avg_override_rate": 0.0,
+      "num_prompts": 50,
+      "elapsed_s": 4018.4
+    }
+  },
+  "highest_blade_reward_strategy": "elo_swiss_mode_b",
+  "note": "No GEval/AQI scoring done here. Run run_geval_only.py against this output directory to score these exact saved generations."
+}

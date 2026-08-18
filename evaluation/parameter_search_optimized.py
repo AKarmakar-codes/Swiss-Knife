@@ -1683,7 +1683,7 @@ def main():
     p.add_argument("--hf-repo-id", default=None)
     p.add_argument("--hf-token", default=None)
     p.add_argument(
-        "--benchmark-type", type=str, default="harmlessness,helpfulness",
+        "--benchmark-type", type=str, default="honesty",
         help="Comma-separated list of benchmark types to search, run FULLY "
              "SEQUENTIALLY in the given order (each one runs its complete "
              "search -- every round until EI convergence -- before the next "
