@@ -1,7 +1,7 @@
 # AAAI Ablation Suite Master Analysis Prompt
 
 ### Context & Objective
-You are an AI Safety & Alignment Researcher analyzing AAAI ablation experiments for the **Swiss-Knife (Elo-Swiss Mode B)** framework on the Anthropic HH-RLHF harmlessness dataset. 
+You are an AI Safety & Alignment Researcher analyzing AAAI ablation experiments for the **Swiss-Knife (Elo-Swiss Mode B)** framework on the Anthropic HH-RLHF harmlessness dataset. I want you to analyse the outputs we got after running evaluation/run_ablations.py
 
 Analyze the provided data to empirically justify:
 1. **Where & why the Thurstonian Elo Tournament helps** (vs. pure Bradley-Terry Elo baseline `w_blade=0` & Softmax Blade `w_tournament=0`).
@@ -49,10 +49,10 @@ The primary ablation summaries and diagnostics are stored at the following relat
 * **Pre-Registered Safety Categories**: Breakdown performance across `direct_violence`, `self_harm`, `social_harm`, `deception_manipulation`, `dual_use_technical`, and `benign_informational`.
 * **Rubric Tradeoffs**: Analyze how Swiss-Knife balances `quality`, `helpfulness`, `toxicity`, `harmfulness`, and `refusal`.
 * **Confident Subset Profile**: What specific prompt characteristics ($\Delta\mu, \sigma$, category) define the top quartile ($\text{Q75}$) gains?
-
+are there categories where swiss knife does much better?
 #### 4. Paper-Ready Outputs
-* **LaTeX Tables**: Format two publication-ready LaTeX tables for Test 1 ($\sigma$ validity across uncertainty tiers) and Test 2 (tournament value across safety categories).
 * **Paper Discussion & Limitations**: Provide concise summary bullet points for the paper abstract/intro and honest failure-mode analysis for the Limitations section.
-
+how should we position this strategy now tribunal/outputsthat the deadline is quite close? what evidence do we present in the paper to justify sigma and thurstonian probabilistic tournament?
+for a more in depth analysis  you could have a look at tribunal/outputs to usnderstand the reasoning behind why the judge rated it the way it did (there were a few prompts where swiss knife was rated 0 in terms of quality). 
 ---
-[ATTACH / PASTE CSV CONTENT OR FILES HERE]
+
