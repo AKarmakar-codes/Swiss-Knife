@@ -3139,3 +3139,147 @@ Assistant:
 2026-08-16 08:28:43 | INFO |   ✓ Saved live progress to runs/generated_responses_manifest.csv (125/125 prompts)
 2026-08-16 08:28:43 | INFO | ✓ Generation complete! All 6 Tribunal input JSONL files saved to tribunal/inputs/
 2026-08-16 08:28:43 | INFO | ✓ Saved post-generation responses manifest CSV → runs/generated_responses_manifest.csv
+2026-08-18 20:45:36 | WARNING | Could not load dataset via HuggingFace (`No module named 'datasets'`). Using fallback prompt pool.
+2026-08-18 20:45:36 | INFO | Using standard curated HH-RLHF Harmlessness prompt pool.
+2026-08-18 20:45:36 | WARNING | No pre-registered classified JSONL found. Classifying prompts at runtime. For AAAI publication, run `python evaluation/classify_prompts.py` first and commit `data/prompts_classified.jsonl` before inference.
+2026-08-18 20:45:36 | INFO | --- Executing Test 1: Sigma Validity Offline Analysis ---
+2026-08-18 20:45:37 | INFO | Note: NumExpr detected 16 cores but "NUMEXPR_MAX_THREADS" not set, so enforcing safe limit of 8.
+2026-08-18 20:45:37 | INFO | NumExpr defaulting to 8 threads.
+2026-08-18 20:45:38 | INFO | --- Feature Correlation with ΔQuality (Real σ − Shuffled σ) ---
+2026-08-18 20:45:39 | INFO |   mean_sigma                     : Spearman r = -0.1556 (p = 0.0844)
+2026-08-18 20:45:39 | INFO |   mean_delta_mu                  : Spearman r = -0.1024 (p = 0.2576)
+2026-08-18 20:45:39 | INFO |   upset_rate                     : Spearman r = +0.0705 (p = 0.4365)
+2026-08-18 20:45:39 | INFO |   mean_champion_sigma_rank       : Spearman r = -0.0596 (p = 0.5109)
+2026-08-18 20:45:39 | INFO |   mean_sigma_spread              : Spearman r = -0.1549 (p = 0.0858)
+2026-08-18 20:45:39 | INFO |   first_divergence_step          : Spearman r = +0.0342 (p = 0.7058)
+2026-08-18 20:45:39 | INFO |   total_divergence_steps         : Spearman r = -0.0881 (p = 0.3305)
+2026-08-18 20:45:39 | INFO |   response_length_delta          : Spearman r = +0.0662 (p = 0.4654)
+2026-08-18 20:45:39 | INFO | Saved summary CSV to: runs/sigma_validity/sigma_validity_summary.csv
+2026-08-18 20:45:39 | INFO | Saved pre-registered categories plot to: runs/tribunal_plots/sigma_validity/preregistered_categories_sigma.png
+2026-08-18 20:45:39 | INFO | Saved bar-chart plot to: runs/tribunal_plots/sigma_validity/sigma_validity_gap.png
+2026-08-18 20:45:40 | INFO | Saved scatter plot to: runs/tribunal_plots/sigma_validity/sigma_validity_scatter.png
+2026-08-18 20:45:40 | INFO | ✓ Test 1 analysis completed successfully!
+2026-08-18 20:45:40 | INFO | 
+--- Executing Test 2: Tournament Value Offline Analysis ---
+2026-08-18 20:45:40 | INFO | --- Data-Driven Feature Correlation with ΔQuality (Thurstonian − Elo Baseline) ---
+2026-08-18 20:45:40 | INFO |   mean_delta_mu                    : Spearman r = -0.0191 (p = 0.8332)
+2026-08-18 20:45:40 | INFO |   mean_sigma                       : Spearman r = -0.0047 (p = 0.9583)
+2026-08-18 20:45:40 | INFO |   mean_champion_sigma_rank         : Spearman r = -0.0400 (p = 0.6591)
+2026-08-18 20:45:40 | INFO |   mean_sigma_spread                : Spearman r = +0.0242 (p = 0.7899)
+2026-08-18 20:45:40 | INFO |   first_divergence_step            : Spearman r = +0.0657 (p = 0.4686)
+2026-08-18 20:45:40 | INFO |   total_divergence_steps           : Spearman r = -0.0560 (p = 0.5368)
+2026-08-18 20:45:40 | INFO |   response_length_delta            : Spearman r = -0.0504 (p = 0.5783)
+2026-08-18 20:45:40 | INFO | Saved pre-registered categories plot to: runs/tribunal_plots/tournament_value/preregistered_categories_tournament.png
+2026-08-18 20:45:40 | INFO | Saved post-hoc confident subset prompts to: runs/tournament_value/confident_subset.csv
+2026-08-18 20:45:41 | INFO | Saved bar-chart plot to: runs/tribunal_plots/tournament_value/tournament_value_gap.png
+2026-08-18 20:45:41 | INFO | Saved scatter plot to: runs/tribunal_plots/tournament_value/delta_quality_vs_delta_mu_scatter.png
+2026-08-18 20:45:41 | INFO | ✓ Test 2 analysis completed successfully!
+2026-08-18 20:45:41 | INFO | 
+--- Exporting Master Consolidated Ablation CSV ---
+2026-08-18 20:45:42 | INFO | ✓ Saved master ablation results CSV → runs/tribunal_plots/master_ablation_results.csv
+2026-08-18 21:08:41 | WARNING | Could not load dataset via HuggingFace (`No module named 'datasets'`). Using fallback prompt pool.
+2026-08-18 21:08:41 | INFO | Using standard curated HH-RLHF Harmlessness prompt pool.
+2026-08-18 21:08:41 | WARNING | No pre-registered classified JSONL found. Classifying prompts at runtime. For AAAI publication, run `python evaluation/classify_prompts.py` first and commit `data/prompts_classified.jsonl` before inference.
+2026-08-18 21:08:41 | INFO | --- Executing Test 1: Sigma Validity Offline Analysis ---
+2026-08-18 21:08:41 | INFO | Note: NumExpr detected 16 cores but "NUMEXPR_MAX_THREADS" not set, so enforcing safe limit of 8.
+2026-08-18 21:08:41 | INFO | NumExpr defaulting to 8 threads.
+2026-08-18 21:08:42 | INFO | --- Feature Correlation with ΔQuality (Real σ − Shuffled σ) ---
+2026-08-18 21:08:42 | INFO |   mean_sigma                     : Spearman r = -0.1556 (p = 0.0844)
+2026-08-18 21:08:42 | INFO |   mean_delta_mu                  : Spearman r = -0.1024 (p = 0.2576)
+2026-08-18 21:08:43 | INFO |   upset_rate                     : Spearman r = +0.0705 (p = 0.4365)
+2026-08-18 21:08:43 | INFO |   mean_champion_sigma_rank       : Spearman r = -0.0596 (p = 0.5109)
+2026-08-18 21:08:43 | INFO |   mean_sigma_spread              : Spearman r = -0.1549 (p = 0.0858)
+2026-08-18 21:08:43 | INFO |   first_divergence_step          : Spearman r = +0.0342 (p = 0.7058)
+2026-08-18 21:08:43 | INFO |   total_divergence_steps         : Spearman r = -0.0881 (p = 0.3305)
+2026-08-18 21:08:43 | INFO |   response_length_delta          : Spearman r = +0.0662 (p = 0.4654)
+2026-08-18 21:08:43 | INFO | Saved summary CSV to: runs/sigma_validity/sigma_validity_summary.csv
+2026-08-18 21:08:43 | INFO | Saved pre-registered categories plot to: runs/tribunal_plots/sigma_validity/preregistered_categories_sigma.png
+2026-08-18 21:08:43 | INFO | Saved bar-chart plot to: runs/tribunal_plots/sigma_validity/sigma_validity_gap.png
+2026-08-18 21:08:44 | INFO | Saved scatter plot to: runs/tribunal_plots/sigma_validity/sigma_validity_scatter.png
+2026-08-18 21:08:44 | INFO | ✓ Test 1 analysis completed successfully!
+2026-08-18 21:08:44 | INFO | 
+--- Executing Test 2: Tournament Value Offline Analysis ---
+2026-08-18 21:08:44 | ERROR | Stats file not found: runs/tournament_value/step_tournament_stats.json
+2026-08-18 21:08:44 | INFO | 
+--- Exporting Master Consolidated Ablation CSV ---
+2026-08-18 21:08:45 | INFO | ✓ Saved master ablation results CSV → runs/tribunal_plots/master_ablation_results.csv
+2026-08-18 21:08:58 | WARNING | Could not load dataset via HuggingFace (`No module named 'datasets'`). Using fallback prompt pool.
+2026-08-18 21:08:58 | INFO | Using standard curated HH-RLHF Harmlessness prompt pool.
+2026-08-18 21:08:58 | WARNING | No pre-registered classified JSONL found. Classifying prompts at runtime. For AAAI publication, run `python evaluation/classify_prompts.py` first and commit `data/prompts_classified.jsonl` before inference.
+2026-08-18 21:08:58 | INFO | --- Executing Test 1: Sigma Validity Offline Analysis ---
+2026-08-18 21:08:58 | INFO | Note: NumExpr detected 16 cores but "NUMEXPR_MAX_THREADS" not set, so enforcing safe limit of 8.
+2026-08-18 21:08:58 | INFO | NumExpr defaulting to 8 threads.
+2026-08-18 21:08:59 | INFO | --- Feature Correlation with ΔQuality (Real σ − Shuffled σ) ---
+2026-08-18 21:08:59 | INFO |   mean_sigma                     : Spearman r = -0.1556 (p = 0.0844)
+2026-08-18 21:08:59 | INFO |   mean_delta_mu                  : Spearman r = -0.1024 (p = 0.2576)
+2026-08-18 21:08:59 | INFO |   upset_rate                     : Spearman r = +0.0705 (p = 0.4365)
+2026-08-18 21:08:59 | INFO |   mean_champion_sigma_rank       : Spearman r = -0.0596 (p = 0.5109)
+2026-08-18 21:08:59 | INFO |   mean_sigma_spread              : Spearman r = -0.1549 (p = 0.0858)
+2026-08-18 21:08:59 | INFO |   first_divergence_step          : Spearman r = +0.0342 (p = 0.7058)
+2026-08-18 21:08:59 | INFO |   total_divergence_steps         : Spearman r = -0.0881 (p = 0.3305)
+2026-08-18 21:08:59 | INFO |   response_length_delta          : Spearman r = +0.0662 (p = 0.4654)
+2026-08-18 21:08:59 | INFO | Saved summary CSV to: runs/sigma_validity/sigma_validity_summary.csv
+2026-08-18 21:09:00 | INFO | Saved pre-registered categories plot to: runs/tribunal_plots/sigma_validity/preregistered_categories_sigma.png
+2026-08-18 21:09:00 | INFO | Saved bar-chart plot to: runs/tribunal_plots/sigma_validity/sigma_validity_gap.png
+2026-08-18 21:09:01 | INFO | Saved scatter plot to: runs/tribunal_plots/sigma_validity/sigma_validity_scatter.png
+2026-08-18 21:09:01 | INFO | ✓ Test 1 analysis completed successfully!
+2026-08-18 21:09:01 | INFO | 
+--- Executing Test 2: Tournament Value Offline Analysis ---
+2026-08-18 21:09:01 | INFO | --- Data-Driven Feature Correlation with ΔQuality (Thurstonian − Elo Baseline) ---
+2026-08-18 21:09:01 | INFO |   mean_delta_mu                    : Spearman r = -0.0191 (p = 0.8332)
+2026-08-18 21:09:01 | INFO |   mean_sigma                       : Spearman r = -0.0047 (p = 0.9583)
+2026-08-18 21:09:01 | INFO |   t_bt_disagreement_rate           : Spearman r = +0.1269 (p = 0.1603)
+2026-08-18 21:09:01 | INFO |   mean_champion_sigma_rank         : Spearman r = -0.0400 (p = 0.6591)
+2026-08-18 21:09:01 | INFO |   mean_sigma_spread                : Spearman r = +0.0242 (p = 0.7899)
+2026-08-18 21:09:01 | INFO |   bt_greedy_agreement_rate         : Spearman r = -0.1269 (p = 0.1603)
+2026-08-18 21:09:01 | INFO |   first_divergence_step            : Spearman r = +0.0171 (p = 0.8501)
+2026-08-18 21:09:01 | INFO |   total_divergence_steps           : Spearman r = -0.1272 (p = 0.1591)
+2026-08-18 21:09:01 | INFO |   response_length_delta            : Spearman r = +0.0208 (p = 0.8186)
+2026-08-18 21:09:01 | INFO | Saved pre-registered categories plot to: runs/tribunal_plots/tournament_value/preregistered_categories_tournament.png
+2026-08-18 21:09:01 | INFO | Saved post-hoc confident subset prompts to: runs/tournament_value/confident_subset.csv
+2026-08-18 21:09:01 | INFO | Saved bar-chart plot to: runs/tribunal_plots/tournament_value/tournament_value_gap.png
+2026-08-18 21:09:02 | INFO | Saved scatter plot to: runs/tribunal_plots/tournament_value/delta_quality_vs_delta_mu_scatter.png
+2026-08-18 21:09:02 | INFO | ✓ Test 2 analysis completed successfully!
+2026-08-18 21:09:02 | INFO | 
+--- Exporting Master Consolidated Ablation CSV ---
+2026-08-18 21:09:03 | INFO | ✓ Saved master ablation results CSV → runs/tribunal_plots/master_ablation_results.csv
+2026-08-18 21:10:27 | WARNING | Could not load dataset via HuggingFace (`No module named 'datasets'`). Using fallback prompt pool.
+2026-08-18 21:10:27 | INFO | Using standard curated HH-RLHF Harmlessness prompt pool.
+2026-08-18 21:10:27 | WARNING | No pre-registered classified JSONL found. Classifying prompts at runtime. For AAAI publication, run `python evaluation/classify_prompts.py` first and commit `data/prompts_classified.jsonl` before inference.
+2026-08-18 21:10:27 | INFO | --- Executing Test 1: Sigma Validity Offline Analysis ---
+2026-08-18 21:10:28 | INFO | Note: NumExpr detected 16 cores but "NUMEXPR_MAX_THREADS" not set, so enforcing safe limit of 8.
+2026-08-18 21:10:28 | INFO | NumExpr defaulting to 8 threads.
+2026-08-18 21:10:29 | INFO | --- Feature Correlation with ΔQuality (Real σ − Shuffled σ) ---
+2026-08-18 21:10:29 | INFO |   mean_sigma                     : Spearman r = -0.1556 (p = 0.0844)
+2026-08-18 21:10:29 | INFO |   mean_delta_mu                  : Spearman r = -0.1024 (p = 0.2576)
+2026-08-18 21:10:29 | INFO |   upset_rate                     : Spearman r = +0.0705 (p = 0.4365)
+2026-08-18 21:10:29 | INFO |   mean_champion_sigma_rank       : Spearman r = -0.0596 (p = 0.5109)
+2026-08-18 21:10:29 | INFO |   mean_sigma_spread              : Spearman r = -0.1549 (p = 0.0858)
+2026-08-18 21:10:29 | INFO |   first_divergence_step          : Spearman r = +0.0342 (p = 0.7058)
+2026-08-18 21:10:29 | INFO |   total_divergence_steps         : Spearman r = -0.0881 (p = 0.3305)
+2026-08-18 21:10:29 | INFO |   response_length_delta          : Spearman r = +0.0662 (p = 0.4654)
+2026-08-18 21:10:29 | INFO | Saved summary CSV to: runs/sigma_validity/sigma_validity_summary.csv
+2026-08-18 21:10:29 | INFO | Saved pre-registered categories plot to: runs/tribunal_plots/sigma_validity/preregistered_categories_sigma.png
+2026-08-18 21:10:30 | INFO | Saved bar-chart plot to: runs/tribunal_plots/sigma_validity/sigma_validity_gap.png
+2026-08-18 21:10:30 | INFO | Saved scatter plot to: runs/tribunal_plots/sigma_validity/sigma_validity_scatter.png
+2026-08-18 21:10:30 | INFO | ✓ Test 1 analysis completed successfully!
+2026-08-18 21:10:30 | INFO | 
+--- Executing Test 2: Tournament Value Offline Analysis ---
+2026-08-18 21:10:30 | INFO | --- Data-Driven Feature Correlation with ΔQuality (Thurstonian − Elo Baseline) ---
+2026-08-18 21:10:30 | INFO |   mean_delta_mu                    : Spearman r = -0.0191 (p = 0.8332)
+2026-08-18 21:10:30 | INFO |   mean_sigma                       : Spearman r = -0.0047 (p = 0.9583)
+2026-08-18 21:10:30 | INFO |   t_bt_disagreement_rate           : Spearman r = +0.1269 (p = 0.1603)
+2026-08-18 21:10:30 | INFO |   mean_champion_sigma_rank         : Spearman r = -0.0400 (p = 0.6591)
+2026-08-18 21:10:30 | INFO |   mean_sigma_spread                : Spearman r = +0.0242 (p = 0.7899)
+2026-08-18 21:10:30 | INFO |   bt_greedy_agreement_rate         : Spearman r = -0.1269 (p = 0.1603)
+2026-08-18 21:10:30 | INFO |   first_divergence_step            : Spearman r = +0.0171 (p = 0.8501)
+2026-08-18 21:10:30 | INFO |   total_divergence_steps           : Spearman r = -0.1272 (p = 0.1591)
+2026-08-18 21:10:30 | INFO |   response_length_delta            : Spearman r = +0.0208 (p = 0.8186)
+2026-08-18 21:10:31 | INFO | Saved pre-registered categories plot to: runs/tribunal_plots/tournament_value/preregistered_categories_tournament.png
+2026-08-18 21:10:31 | INFO | Saved post-hoc confident subset prompts to: runs/tournament_value/confident_subset.csv
+2026-08-18 21:10:31 | INFO | Saved bar-chart plot to: runs/tribunal_plots/tournament_value/tournament_value_gap.png
+2026-08-18 21:10:31 | INFO | Saved scatter plot to: runs/tribunal_plots/tournament_value/delta_quality_vs_delta_mu_scatter.png
+2026-08-18 21:10:31 | INFO | ✓ Test 2 analysis completed successfully!
+2026-08-18 21:10:31 | INFO | 
+--- Exporting Master Consolidated Ablation CSV ---
+2026-08-18 21:10:32 | INFO | ✓ Saved master ablation results CSV → runs/tribunal_plots/master_ablation_results.csv
