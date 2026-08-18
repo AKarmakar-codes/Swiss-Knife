@@ -597,8 +597,8 @@ def parse_args():
     p.add_argument("--tribunal-dir", type=str, default="tribunal/inputs/hhh_pareto")
 
     # generation
-    p.add_argument("--max-tokens", type=int, default=256,
-                   help="MOD used MAX_LENGTH=200 for its DPO experiments; 256 keeps us close.")
+    p.add_argument("--max-tokens", type=int, default=512,
+                   help="Max tokens per response.")
     p.add_argument("--gsi-n", type=int, default=8)
     p.add_argument("--beta", type=float, default=0.1)
     p.add_argument("--alpha", type=float, default=0.5)

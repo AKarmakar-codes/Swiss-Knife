@@ -264,7 +264,7 @@ def parse_args():
     p.add_argument("--methods",      nargs="+", default=["swiss", "mod", "rs", "args", "bon", "base"])
     p.add_argument("--grid",         default="edges", choices=["edges", "simplex", "vertices"])
     p.add_argument("--steps",        type=int, default=4)
-    p.add_argument("--max-tokens",   type=int, default=200)
+    p.add_argument("--max-tokens",   type=int, default=512)
     p.add_argument("--output-root",  default="runs/hhh_pareto")
     p.add_argument("--num-shards",   type=int, default=1)
     p.add_argument("--shard-id",     type=int, default=0)
