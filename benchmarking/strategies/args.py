@@ -29,7 +29,7 @@ Usage:
 import time
 import logging
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 
 import torch
 import torch.nn.functional as F
@@ -94,6 +94,8 @@ class ARGSGenerator:
         max_new_tokens: Optional[int] = None,
         verbose: bool = False,
         return_stats: bool = False,
+        blade_coefficients: Optional[Dict[str, float]] = None,
+        **kwargs,
     ) -> str | Tuple[str, ARGSStats]:
         """
         Generate a response using ARGS token-level steering.

@@ -28,7 +28,7 @@ Usage:
 import time
 import logging
 from dataclasses import dataclass
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 
 import torch
 import torch.nn.functional as F
@@ -95,6 +95,8 @@ class MODGenerator:
         max_new_tokens: Optional[int] = None,
         verbose: bool = False,
         return_stats: bool = False,
+        blade_coefficients: Optional[Dict[str, float]] = None,
+        **kwargs,
     ) -> str | Tuple[str, MODStats]:
         """
         Generate a response using MOD token-level linear combination.
@@ -104,8 +106,6 @@ class MODGenerator:
             max_new_tokens (int, optional): Maximum tokens to generate.
             verbose (bool): Whether to log detailed information.
             return_stats (bool): If True, returns a tuple of (generated_text, stats_object).
-
-        Returns:
             The generated response string, optionally along with generation statistics.
         """
         max_tokens = max_new_tokens or self.cfg.max_new_tokens

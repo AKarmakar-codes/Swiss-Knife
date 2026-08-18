@@ -26,7 +26,7 @@ Usage:
 import time
 import logging
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 
 import torch
 from transformers import PreTrainedModel, PreTrainedTokenizer
@@ -95,6 +95,8 @@ class BestOfNGenerator:
         max_new_tokens: Optional[int] = None,
         verbose: bool = False,
         return_stats: bool = False,
+        blade_coefficients: Optional[Dict[str, float]] = None,
+        **kwargs,
     ) -> str | Tuple[str, BestOfNStats]:
         """
         Generate a response using Best-of-N sampling.
