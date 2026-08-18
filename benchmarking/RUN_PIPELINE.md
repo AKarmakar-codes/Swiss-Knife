@@ -42,7 +42,7 @@ for i in $(seq 0 7); do
   CUDA_VISIBLE_DEVICES=$i python benchmarking/benchmark_hhh_pareto.py \
     --prompts data/hhh_eval_prompts.jsonl \
     --methods swiss mod rs args bon base \
-    --grid edges \
+    --grid symmetric7 \
     --num-shards 8 \
     --shard-id $i \
     > runs/logs/pareto_shard_$i.log 2>&1 &
@@ -65,7 +65,7 @@ Merges responses from all 8 shards, verifies that all 120 prompts are present wi
 python benchmarking/benchmark_hhh_pareto.py \
   --prompts data/hhh_eval_prompts.jsonl \
   --methods swiss mod rs args bon base \
-  --grid edges \
+  --grid symmetric7 \
   --num-shards 8 \
   --merge-shards
 ```

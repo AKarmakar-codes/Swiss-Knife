@@ -92,9 +92,16 @@ def build_grid(spec: str, steps: int) -> List[Dict[str, float]]:
             seen.add(key)
             grid.append(w)
 
-    if spec == "vertices":
+    if spec in ("vertices", "v"):
         for b in HHH_BLADES:
             add({b: 1.0})
+    elif spec in ("symmetric7", "s7", "7"):
+        # 3 Vertices + 3 Pairwise Midpoints + 1 Centroid
+        for b in HHH_BLADES:
+            add({b: 1.0})
+        for a, b in itertools.combinations(HHH_BLADES, 2):
+            add({a: 0.5, b: 0.5})
+        add({b: 1.0 / 3 for b in HHH_BLADES})
     elif spec.startswith("edge:"):
         _, a, b = spec.split(":")
         for i in range(steps + 1):
@@ -262,8 +269,8 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--prompts",      default="data/hhh_eval_prompts.jsonl")
     p.add_argument("--methods",      nargs="+", default=["swiss", "mod", "rs", "args", "bon", "base"])
-    p.add_argument("--grid",         default="edges", choices=["edges", "simplex", "vertices"])
-    p.add_argument("--steps",        type=int, default=4)
+    p.add_argument("--grid",         default="symmetric7", choices=["edges", "simplex", "vertices", "symmetric7", "s7"])
+    p.add_argument("--steps",        type=int, default=2)
     p.add_argument("--max-tokens",   type=int, default=512)
     p.add_argument("--output-root",  default="runs/hhh_pareto")
     p.add_argument("--num-shards",   type=int, default=1)
