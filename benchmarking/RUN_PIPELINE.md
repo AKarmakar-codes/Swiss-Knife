@@ -23,17 +23,17 @@ conda activate myenv
 
 ## Step 1: Generate Frozen 3D HHH Prompt Set (CPU-Only)
 
-Builds the balanced dataset of 120 prompts (40 helpfulness, 40 harmlessness, 40 honesty) and saves it to `data/hhh_eval_prompts.jsonl`.
+Builds the balanced dataset of 60 prompts (20 helpfulness, 20 harmlessness, 20 honesty) and saves it to `data/hhh_eval_prompts.jsonl`.
 
 ```bash
-python benchmarking/build_hhh_dataset.py --per-axis 40 --out data/hhh_eval_prompts.jsonl
+python benchmarking/build_hhh_dataset.py --per-axis 20 --out data/hhh_eval_prompts.jsonl
 ```
 
 ---
 
 ## Step 2: Parallel 8-GPU Generation (Shards 0 to 7)
 
-Launches 8 background processes in parallel across GPUs 0 through 7. Each GPU processes 1/8th of the 120 prompts across the 13 Pareto grid points.
+Launches 8 background processes in parallel across GPUs 0 through 7. Each GPU processes 1/8th of the 60 prompts across the 7 symmetric Pareto grid points.
 
 ```bash
 mkdir -p runs/logs

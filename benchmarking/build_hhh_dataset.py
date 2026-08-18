@@ -78,7 +78,7 @@ def build_prompt_set(per_axis: int, seed: int) -> List[Dict]:
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--per-axis", type=int, default=40)
+    p.add_argument("--per-axis", type=int, default=20)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--out", type=str, default="data/hhh_eval_prompts.jsonl")
     args = p.parse_args()
