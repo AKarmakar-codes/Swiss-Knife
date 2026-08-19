@@ -23,7 +23,7 @@ def parse_args():
     p.add_argument("--output-dir", "--output", dest="output", help="Output folder for evaluation results CSVs.")
     p.add_argument("--sample-size", type=int, help="Maximum records to score per file.")
     p.add_argument("--judge-url", help="vLLM judge server URL (default http://localhost:8000/v1).")
-    p.add_argument("--judge-model", default="Qwen/Qwen2.5-32B-Instruct", help="Judge model identifier.")
+    p.add_argument("--judge-model", default="Qwen/Qwen2.5-32B-Instruct-AWQ", help="Judge model identifier.")
     p.add_argument("--no-detoxify", action="store_true", help="Skip Detoxify cross-check.")
     p.add_argument("--include-humour", action="store_true", help="Include humour rubrics in evaluation.")
     p.add_argument("--overwrite", action="store_true", help="Force clean re-evaluation, overwriting existing evaluation CSVs.")

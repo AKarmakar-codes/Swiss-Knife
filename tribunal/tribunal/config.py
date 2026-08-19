@@ -3,7 +3,7 @@ command line (see `python -m tribunal.run_eval --help`)."""
 
 CONFIG = {
     # Judge model, served via vLLM (see serve_judge.py).
-    "judge_model": "Qwen/Qwen2.5-32B-Instruct",
+    "judge_model": "Qwen/Qwen2.5-32B-Instruct-AWQ",
     "vllm_url": "http://localhost:8000/v1",
     "vllm_api_key": "EMPTY",
 
