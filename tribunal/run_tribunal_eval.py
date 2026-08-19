@@ -23,8 +23,7 @@ def parse_args():
     p.add_argument("--output-dir", "--output", dest="output", help="Output folder for evaluation results CSVs.")
     p.add_argument("--sample-size", type=int, help="Maximum records to score per file.")
     p.add_argument("--judge-url", help="vLLM judge server URL (default http://localhost:8000/v1).")
-    p.add_argument("--parallel", action="store_true", help="Enable parallel HTTP worker threads for judging.")
-    p.add_argument("--max-workers", type=int, default=4, help="Number of parallel worker threads sending requests to vLLM (default: 4).")
+    p.add_argument("--judge-model", default="Qwen/Qwen2.5-32B-Instruct", help="Judge model identifier.")
     p.add_argument("--no-detoxify", action="store_true", help="Skip Detoxify cross-check.")
     p.add_argument("--include-humour", action="store_true", help="Include humour rubrics in evaluation.")
     p.add_argument("--overwrite", action="store_true", help="Force clean re-evaluation, overwriting existing evaluation CSVs.")
@@ -49,6 +48,8 @@ def main():
         CONFIG["sample_size"] = args.sample_size
     if args.judge_url:
         CONFIG["vllm_url"] = args.judge_url
+    if args.judge_model:
+        CONFIG["judge_model"] = args.judge_model
     if args.no_detoxify:
         CONFIG["use_detoxify"] = False
     if args.include_humour:
@@ -57,8 +58,7 @@ def main():
         CONFIG["include_honesty"] = args.include_honesty
     if args.overwrite:
         CONFIG["overwrite"] = True
-    if args.parallel or args.max_workers is not None:
-        CONFIG["max_workers"] = args.max_workers if args.max_workers else 4
+    CONFIG["max_workers"] = 1
 
     pipeline.run(CONFIG)
 

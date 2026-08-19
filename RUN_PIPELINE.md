@@ -75,12 +75,12 @@ python benchmarking/benchmark_hhh_ablations.py \
 
 ---
 
-## 3. Tribunal G-Eval LLM Judging
+## 3. Tribunal G-Eval LLM Judging (Qwen 2.5 32B Judge)
 
-#### 1. Launch vLLM Judge Server
-In a separate terminal or background process, launch the judge server:
+#### 1. Launch vLLM Judge Server with Qwen 2.5 32B Instruct
+In a separate terminal or background process, launch the judge server (e.g. across 4 GPUs with tensor parallelism):
 ```bash
-vllm serve Qwen/Qwen2.5-7B-Instruct --port 8000 --tensor-parallel-size 1
+vllm serve Qwen/Qwen2.5-32B-Instruct --port 8000 --tensor-parallel-size 4
 ```
 
 #### 2. Evaluate Pareto Grid Outputs
@@ -88,8 +88,6 @@ vllm serve Qwen/Qwen2.5-7B-Instruct --port 8000 --tensor-parallel-size 1
 python tribunal/run_tribunal_eval.py \
   --input tribunal/inputs/hhh_pareto \
   --output tribunal/eval_results/hhh_pareto \
-  --parallel \
-  --max-workers 8 \
   --overwrite
 ```
 
@@ -98,8 +96,6 @@ python tribunal/run_tribunal_eval.py \
 python tribunal/run_tribunal_eval.py \
   --input tribunal/inputs/hhh_ablations \
   --output tribunal/eval_results/hhh_ablations \
-  --parallel \
-  --max-workers 8 \
   --overwrite
 ```
 
