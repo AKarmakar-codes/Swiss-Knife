@@ -25,6 +25,7 @@ Usage:
 
 import time
 import logging
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Optional, Tuple, Dict
 
@@ -79,13 +80,22 @@ class BestOfNGenerator:
         self.tokenizer = tokenizer
         self.base_model = base_model
         
-        # Build the scoring blade
-        self.blade = DPOBlade(cfg, base_model, blade_model, tokenizer)
+        # Build the scoring blades map
+        self.blades: Dict[str, DPOBlade] = {}
+        if isinstance(blade_model, dict):
+            for b_name, b_m in blade_model.items():
+                self.blades[b_name] = DPOBlade(cfg, base_model, b_m, tokenizer, blade_name=b_name)
+        elif hasattr(blade_model, "peft_config"):
+            for b_name in getattr(blade_model, "peft_config", {}):
+                self.blades[b_name] = DPOBlade(cfg, base_model, blade_model, tokenizer, blade_name=b_name)
+        if not self.blades:
+            self.blades["default"] = DPOBlade(cfg, base_model, blade_model, tokenizer)
+
         self.device = next(iter(base_model.parameters())).device
         
         logger.info(
-            "BestOfNGenerator initialized: N=%d, temp=%.2f",
-            self.cfg.gsi_n, self.cfg.temperature
+            "BestOfNGenerator initialized: N=%d, temp=%.2f, blades=%s",
+            self.cfg.gsi_n, self.cfg.temperature, list(self.blades.keys())
         )
 
     @torch.no_grad()
@@ -127,22 +137,30 @@ class BestOfNGenerator:
         if verbose:
             logger.info("BoN: Generating %d candidate responses...", n)
             
-        outputs = self.base_model.generate(
-            input_ids=batch_ids,
-            attention_mask=batch_mask,
-            max_new_tokens=max_tokens,
-            do_sample=True,
-            temperature=self.cfg.temperature,
-            top_k=self.cfg.top_k,
-            top_p=self.cfg.top_p,
-            pad_token_id=self.tokenizer.pad_token_id,
-        )
+        disable_ctx = next(iter(self.blades.values()))._disable_adapter_context() if self.blades else nullcontext()
+        with disable_ctx:
+            outputs = self.base_model.generate(
+                input_ids=batch_ids,
+                attention_mask=batch_mask,
+                max_new_tokens=max_tokens,
+                do_sample=True,
+                temperature=self.cfg.temperature,
+                top_k=self.cfg.top_k,
+                top_p=self.cfg.top_p,
+                pad_token_id=self.tokenizer.pad_token_id,
+            )
         
-        # Step 2: Score candidates using the alignment blade
+        # Step 2: Score candidates using multi-blade alignment rewards
         candidates_text = []
         candidates_ids = []
         rewards = []
         
+        # Resolve active blades and weights
+        active_blades = {}
+        if blade_coefficients:
+            active_blades = {b: float(w) for b, w in blade_coefficients.items() if float(w) > 0.0 and b in self.blades}
+        total_w = sum(active_blades.values()) if active_blades else 0.0
+
         for i in range(n):
             new_tokens = outputs[i, prefix_len:]
             
@@ -154,13 +172,17 @@ class BestOfNGenerator:
             candidates_ids.append(new_tokens)
             candidates_text.append(self.tokenizer.decode(new_tokens, skip_special_tokens=True))
             
-            # Score this candidate sequence
-            # DPOBlade.score_reasoning_steps takes a list of step sequences.
-            # For BoN, the entire response is treated as one "step".
-            r_blade = self.blade.score_reasoning_steps(
-                prefix_ids, [new_tokens]
-            )[0].item()
-            rewards.append(r_blade)
+            # Score candidate using multi-objective blade combination
+            if total_w > 0.0:
+                composite_r = 0.0
+                for b_name, b_w in active_blades.items():
+                    r_k = self.blades[b_name].score_reasoning_steps(prefix_ids, [new_tokens])[0].item()
+                    composite_r += (b_w / total_w) * r_k
+                rewards.append(composite_r)
+            else:
+                default_blade = next(iter(self.blades.values()))
+                r_blade = default_blade.score_reasoning_steps(prefix_ids, [new_tokens])[0].item()
+                rewards.append(r_blade)
             
         # Step 3: Select the candidate with the highest reward
         best_idx = rewards.index(max(rewards))

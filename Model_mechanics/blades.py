@@ -551,6 +551,9 @@ class DPOBlade:
             # Score blade first, then free its activations *before* running
             # the ref forward pass — the two [m, max_len, V] logit tensors
             # never need to be alive at the same time.
+            if isinstance(self.blade_model, PeftModel) and self.blade_name:
+                self.blade_model.set_adapter(self.blade_name)
+
             blade_logits = self.blade_model(
                 input_ids=padded_ids, attention_mask=padded_mask
             ).logits  # [m, max_len, V]

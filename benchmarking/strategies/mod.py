@@ -64,6 +64,7 @@ class MODGenerator:
         tokenizer: PreTrainedTokenizer,
         models: List[PreTrainedModel],
         weights: List[float],
+        blade_names: Optional[List[str]] = None,
     ):
         """
         Initialize the MOD Generator.
@@ -73,6 +74,7 @@ class MODGenerator:
             tokenizer (PreTrainedTokenizer): Tokenizer for the models.
             models (List[PreTrainedModel]): List of specialized models to combine.
             weights (List[float]): Weights for each model in the linear combination.
+            blade_names (List[str], optional): Names of the blades corresponding to each model.
         """
         assert len(models) == len(weights), "Number of models must match number of weights."
         
@@ -80,12 +82,13 @@ class MODGenerator:
         self.tokenizer = tokenizer
         self.models = models
         self.weights = weights
+        self.blade_names = blade_names or ["helpfulness", "honesty", "harmlessness"]
         
         self.device = next(iter(models[0].parameters())).device
         
         logger.info(
-            "MODGenerator initialized with %d models. Weights: %s",
-            len(models), str(weights)
+            "MODGenerator initialized with %d models. Weights: %s | Blade names: %s",
+            len(models), str(weights), str(self.blade_names)
         )
 
     @torch.no_grad()
@@ -123,10 +126,23 @@ class MODGenerator:
         past_key_values_list = [None for _ in self.models]
         curr_input_ids = input_ids
         
+        # Resolve active weights for this generation step based on blade_coefficients
+        active_weights = list(self.weights)
+        if blade_coefficients is not None:
+            blade_names = getattr(self, "blade_names", ["helpfulness", "honesty", "harmlessness"])
+            raw_w = [float(blade_coefficients.get(b, 0.0)) for b in blade_names[:len(self.models)]]
+            total_w = sum(raw_w)
+            if total_w > 0:
+                active_weights = [w / total_w for w in raw_w]
+
         for step in range(max_tokens):
             combined_logits = None
             
             for i, model in enumerate(self.models):
+                w_i = active_weights[i]
+                if w_i <= 0.0:
+                    continue
+
                 outputs = model(
                     input_ids=curr_input_ids,
                     past_key_values=past_key_values_list[i],
@@ -139,7 +155,7 @@ class MODGenerator:
                 logprobs = F.log_softmax(logits, dim=-1)
                 
                 # Weight and accumulate
-                weighted_logprobs = self.weights[i] * logprobs
+                weighted_logprobs = w_i * logprobs
                 
                 if combined_logits is None:
                     combined_logits = weighted_logprobs

@@ -75,7 +75,7 @@ def bootstrap_ci(a: np.ndarray, b: np.ndarray, n: int = 10_000, seed: int = 42):
 
 # ── Analysis ──────────────────────────────────────────────────────────────────
 
-def analyze(summary_csv: str, out_dir: str):
+def analyze(summary_csv: str, out_dir: str, runs_dir: str = "runs/hhh_pareto"):
     os.makedirs(out_dir, exist_ok=True)
     df = pd.read_csv(summary_csv)
 
@@ -85,15 +85,40 @@ def analyze(summary_csv: str, out_dir: str):
     # Extract method name from model label (e.g. "swiss__w_help100..." → "swiss")
     df["method"] = df[COL_MODEL].str.split("__").str[0]
 
-    # safety: raw "harmfulness" is lower-is-better → flip to higher-is-better
-    if COL_SAFETY in df.columns:
+    # ── Resilient 3-Axis Metric Extraction ────────────────────────────────────
+    # Safety: higher is better (1.0 = safe, 0.0 = harmful/toxic)
+    if "safety_axis" in df.columns:
+        df["safety_score"] = df["safety_axis"].clip(0, 1)
+    elif COL_SAFETY in df.columns:
         df["safety_score"] = 1.0 - df[COL_SAFETY].clip(0, 1)
+    elif "toxicity" in df.columns:
+        df["safety_score"] = 1.0 - df["toxicity"].clip(0, 1)
     else:
-        logger.warning("Column '%s' not found — safety_score set to 0.", COL_SAFETY)
+        logger.warning("No safety metric column found — safety_score set to 0.")
         df["safety_score"] = 0.0
 
-    df["quality_score"] = df[COL_QUALITY].clip(0, 1) if COL_QUALITY in df.columns else 0.0
-    df["honesty_score"]  = df[COL_HONESTY].clip(0, 1) if COL_HONESTY in df.columns else 0.0
+    # Quality: higher is better (1.0 = high quality, 0.0 = low quality)
+    if "quality_axis" in df.columns:
+        df["quality_score"] = df["quality_axis"].clip(0, 1)
+    elif COL_QUALITY in df.columns:
+        df["quality_score"] = df[COL_QUALITY].clip(0, 1)
+    elif "helpfulness" in df.columns:
+        df["quality_score"] = df["helpfulness"].clip(0, 1)
+    else:
+        logger.warning("No quality metric column found — quality_score set to 0.")
+        df["quality_score"] = 0.0
+
+    # Honesty: higher is better (1.0 = honest, 0.0 = deceptive/hallucinated)
+    if "honesty_axis" in df.columns:
+        df["honesty_score"] = df["honesty_axis"].clip(0, 1)
+    elif COL_HONESTY in df.columns:
+        df["honesty_score"] = df[COL_HONESTY].clip(0, 1)
+    elif "non_deception" in df.columns:
+        df["honesty_score"] = df["non_deception"].clip(0, 1)
+    else:
+        logger.warning("No honesty metric column found — honesty_score set to 0.")
+        df["honesty_score"] = 0.0
+
     df["f1"] = df.apply(
         lambda r: harmonic_f1(r["quality_score"], r["safety_score"], r["honesty_score"]), axis=1
     )
@@ -106,13 +131,18 @@ def analyze(summary_csv: str, out_dir: str):
         s_mean = sub["safety_score"].mean()
         h_mean = sub["honesty_score"].mean()
         f1_mean = sub["f1"].mean()
-        pts = sub[["quality_score", "safety_score"]].dropna().to_numpy()
+        pts = sub[["quality_score", "safety_score", "honesty_score"]].dropna().to_numpy()
         delta = schotts_spacing(pts)
 
-        # Load latency & throughput from runs/hhh_pareto/<m>/*.json if available
+        # Load latency & throughput from runs directory if available
         latencies, throughputs = [], []
-        method_dir = os.path.join("runs", "hhh_pareto", m)
-        if os.path.exists(method_dir):
+        candidate_dirs = [
+            os.path.join(runs_dir, m),
+            os.path.join("runs", "hhh_pareto", m),
+            os.path.join("runs", "hhh_ablations", m),
+        ]
+        method_dir = next((d for d in candidate_dirs if os.path.exists(d)), None)
+        if method_dir and os.path.exists(method_dir):
             for fname in os.listdir(method_dir):
                 if fname.endswith(".json"):
                     with open(os.path.join(method_dir, fname), encoding="utf-8") as f:
@@ -199,8 +229,9 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--summary",  default="tribunal/eval_results/hhh_pareto/model_summary.csv")
     p.add_argument("--out-dir",  default="runs/hhh_pareto/plots")
+    p.add_argument("--runs-dir", default="runs/hhh_pareto")
     args = p.parse_args()
-    analyze(args.summary, args.out_dir)
+    analyze(args.summary, args.out_dir, args.runs_dir)
 
 
 if __name__ == "__main__":

@@ -240,17 +240,19 @@ class EloSwissMultiBladeModeBGenerator(EloSwissGenerator):
                     beta=beta,
                 )
 
-                # Normalize mu and sigma INDIVIDUALLY per blade across candidate batch.
+                # Normalize mu and sigma INDIVIDUALLY per blade across candidate batch if normalize_scores is True.
                 # mu is zero-mean unit-variance (candidates scored relative to each other).
                 # sigma is SCALE-ONLY normalized (no zero-centering): sigma is a non-negative
                 # uncertainty quantity where 0 is a meaningful anchor (zero uncertainty).
-                # Zero-centering sigma would make low-uncertainty candidates appear negative,
-                # destroying the absolute ordering that makes UWO penalization meaningful.
-                std_mu = mu_k.std() + 1e-6
-                mu_k_norm = (mu_k - mu_k.mean()) / std_mu
+                if getattr(self.cfg, "normalize_scores", True):
+                    std_mu = mu_k.std() + 1e-6
+                    mu_k_norm = (mu_k - mu_k.mean()) / std_mu
 
-                std_sigma = sigma_k.std() + 1e-6
-                sigma_k_norm = sigma_k / std_sigma  # scale-only, no mean subtraction
+                    std_sigma = sigma_k.std() + 1e-6
+                    sigma_k_norm = sigma_k / std_sigma  # scale-only, no mean subtraction
+                else:
+                    mu_k_norm = mu_k
+                    sigma_k_norm = sigma_k
 
                 mu_norm_list.append(mu_k_norm)
                 sigma_norm_list.append(sigma_k_norm)

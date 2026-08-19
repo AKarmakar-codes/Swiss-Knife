@@ -100,6 +100,17 @@ from benchmarking.configs import get_all_configs, ARCHITECTURAL
 
 HHH_BLADES = ["helpfulness", "honesty", "harmlessness"]
 
+
+def extract_response(text: str, prompt: str) -> str:
+    """Safely extract generated response from model output, stripping prompt preambles."""
+    if text.startswith(prompt):
+        return text[len(prompt):].strip()
+    if "\n\nAssistant:" in text:
+        return text.rsplit("\n\nAssistant:", 1)[-1].strip()
+    elif "Assistant:" in text:
+        return text.rsplit("Assistant:", 1)[-1].strip()
+    return text.strip()
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("HHHAblations")
 
@@ -327,7 +338,7 @@ def main():
                     return_stats=True,
                     blade_coefficients=w,
                 )
-                resp = text[len(p["prompt"]):].strip() if text.startswith(p["prompt"]) else text.strip()
+                resp = extract_response(text, p["prompt"])
                 responses.append({
                     "id":       p["id"],
                     "axis":     p.get("axis", "unknown"),

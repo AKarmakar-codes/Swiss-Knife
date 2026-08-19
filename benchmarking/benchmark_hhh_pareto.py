@@ -62,12 +62,23 @@ from Model_mechanics.elo_swiss_multi_blade_mode_b import EloSwissMultiBladeModeB
 from benchmarking.strategies.mod import MODGenerator
 from benchmarking.strategies.args import ARGSGenerator
 from benchmarking.strategies.bon import BestOfNGenerator
-from benchmarking.configs import get_all_configs
+from benchmarking.configs import get_all_configs, ARCHITECTURAL
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 logger = logging.getLogger("HHHPareto")
 
 HHH_BLADES = ["helpfulness", "honesty", "harmlessness"]
+
+
+def extract_response(text: str, prompt: str) -> str:
+    """Safely extract generated response from model output, stripping prompt preambles."""
+    if text.startswith(prompt):
+        return text[len(prompt):].strip()
+    if "\n\nAssistant:" in text:
+        return text.rsplit("\n\nAssistant:", 1)[-1].strip()
+    elif "Assistant:" in text:
+        return text.rsplit("Assistant:", 1)[-1].strip()
+    return text.strip()
 
 
 # ── Weight Grid ───────────────────────────────────────────────────────────────
@@ -134,11 +145,23 @@ class RewardedSoupsGenerator:
         self.tok = tokenizer
         self.host = blade_host
         self.device = next(blade_host.parameters()).device
+        self._current_key = None
 
     def _mount(self, coeffs: Dict[str, float]):
         active = {k: v for k, v in coeffs.items() if v > 0.0}
+        key = tuple(sorted(active.items()))
+        expected_adapter = self._MERGED if len(active) > 1 else (next(iter(active)) if len(active) == 1 else None)
+        active_adapter = getattr(self.host, "active_adapter", None)
+        if self._current_key == key and active_adapter == expected_adapter:
+            return
+        self._current_key = key
+
         if self._MERGED in getattr(self.host, "peft_config", {}):
             self.host.delete_adapter(self._MERGED)
+        if len(active) == 0:
+            if hasattr(self.host, "set_adapter"):
+                self.host.set_adapter([])
+            return
         if len(active) == 1:
             self.host.set_adapter(next(iter(active)))
             return
@@ -177,10 +200,11 @@ class RewardedSoupsGenerator:
 class BaseGenerator:
     """Frozen SFT backbone — unsteered control."""
 
-    def __init__(self, cfg, tokenizer, model):
+    def __init__(self, cfg, tokenizer, model, blade_host: Optional[PeftModel] = None):
         self.cfg = cfg
         self.tok = tokenizer
         self.model = model
+        self.blade_host = blade_host
         self.device = next(model.parameters()).device
 
     @torch.no_grad()
@@ -188,7 +212,12 @@ class BaseGenerator:
                  return_stats: bool = False, **_):
         t0 = time.perf_counter()
         inp = self.tok(prompt, return_tensors="pt").to(self.device)
-        ctx = self.model.disable_adapter() if isinstance(self.model, PeftModel) else _NullCtx()
+        if self.blade_host is not None and hasattr(self.blade_host, "disable_adapter"):
+            ctx = self.blade_host.disable_adapter()
+        elif hasattr(self.model, "disable_adapter"):
+            ctx = self.model.disable_adapter()
+        else:
+            ctx = _NullCtx()
         with ctx:
             out = self.model.generate(**inp,
                                       max_new_tokens=max_new_tokens or self.cfg.max_new_tokens,
@@ -355,7 +384,8 @@ def main():
         blade_models = [load_blade_model(base_cfg, b) for b in HHH_BLADES]
         generators["mod"] = MODGenerator(mod_cfg, tokenizer,
                                          models=blade_models,
-                                         weights=[1/3, 1/3, 1/3])
+                                         weights=[1/3, 1/3, 1/3],
+                                         blade_names=HHH_BLADES)
 
     if "rs" in args.methods:
         rs_cfg = SwissKnifeConfig(**{**vars(base_cfg),
@@ -379,7 +409,7 @@ def main():
         generators["bon"] = BestOfNGenerator(bon_cfg, tokenizer, base_model, blade_host)
 
     if "base" in args.methods:
-        generators["base"] = BaseGenerator(base_cfg, tokenizer, base_model)
+        generators["base"] = BaseGenerator(base_cfg, tokenizer, base_model, blade_host)
 
     # ── Run benchmark ─────────────────────────────────────────────────────────
     for method in args.methods:
@@ -397,7 +427,7 @@ def main():
                                            max_new_tokens=args.max_tokens,
                                            return_stats=True,
                                            blade_coefficients=w)
-                resp = text[len(p["prompt"]):].strip() if text.startswith(p["prompt"]) else text.strip()
+                resp = extract_response(text, p["prompt"])
                 responses.append({
                     "id":       p["id"],
                     "axis":     p.get("axis", "unknown"),

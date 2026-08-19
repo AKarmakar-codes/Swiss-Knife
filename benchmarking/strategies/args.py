@@ -28,6 +28,7 @@ Usage:
 
 import time
 import logging
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Optional, Tuple, Dict
 
@@ -125,40 +126,80 @@ class ARGSGenerator:
         if verbose:
             logger.info("ARGS: Starting token-by-token generation...")
 
-        # Keep track of past key values for efficient generation
+        # Keep track of past key values for efficient generation across models/adapters
         past_key_values_base = None
-        past_key_values_blade = None
+        past_key_values_blades: Dict[str, Any] = {}
         
+        # Resolve active blade weights for multi-objective steering
+        active_blades: Dict[str, float] = {}
+        if blade_coefficients:
+            if isinstance(self.blade_model, dict):
+                avail = list(self.blade_model.keys())
+            elif hasattr(self.blade_model, "peft_config"):
+                avail = list(getattr(self.blade_model, "peft_config", {}).keys())
+            else:
+                avail = ["default"]
+
+            raw_w = {b: float(w) for b, w in blade_coefficients.items() if float(w) > 0.0 and b in avail}
+            tot_w = sum(raw_w.values())
+            if tot_w > 0:
+                active_blades = {b: w / tot_w for b, w in raw_w.items()}
+
         # Initial forward pass with full prompt
         curr_input_ids = input_ids
         
         for step in range(max_tokens):
-            # Forward pass base model
-            outputs_base = self.base_model(
-                input_ids=curr_input_ids,
-                past_key_values=past_key_values_base,
-                use_cache=True,
-            )
+            # Forward pass base model (ensuring PEFT adapters are disabled)
+            if hasattr(self.blade_model, "disable_adapter"):
+                ctx_base = self.blade_model.disable_adapter()
+            elif hasattr(self.base_model, "disable_adapter"):
+                ctx_base = self.base_model.disable_adapter()
+            else:
+                ctx_base = nullcontext()
+
+            with ctx_base:
+                outputs_base = self.base_model(
+                    input_ids=curr_input_ids,
+                    past_key_values=past_key_values_base,
+                    use_cache=True,
+                )
             past_key_values_base = outputs_base.past_key_values
             logits_base = outputs_base.logits[0, -1, :]
-            
-            # Forward pass blade model
-            outputs_blade = self.blade_model(
-                input_ids=curr_input_ids,
-                past_key_values=past_key_values_blade,
-                use_cache=True,
-            )
-            past_key_values_blade = outputs_blade.past_key_values
-            logits_blade = outputs_blade.logits[0, -1, :]
-            
-            # Convert to log probabilities to compute the reward correctly
-            # log P = log_softmax(logits)
             logprobs_base = F.log_softmax(logits_base, dim=-1)
-            logprobs_blade = F.log_softmax(logits_blade, dim=-1)
             
-            # Compute steered logits
-            # logit = log P_base + alpha * beta * (log P_blade - log P_base)
-            steered_logits = logprobs_base + steering_weight * (logprobs_blade - logprobs_base)
+            # Compute multi-blade weighted reward logprobs
+            if active_blades:
+                composite_reward_term = torch.zeros_like(logprobs_base)
+                for b_name, b_weight in active_blades.items():
+                    if isinstance(self.blade_model, dict):
+                        b_m = self.blade_model[b_name]
+                    else:
+                        b_m = self.blade_model
+                        if hasattr(b_m, "set_adapter"):
+                            b_m.set_adapter(b_name)
+
+                    outputs_b = b_m(
+                        input_ids=curr_input_ids,
+                        past_key_values=past_key_values_blades.get(b_name),
+                        use_cache=True,
+                    )
+                    past_key_values_blades[b_name] = outputs_b.past_key_values
+                    logits_b = outputs_b.logits[0, -1, :]
+                    logprobs_b = F.log_softmax(logits_b, dim=-1)
+                    composite_reward_term += b_weight * (logprobs_b - logprobs_base)
+
+                steered_logits = logprobs_base + steering_weight * composite_reward_term
+            else:
+                # Single default blade fallback
+                outputs_blade = self.blade_model(
+                    input_ids=curr_input_ids,
+                    past_key_values=past_key_values_blades.get("default"),
+                    use_cache=True,
+                )
+                past_key_values_blades["default"] = outputs_blade.past_key_values
+                logits_blade = outputs_blade.logits[0, -1, :]
+                logprobs_blade = F.log_softmax(logits_blade, dim=-1)
+                steered_logits = logprobs_base + steering_weight * (logprobs_blade - logprobs_base)
             
             # Apply temperature
             if self.cfg.temperature != 1.0 and self.cfg.temperature > 0.0:
