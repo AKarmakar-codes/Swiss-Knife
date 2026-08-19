@@ -77,10 +77,12 @@ python benchmarking/benchmark_hhh_ablations.py \
 
 ## 3. Tribunal G-Eval LLM Judging (Qwen 2.5 32B Judge)
 
-#### 1. Launch vLLM Judge Server with 4-bit Quantized Qwen 2.5 32B (AWQ)
-In a separate terminal or background process, launch the judge server (fits comfortably on 1 GPU with ~20 GB VRAM):
+#### 1. Launch 4-Bit Quantized Qwen 2.5 32B Judge Server
+In a separate terminal, launch the judge server (uses 4-bit quantization, fitting on a single 24GB GPU):
 ```bash
-vllm serve Qwen/Qwen2.5-32B-Instruct-AWQ --port 8000
+python tribunal/serve_judge.py
+# Or directly via vLLM:
+# vllm serve Qwen/Qwen2.5-32B-Instruct-AWQ --port 8000
 ```
 
 #### 2. Evaluate Pareto Grid Outputs
