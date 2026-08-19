@@ -85,7 +85,7 @@ vllm serve Qwen/Qwen2.5-32B-Instruct --port 8000 --tensor-parallel-size 4
 
 #### 2. Evaluate Pareto Grid Outputs
 ```bash
-python tribunal/run_tribunal_eval.py \
+python -m tribunal.tribunal.run_eval \
   --input tribunal/inputs/hhh_pareto \
   --output tribunal/eval_results/hhh_pareto \
   --overwrite
@@ -93,7 +93,7 @@ python tribunal/run_tribunal_eval.py \
 
 #### 3. Evaluate Ablation Suite Outputs
 ```bash
-python tribunal/run_tribunal_eval.py \
+python -m tribunal.tribunal.run_eval \
   --input tribunal/inputs/hhh_ablations \
   --output tribunal/eval_results/hhh_ablations \
   --overwrite
