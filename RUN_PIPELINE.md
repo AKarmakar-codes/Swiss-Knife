@@ -89,7 +89,8 @@ python tribunal/run_tribunal_eval.py \
   --input tribunal/inputs/hhh_pareto \
   --output tribunal/eval_results/hhh_pareto \
   --parallel \
-  --max-workers 8
+  --max-workers 8 \
+  --overwrite
 ```
 
 #### 3. Evaluate Ablation Suite Outputs
@@ -98,7 +99,8 @@ python tribunal/run_tribunal_eval.py \
   --input tribunal/inputs/hhh_ablations \
   --output tribunal/eval_results/hhh_ablations \
   --parallel \
-  --max-workers 8
+  --max-workers 8 \
+  --overwrite
 ```
 
 ---

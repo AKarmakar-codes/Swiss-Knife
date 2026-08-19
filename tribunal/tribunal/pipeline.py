@@ -101,6 +101,13 @@ def run_evaluation_single_file(
     if sample_size:
         records = records[:sample_size]
 
+    if config.get("overwrite", False) and os.path.exists(output_path):
+        try:
+            os.remove(output_path)
+            logging.info(f"Overwrite enabled: Removed previous eval file {output_path}")
+        except Exception as e:
+            logging.warning(f"Failed to remove previous eval file {output_path}: {e}")
+
     processed_ids = set()
     existing_cols = None
     file_exists = os.path.exists(output_path) and os.path.getsize(output_path) > 0

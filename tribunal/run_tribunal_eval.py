@@ -27,6 +27,7 @@ def parse_args():
     p.add_argument("--max-workers", type=int, default=4, help="Number of parallel worker threads sending requests to vLLM (default: 4).")
     p.add_argument("--no-detoxify", action="store_true", help="Skip Detoxify cross-check.")
     p.add_argument("--include-humour", action="store_true", help="Include humour rubrics in evaluation.")
+    p.add_argument("--overwrite", action="store_true", help="Force clean re-evaluation, overwriting existing evaluation CSVs.")
     
     honesty_group = p.add_mutually_exclusive_group()
     honesty_group.add_argument("--no-honesty", dest="include_honesty", action="store_false",
@@ -54,6 +55,8 @@ def main():
         CONFIG["include_humour"] = True
     if args.include_honesty is not None:
         CONFIG["include_honesty"] = args.include_honesty
+    if args.overwrite:
+        CONFIG["overwrite"] = True
     if args.parallel or args.max_workers is not None:
         CONFIG["max_workers"] = args.max_workers if args.max_workers else 4
 
