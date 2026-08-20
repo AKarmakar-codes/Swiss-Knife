@@ -143,6 +143,11 @@ class MODGenerator:
                 if w_i <= 0.0:
                     continue
 
+                if hasattr(model, "set_adapter") and self.blade_names and i < len(self.blade_names):
+                    b_name = self.blade_names[i]
+                    if hasattr(model, "peft_config") and b_name in model.peft_config:
+                        model.set_adapter(b_name)
+
                 outputs = model(
                     input_ids=curr_input_ids,
                     past_key_values=past_key_values_list[i],

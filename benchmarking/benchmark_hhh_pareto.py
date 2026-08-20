@@ -427,7 +427,7 @@ def main():
         mod_cfg = SwissKnifeConfig(**{**vars(base_cfg),
                                      "temperature": cfgs["mod"]["temperature"],
                                      "top_p":       cfgs["mod"]["top_p"]})
-        blade_models = [load_blade_model(base_cfg, b) for b in HHH_BLADES]
+        blade_models = [blade_host, blade_host, blade_host]
         generators["mod"] = MODGenerator(mod_cfg, tokenizer,
                                          models=blade_models,
                                          weights=[1/3, 1/3, 1/3],
