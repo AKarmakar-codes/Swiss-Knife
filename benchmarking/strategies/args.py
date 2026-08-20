@@ -130,20 +130,35 @@ class ARGSGenerator:
         past_key_values_base = None
         past_key_values_blades: Dict[str, Any] = {}
         
-        # Resolve active blade weights for multi-objective steering
+        # Resolve active blade weights for multi-objective steering.
+        # Available adapters are read directly from peft_config so that the
+        # adapter names never need to be hardcoded here.
         active_blades: Dict[str, float] = {}
-        if blade_coefficients:
-            if isinstance(self.blade_model, dict):
-                avail = list(self.blade_model.keys())
-            elif hasattr(self.blade_model, "peft_config"):
-                avail = list(getattr(self.blade_model, "peft_config", {}).keys())
-            else:
-                avail = ["default"]
+        if isinstance(self.blade_model, dict):
+            avail = list(self.blade_model.keys())
+        elif hasattr(self.blade_model, "peft_config"):
+            avail = [k for k in getattr(self.blade_model, "peft_config", {}).keys()]
+        else:
+            avail = []
 
+        if blade_coefficients:
             raw_w = {b: float(w) for b, w in blade_coefficients.items() if float(w) > 0.0 and b in avail}
             tot_w = sum(raw_w.values())
             if tot_w > 0:
                 active_blades = {b: w / tot_w for b, w in raw_w.items()}
+            elif avail:
+                # blade_coefficients keys did not match any registered adapter — this
+                # means the peft_config adapter names differ from the coefficient keys.
+                # Log a clear warning and fall back to equal-weight steering across
+                # all registered adapters so output is never silently unsteered.
+                logger.warning(
+                    "ARGS: blade_coefficients keys %s do not intersect registered "
+                    "adapters %s. Falling back to equal-weight steering across all "
+                    "adapters. Check that adapter_name matches blade names.",
+                    list(blade_coefficients.keys()), avail,
+                )
+                equal_w = 1.0 / len(avail)
+                active_blades = {b: equal_w for b in avail}
 
         # Initial forward pass with full prompt
         curr_input_ids = input_ids
