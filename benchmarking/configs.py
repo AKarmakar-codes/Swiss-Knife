@@ -41,7 +41,7 @@ ARCHITECTURAL = {
     "probabilistic": True,
     "normalize": True,
     "beta": 0.1,
-    "sigma_mode": "none",
+    "sigma_mode": "min_entropy",
 }
 
 # ── Swiss-Knife HHH multi-blade config ───────────────────────────────────────
