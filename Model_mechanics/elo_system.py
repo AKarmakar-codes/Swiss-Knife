@@ -48,7 +48,8 @@ def elo_bracket(
     w_blade: float = 0.0,
     uwo_lambda: float = 0.5,
     probabilistic: bool = False,
-) -> int:
+    return_details: bool = False,
+) -> int | Tuple[int, Dict[str, float]]:
     """Run an Elo rating system tournament over candidates to select a champion.
 
     Tournament mechanics (rating-based pairing + continuous Elo ratings):
@@ -305,6 +306,16 @@ def elo_bracket(
             uwo_normed = raw_blade_scores
         tournament_term = ratings_tensor - 1500.0
 
+    std_tourn = float(tournament_term.std().item()) if tournament_term.numel() > 1 else 0.0
+    std_blade = float(uwo_normed.std().item()) if uwo_normed.numel() > 1 else 0.0
+    logit_scale_ratio = round(std_tourn / (std_blade + 1e-8), 4)
+
+    diags = {
+        "tournament_term_std": round(std_tourn, 4),
+        "blade_term_std": round(std_blade, 6),
+        "logit_scale_ratio": logit_scale_ratio,
+    }
+
     if temperature < 1e-5:
         # Greedy (T→0): pick argmax of combined scores
         scores = w_tournament * tournament_term + w_blade * uwo_normed
@@ -322,7 +333,7 @@ def elo_bracket(
             temperature, champion, ratings[champion], probs[champion].item()
         )
 
-    return champion
+    return (champion, diags) if return_details else champion
 
 
 def stochastic_elo_bracket(

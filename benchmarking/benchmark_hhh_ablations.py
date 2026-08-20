@@ -11,10 +11,12 @@ Swiss-Knife achieves superior multi-objective steerability and Pareto frontier
 uniformity through three core architectural mechanisms operating during 
 decode-time Candidate-Batch Normalization (CBN) and Thurstonian Elo selection:
 
-  1. Candidate-Batch Normalization (CBN):
+  1. Candidate-Batch Normalization (CBN, normalize_scores=True):
      Normalizes candidate reward distributions (mu = 0, sigma = 1) across the 
-     candidate batch for each active blade prior to convex logit mixing. This 
-     prevents high-magnitude reward blades from dominating low-magnitude blades.
+     candidate batch for each active blade prior to convex logit mixing. Epistemic 
+     uncertainty sigma is scale-normalized (sigma / std(sigma)). This prevents 
+     high-magnitude reward blades from dominating low-magnitude blades, restoring 
+     true Pareto steerability across heterogeneous DPO reward scales.
 
   2. Thurstonian Elo Tournament Selection (w_tournament > 0):
      Runs pairwise Thurstonian Elo matches over candidate batches to construct 
@@ -31,11 +33,25 @@ Ablation Variants Evaluated:
 ----------------------------
   - `swiss_full`   : Full Swiss-Knife pipeline (CBN=On, Elo=1.1, UWO=0.2).
   - `swiss_no_cbn` : Disables Candidate-Batch Normalization (normalize_scores=False).
-                     Raw unstandardized blade rewards are summed directly.
+                     Raw unstandardized blade rewards are summed directly, causing 
+                     reward-scale imbalances between blades.
   - `swiss_no_elo` : Disables Thurstonian Elo Tournament (w_tournament=0.0).
                      Candidates are selected purely via UWO score softmax.
   - `swiss_no_uwo` : Disables Uncertainty-Weighted Objective (uwo_lambda=0.0).
                      Candidate selection ignores epistemic variance (sigma_i = 0).
+
+Automated Diagnostic Metadata Saved:
+-------------------------------------
+Every generation step automatically logs diagnostic metadata inside output JSON files:
+  - `stats`: total steps, total tokens, acceptance rate, tokens/sec, mean reward.
+  - `step_details`: step-by-step diagnostic breakdown containing:
+      * `raw_blade_mu_stds`   : raw std of reward logits per blade before CBN
+      * `raw_blade_mu_means`  : raw mean of reward logits per blade
+      * `logit_scale_ratio`   : ratio of tournament rating std to blade UWO std
+      * `tournament_term_std` : standard deviation of Elo tournament logits
+      * `blade_term_std`      : standard deviation of UWO blade logits
+      * `candidate_mus`       : per-candidate composite rewards
+      * `candidate_sigmas`    : per-candidate composite uncertainties
 
 Output Directory Structure:
 ---------------------------
@@ -95,6 +111,13 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from Model_mechanics.config import SwissKnifeConfig
+from Model_mechanics.models import (
+    load_tokenizer,
+    load_base_model,
+    load_blade_model,
+    load_drafter_model,
+    load_drafter_tokenizer,
+)
 from Model_mechanics.elo_swiss_multi_blade_mode_b import EloSwissMultiBladeModeBGenerator
 from benchmarking.configs import get_all_configs, ARCHITECTURAL
 
@@ -102,13 +125,16 @@ HHH_BLADES = ["helpfulness", "honesty", "harmlessness"]
 
 
 def extract_response(text: str, prompt: str) -> str:
-    """Safely extract generated response from model output, stripping prompt preambles."""
-    if text.startswith(prompt):
-        return text[len(prompt):].strip()
-    if "\n\nAssistant:" in text:
-        return text.rsplit("\n\nAssistant:", 1)[-1].strip()
-    elif "Assistant:" in text:
-        return text.rsplit("Assistant:", 1)[-1].strip()
+    """Safely extract generated response from model output, stripping prompt preambles and turn markers."""
+    if not text:
+        return ""
+    if prompt and text.startswith(prompt):
+        text = text[len(prompt):].strip()
+    elif prompt and prompt in text and text.index(prompt) == 0:
+        text = text.replace(prompt, "", 1).strip()
+    for marker in ["\n\nAssistant:", "Assistant:", "\n\nUser:", "User:", "\n\nHuman:", "Human:"]:
+        if marker in text:
+            text = text.rsplit(marker, 1)[-1].strip()
     return text.strip()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
@@ -281,20 +307,13 @@ def main():
     base_cfg_sample = build_ablation_config("swiss_full", cfgs, args.max_tokens, device)
 
     logger.info("Loading base tokenizer and model...")
-    tokenizer = AutoTokenizer.from_pretrained(base_cfg_sample.model_name_or_path, padding_side="left")
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-    base_model = AutoModelForCausalLM.from_pretrained(
-        base_cfg_sample.model_name_or_path,
-        torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
-        device_map="auto" if device == "cuda" else None,
-    )
+    tokenizer = load_tokenizer(base_cfg_sample)
+    base_model = load_base_model(base_cfg_sample)
 
     logger.info("Loading shared PEFT blade host...")
-    blade_host = PeftModel.from_pretrained(base_model, base_cfg_sample.helpfulness_adapter_path, adapter_name="helpfulness")
-    blade_host.load_adapter(base_cfg_sample.honesty_adapter_path,     adapter_name="honesty")
-    blade_host.load_adapter(base_cfg_sample.harmlessness_adapter_path, adapter_name="harmlessness")
+    blade_host = load_blade_model(base_cfg_sample, "helpfulness", base_model=base_model)
+    load_blade_model(base_cfg_sample, "honesty", base_model=blade_host)
+    load_blade_model(base_cfg_sample, "harmlessness", base_model=blade_host)
 
     blade_models_map = {
         "helpfulness": blade_host,
@@ -302,14 +321,9 @@ def main():
         "harmlessness": blade_host,
     }
 
-    drafter_tok = AutoTokenizer.from_pretrained(base_cfg_sample.drafter_name_or_path, padding_side="left")
-    if drafter_tok.pad_token is None:
-        drafter_tok.pad_token = drafter_tok.eos_token
-    drafter = AutoModelForCausalLM.from_pretrained(
-        base_cfg_sample.drafter_name_or_path,
-        torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
-        device_map="auto" if device == "cuda" else None,
-    )
+    logger.info("Loading drafter tokenizer and model...")
+    drafter_tok = load_drafter_tokenizer(base_cfg_sample)
+    drafter = load_drafter_model(base_cfg_sample)
 
     # ── Execute Ablation Variants ─────────────────────────────────────────────
     for variant in args.variants:

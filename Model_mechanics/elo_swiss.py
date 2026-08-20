@@ -144,7 +144,7 @@ class EloSwissStats:
         return self.total_tokens / self.total_steps
 
     def to_dict(self) -> dict:
-        return {
+        data = {
             "strategy": "elo_swiss",
             "total_steps": self.total_steps,
             "total_tokens": self.total_tokens,
@@ -157,6 +157,9 @@ class EloSwissStats:
             "total_time_s": round(self.total_time_s, 3),
             "mean_reward": round(sum(self.step_rewards) / max(len(self.step_rewards), 1), 6),
         }
+        if self.step_details:
+            data["step_details"] = self.step_details
+        return data
 
 
 # ─────────────────────────────────────────────────────────────────────────────

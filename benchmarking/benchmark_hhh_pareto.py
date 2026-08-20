@@ -4,12 +4,36 @@ benchmark_hhh_pareto.py — 3D HHH Pareto Benchmark Runner
 
 Runs multi-objective steering on the 3D HHH simplex (Helpfulness, Harmlessness,
 Honesty) across all canonical alignment strategies:
-  swiss — Swiss-Knife Multi-Blade Mode B (CBN + Thurstonian Elo, ours)
-  mod   — Multi-Objective Decoding   (Shi et al., NeurIPS 2024)
-  rs    — Rewarded Soups             (Ramé et al., NeurIPS 2023)
-  args  — Alignment as Reward-Guided Search (Shi et al., 2023)
-  bon   — Best-of-N (compute-matched to Swiss-Knife gsi_n)
-  base  — Frozen SFT backbone (frontier origin)
+  swiss        — Swiss-Knife Multi-Blade Mode B (CBN + Thurstonian Elo, ours)
+  mod          — Multi-Objective Decoding   (Shi et al., NeurIPS 2024)
+  rs           — Rewarded Soups             (Ramé et al., NeurIPS 2023)
+  args         — Alignment as Reward-Guided Search (Shi et al., 2023)
+  bon          — Best-of-N (compute-matched to Swiss-Knife gsi_n)
+  base         — Frozen SFT backbone (frontier origin)
+  swiss_no_cbn — Ablation variant: Swiss-Knife with Candidate-Batch Normalization disabled
+
+Architectural Mechanics:
+------------------------
+  - `swiss`: Applies Candidate-Batch Normalization (CBN, normalize_scores=True) by 
+    standardizing candidate reward distributions (mu = 0, sigma = 1) across the 
+    candidate batch for each active blade prior to convex logit mixing. Epistemic 
+    uncertainty sigma is scale-normalized (sigma / std(sigma)). This ensures 
+    heterogeneous DPO reward scales balance perfectly across Pareto weights.
+  - `swiss_no_cbn`: Disables Candidate-Batch Normalization (normalize_scores=False),
+    combining raw unstandardized DPO blade rewards directly.
+
+Automated Diagnostic Metadata Saved:
+-------------------------------------
+Every generation step automatically logs diagnostic metadata inside output JSON files:
+  - `stats`: total steps, total tokens, acceptance rate, tokens/sec, mean reward.
+  - `step_details`: step-by-step diagnostic breakdown containing:
+      * `raw_blade_mu_stds`   : raw std of reward logits per blade before CBN
+      * `raw_blade_mu_means`  : raw mean of reward logits per blade
+      * `logit_scale_ratio`   : ratio of tournament rating std to blade UWO std
+      * `tournament_term_std` : standard deviation of Elo tournament logits
+      * `blade_term_std`      : standard deviation of UWO blade logits
+      * `candidate_mus`       : per-candidate composite rewards
+      * `candidate_sigmas`    : per-candidate composite uncertainties
 
 All hyperparameters are read from benchmarking/configs.py.  No tuning is done
 here; configs.py is the single source of truth.
@@ -19,21 +43,18 @@ Outputs:
   tribunal/inputs/hhh_pareto/<method>__<config>.jsonl — judge-ready JSONL
 
 Usage:
-  # Build prompt set first (CPU-only, already done):
-  python benchmarking/build_hhh_dataset.py --per-axis 40
-
-  # Single-GPU run:
-  python benchmarking/benchmark_hhh_pareto.py --methods swiss mod rs args bon base --grid edges
-
-  # 8-GPU parallel:
+  # 8-GPU parallel generation across Pareto strategies:
   for i in $(seq 0 7); do
     CUDA_VISIBLE_DEVICES=$i python benchmarking/benchmark_hhh_pareto.py \
-      --methods swiss mod rs args bon base \
-      --grid edges --num-shards 8 --shard-id $i \
+      --methods swiss mod rs args bon base swiss_no_cbn \
+      --grid symmetric7 --num-shards 8 --shard-id $i \
       > runs/logs/pareto_shard_$i.log 2>&1 &
   done; wait
+
+  # Merge GPU shards into final evaluation JSONL files:
   python benchmarking/benchmark_hhh_pareto.py \
-    --methods swiss mod rs args bon base --grid edges --num-shards 8 --merge-shards
+    --methods swiss mod rs args bon base swiss_no_cbn \
+    --grid symmetric7 --num-shards 8 --merge-shards
 """
 
 import os
@@ -71,13 +92,16 @@ HHH_BLADES = ["helpfulness", "honesty", "harmlessness"]
 
 
 def extract_response(text: str, prompt: str) -> str:
-    """Safely extract generated response from model output, stripping prompt preambles."""
-    if text.startswith(prompt):
-        return text[len(prompt):].strip()
-    if "\n\nAssistant:" in text:
-        return text.rsplit("\n\nAssistant:", 1)[-1].strip()
-    elif "Assistant:" in text:
-        return text.rsplit("Assistant:", 1)[-1].strip()
+    """Safely extract generated response from model output, stripping prompt preambles and turn markers."""
+    if not text:
+        return ""
+    if prompt and text.startswith(prompt):
+        text = text[len(prompt):].strip()
+    elif prompt and prompt in text and text.index(prompt) == 0:
+        text = text.replace(prompt, "", 1).strip()
+    for marker in ["\n\nAssistant:", "Assistant:", "\n\nUser:", "User:", "\n\nHuman:", "Human:"]:
+        if marker in text:
+            text = text.rsplit(marker, 1)[-1].strip()
     return text.strip()
 
 
@@ -297,7 +321,13 @@ def merge_shards(methods, grid, num_shards, out_root, prompts_file: str = "data/
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--prompts",      default="data/hhh_eval_prompts.jsonl")
-    p.add_argument("--methods",      nargs="+", default=["swiss", "mod", "rs", "args", "bon", "base"])
+ALL_METHODS = ["swiss", "mod", "rs", "args", "bon", "base", "swiss_no_cbn"]
+
+
+def parse_args():
+    p = argparse.ArgumentParser(description="HHH Multi-Objective Alignment Pareto Benchmark")
+    p.add_argument("--prompts",      default="data/hhh_eval_prompts.jsonl")
+    p.add_argument("--methods",      nargs="+", default=ALL_METHODS, choices=ALL_METHODS)
     p.add_argument("--grid",         default="symmetric7", choices=["edges", "simplex", "vertices", "symmetric7", "s7"])
     p.add_argument("--steps",        type=int, default=2)
     p.add_argument("--max-tokens",   type=int, default=512)
@@ -351,16 +381,19 @@ def main():
     tokenizer  = load_tokenizer(base_cfg)
     base_model = load_base_model(base_cfg)
 
-    # Shared blade host (for RS, Swiss)
-    blade_host = PeftModel.from_pretrained(base_model, base_cfg.helpfulness_adapter_path,
-                                           adapter_name="helpfulness")
-    blade_host.load_adapter(base_cfg.honesty_adapter_path,     adapter_name="honesty")
-    blade_host.load_adapter(base_cfg.harmlessness_adapter_path, adapter_name="harmlessness")
+    # Shared blade host (for RS, Swiss, Swiss_no_cbn)
+    blade_host = load_blade_model(base_cfg, "helpfulness", base_model=base_model)
+    load_blade_model(base_cfg, "honesty", base_model=blade_host)
+    load_blade_model(base_cfg, "harmlessness", base_model=blade_host)
 
     # ── Build generators ──────────────────────────────────────────────────────
     generators = {}
 
-    if "swiss" in args.methods:
+    drafter = None
+    drafter_tok = None
+    blade_models_map = None
+
+    if "swiss" in args.methods or "swiss_no_cbn" in args.methods:
         drafter_tok = load_drafter_tokenizer(base_cfg)
         drafter     = load_drafter_model(base_cfg)
         blade_models_map = {
@@ -368,8 +401,21 @@ def main():
             "honesty": blade_host,
             "harmlessness": blade_host,
         }
+
+    if "swiss" in args.methods:
         generators["swiss"] = EloSwissMultiBladeModeBGenerator(
             cfg=base_cfg,
+            drafter_model=drafter,
+            drafter_tokenizer=drafter_tok,
+            verifier_model=base_model,
+            verifier_tokenizer=tokenizer,
+            blade_models=blade_models_map,
+        )
+
+    if "swiss_no_cbn" in args.methods:
+        no_cbn_cfg = SwissKnifeConfig(**{**vars(base_cfg), "normalize_scores": False})
+        generators["swiss_no_cbn"] = EloSwissMultiBladeModeBGenerator(
+            cfg=no_cbn_cfg,
             drafter_model=drafter,
             drafter_tokenizer=drafter_tok,
             verifier_model=base_model,

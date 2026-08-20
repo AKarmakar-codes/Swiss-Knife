@@ -17,12 +17,12 @@ python benchmarking/build_hhh_dataset.py --per-axis 20 --seed 42 --out data/hhh_
 
 ### Option A: 8-GPU Parallel Cluster Execution (Recommended)
 
-#### 1. Pareto Grid Generation (8 GPUs in Parallel)
+#### 1. Pareto Grid & Ablation Generation (8 GPUs in Parallel)
 ```bash
 for gpu in {0..7}; do
   CUDA_VISIBLE_DEVICES=$gpu python benchmarking/benchmark_hhh_pareto.py \
     --prompts data/hhh_eval_prompts.jsonl \
-    --methods swiss mod args bon rs base \
+    --methods swiss mod args bon rs base swiss_no_cbn \
     --grid symmetric7 \
     --max-tokens 512 \
     --num-shards 8 \
@@ -31,9 +31,13 @@ done
 wait
 ```
 
-#### 2. Merge Pareto Shards
+#### 2. Merge Shards
 ```bash
-python benchmarking/benchmark_hhh_pareto.py --merge-shards --num-shards 8
+python benchmarking/benchmark_hhh_pareto.py \
+  --methods swiss mod args bon rs base swiss_no_cbn \
+  --grid symmetric7 \
+  --num-shards 8 \
+  --merge-shards
 ```
 
 #### 3. Ablation Suite Generation (8 GPUs in Parallel)

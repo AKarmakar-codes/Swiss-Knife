@@ -56,6 +56,19 @@ logger.handlers = [file_handler, stream_handler]
 # Import prompt classification logic
 from evaluation.classify_prompts import classify_prompt, CATEGORY_LABELS, CATEGORY_ORDER
 
+def extract_response(text: str, prompt: str) -> str:
+    """Safely extract generated response from model output, stripping all prompt preambles and turn markers."""
+    if not text:
+        return ""
+    if prompt and text.startswith(prompt):
+        text = text[len(prompt):].strip()
+    elif prompt and prompt in text and text.index(prompt) == 0:
+        text = text.replace(prompt, "", 1).strip()
+    for marker in ["\n\nAssistant:", "Assistant:", "\n\nUser:", "User:", "\n\nHuman:", "Human:"]:
+        if marker in text:
+            text = text.rsplit(marker, 1)[-1].strip()
+    return text.strip()
+
 # Helper for pre-registered category summary tables
 def pre_registered_category_summary_table(
     df_merged,
@@ -64,12 +77,7 @@ def pre_registered_category_summary_table(
     baseline_name: str = "Zero",
     toxicity_col: Optional[str] = "real_toxicity"
 ):
-    category_names = {
-        "boundary_dual_use": "Boundary / Technical Dual-Use",
-        "adversarial_identity": "Adversarial & Identity Spoofing",
-        "unambiguous_harmful": "Unambiguous Harmful Requests",
-        "benign_informational": "Benign Informational Queries"
-    }
+    category_names = CATEGORY_LABELS
 
     if "category" not in df_merged.columns and "prompt" in df_merged.columns:
         df_merged["category"] = df_merged["prompt"].map(classify_prompt)
@@ -78,47 +86,61 @@ def pre_registered_category_summary_table(
         return None
 
     rows = []
-    cats = list(category_names.keys())
+    cats = CATEGORY_ORDER
     for cat in cats:
         sub = df_merged[df_merged["category"] == cat]
         if len(sub) == 0:
             continue
-        disagree_rate = (sub["disagreement_rate"].mean() * 100) if "disagreement_rate" in sub.columns else (sub["t_bt_disagreement_rate"].mean() * 100 if "t_bt_disagreement_rate" in sub.columns else 100.0)
+        disagree_val = None
+        if "disagreement_rate" in sub.columns:
+            disagree_val = sub["disagreement_rate"].mean() * 100
+        elif "t_bt_disagreement_rate" in sub.columns:
+            disagree_val = sub["t_bt_disagreement_rate"].mean() * 100
+
         mean_score = sub[score_col].mean()
         mean_base = sub[baseline_score_col].mean()
         delta_q = mean_score - mean_base
         win_rate = (sub[score_col] > sub[baseline_score_col]).mean() * 100
         tox = sub[toxicity_col].mean() if toxicity_col and toxicity_col in sub.columns else 0.0
 
-        rows.append({
+        r_dict = {
             "Category ID": cat,
-            "Category Name": category_names[cat],
+            "Category Name": category_names.get(cat, cat),
             "N": len(sub),
-            f"Disagreement Rate % (vs {baseline_name})": round(disagree_rate, 1),
             f"Sobj ({score_col})": round(mean_score, 4),
             f"ΔQ (vs {baseline_name})": round(delta_q, 4),
             f"Win % (vs {baseline_name})": round(win_rate, 1),
             "Toxicity": round(tox, 4),
-        })
+        }
+        if disagree_val is not None:
+            r_dict[f"Disagreement Rate % (vs {baseline_name})"] = round(disagree_val, 1)
+        rows.append(r_dict)
 
     if len(df_merged) > 0:
-        disagree_rate_all = (df_merged["disagreement_rate"].mean() * 100) if "disagreement_rate" in df_merged.columns else (df_merged["t_bt_disagreement_rate"].mean() * 100 if "t_bt_disagreement_rate" in df_merged.columns else 100.0)
+        disagree_val_all = None
+        if "disagreement_rate" in df_merged.columns:
+            disagree_val_all = df_merged["disagreement_rate"].mean() * 100
+        elif "t_bt_disagreement_rate" in df_merged.columns:
+            disagree_val_all = df_merged["t_bt_disagreement_rate"].mean() * 100
+
         mean_score_all = df_merged[score_col].mean()
         mean_base_all = df_merged[baseline_score_col].mean()
         delta_q_all = mean_score_all - mean_base_all
         win_rate_all = (df_merged[score_col] > df_merged[baseline_score_col]).mean() * 100
         tox_all = df_merged[toxicity_col].mean() if toxicity_col and toxicity_col in df_merged.columns else 0.0
 
-        rows.append({
+        r_dict_all = {
             "Category ID": "overall",
             "Category Name": "[OVERALL] All Categories",
             "N": len(df_merged),
-            f"Disagreement Rate % (vs {baseline_name})": round(disagree_rate_all, 1),
             f"Sobj ({score_col})": round(mean_score_all, 4),
             f"ΔQ (vs {baseline_name})": round(delta_q_all, 4),
             f"Win % (vs {baseline_name})": round(win_rate_all, 1),
             "Toxicity": round(tox_all, 4),
-        })
+        }
+        if disagree_val_all is not None:
+            r_dict_all[f"Disagreement Rate % (vs {baseline_name})"] = round(disagree_val_all, 1)
+        rows.append(r_dict_all)
 
     import pandas as pd
     return pd.DataFrame(rows)
@@ -525,6 +547,13 @@ def run_ablation_generations(
         sm_text, sm_stats = softmax_gen.generate(prompt, max_new_tokens=max_new_tokens, return_stats=True)
         logger.info("  ✓ Pass 5 finished (%d steps).", sm_stats.total_steps)
 
+        # Strip prompt preambles and turn markers cleanly
+        sk_text = extract_response(sk_text, prompt)
+        shuffled_text = extract_response(shuffled_text, prompt)
+        zero_text = extract_response(zero_text, prompt)
+        base_text = extract_response(base_text, prompt)
+        sm_text = extract_response(sm_text, prompt)
+
         # Store response records
         item_sk = {"prompt_idx": idx, "prompt": prompt, "category": category, "generated": sk_text}
         real_responses.append(item_sk)
@@ -799,13 +828,30 @@ def export_master_ablation_results(
             m = df[df["prompt_idx"] == p_idx]
             if len(m) > 0:
                 return m.iloc[0].to_dict()
+            m = df[df["prompt_idx"].astype(str) == str(p_idx)]
+            if len(m) > 0:
+                return m.iloc[0].to_dict()
         if "id" in df.columns:
             m = df[df["id"] == p_idx]
+            if len(m) > 0:
+                return m.iloc[0].to_dict()
+            m = df[df["id"].astype(str) == str(p_idx)]
             if len(m) > 0:
                 return m.iloc[0].to_dict()
         if p_idx < len(df):
             return df.iloc[p_idx].to_dict()
         return {}
+
+    def _get_val(d: Dict[str, Any], keys: List[str], default: float = 0.0) -> float:
+        if not d:
+            return default
+        for k in keys:
+            if k in d and d[k] is not None and not (isinstance(d[k], float) and math.isnan(d[k])):
+                try:
+                    return float(d[k])
+                except (ValueError, TypeError):
+                    pass
+        return default
 
     def _comp(row):
         if not row:
@@ -865,12 +911,12 @@ def export_master_ablation_results(
             "delta_q_real_vs_zero": round(c_real - c_zero, 4),
 
             # Test 1 Rubric Details
-            "test1_real_quality": round(r_real.get("response_quality", 0.0), 3),
-            "test1_real_relevance": round(r_real.get("relevance", 0.0), 3),
-            "test1_real_helpfulness": round(r_real.get("helpfulness", 0.0), 3),
-            "test1_real_toxicity": round(r_real.get("toxicity", 0.0), 3),
-            "test1_real_harmfulness": round(r_real.get("harmfulness", 0.0), 3),
-            "test1_real_refusal": round(r_real.get("refusal", 0.0), 3),
+            "test1_real_quality": round(_get_val(r_real, ["response_quality", "quality_score", "quality"]), 3),
+            "test1_real_relevance": round(_get_val(r_real, ["relevance", "relevance_score"]), 3),
+            "test1_real_helpfulness": round(_get_val(r_real, ["helpfulness", "helpfulness_score"]), 3),
+            "test1_real_toxicity": round(_get_val(r_real, ["toxicity", "toxicity_score"]), 3),
+            "test1_real_harmfulness": round(_get_val(r_real, ["harmfulness", "harmfulness_score", "safety_score"]), 3),
+            "test1_real_refusal": round(_get_val(r_real, ["refusal", "refusal_score"]), 3),
 
             # Test 2 Composite Scores & Gaps
             "test2_thurstonian_sobj": round(c_t, 4),
@@ -880,12 +926,12 @@ def export_master_ablation_results(
             "delta_q_thurstonian_vs_softmax": round(c_t - c_sm, 4),
 
             # Test 2 Rubric Details
-            "test2_thurstonian_quality": round(r_t.get("response_quality", 0.0), 3),
-            "test2_thurstonian_relevance": round(r_t.get("relevance", 0.0), 3),
-            "test2_thurstonian_helpfulness": round(r_t.get("helpfulness", 0.0), 3),
-            "test2_thurstonian_toxicity": round(r_t.get("toxicity", 0.0), 3),
-            "test2_thurstonian_harmfulness": round(r_t.get("harmfulness", 0.0), 3),
-            "test2_thurstonian_refusal": round(r_t.get("refusal", 0.0), 3),
+            "test2_thurstonian_quality": round(_get_val(r_t, ["response_quality", "quality_score", "quality"]), 3),
+            "test2_thurstonian_relevance": round(_get_val(r_t, ["relevance", "relevance_score"]), 3),
+            "test2_thurstonian_helpfulness": round(_get_val(r_t, ["helpfulness", "helpfulness_score"]), 3),
+            "test2_thurstonian_toxicity": round(_get_val(r_t, ["toxicity", "toxicity_score"]), 3),
+            "test2_thurstonian_harmfulness": round(_get_val(r_t, ["harmfulness", "harmfulness_score", "safety_score"]), 3),
+            "test2_thurstonian_refusal": round(_get_val(r_t, ["refusal", "refusal_score"]), 3),
 
             # Responses across all 5 strategies
             "response_thurstonian_real_sigma": m_row.get("response_thurstonian_real_sigma", ""),

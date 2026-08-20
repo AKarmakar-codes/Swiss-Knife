@@ -225,6 +225,8 @@ class EloSwissMultiBladeModeBGenerator(EloSwissGenerator):
             mu_norm_list = []
             sigma_norm_list = []
             active_weights = []
+            raw_blade_stds = {}
+            raw_blade_means = {}
 
             for b_name, b_weight in active_blades.items():
                 blade_obj = self.blades[b_name]
@@ -239,6 +241,9 @@ class EloSwissMultiBladeModeBGenerator(EloSwissGenerator):
                     verifier_logprobs=verifier_logprobs,
                     beta=beta,
                 )
+
+                raw_blade_stds[b_name] = float(mu_k.std().item()) if len(mu_k) > 1 else 0.0
+                raw_blade_means[b_name] = float(mu_k.mean().item()) if len(mu_k) > 0 else 0.0
 
                 # Normalize mu and sigma INDIVIDUALLY per blade across candidate batch if normalize_scores is True.
                 # mu is zero-mean unit-variance (candidates scored relative to each other).
@@ -279,7 +284,7 @@ class EloSwissMultiBladeModeBGenerator(EloSwissGenerator):
                 tilted_rewards = None
 
             # ── Step 2: Elo tournament via elo_bracket ───────────────────────
-            selected_idx = elo_bracket(
+            selected_idx, elo_diags = elo_bracket(
                 draft_logprobs,
                 blade_rewards,
                 alpha,
@@ -294,6 +299,7 @@ class EloSwissMultiBladeModeBGenerator(EloSwissGenerator):
                 w_blade=w_blade,
                 uwo_lambda=uwo_lambda,
                 probabilistic=is_probabilistic,
+                return_details=True,
             )
 
             selected_reward = blade_rewards[selected_idx].item()
@@ -339,6 +345,12 @@ class EloSwissMultiBladeModeBGenerator(EloSwissGenerator):
                 "step": stats.total_steps,
                 "candidate_mus": [round(x, 6) for x in blade_rewards.tolist()],
                 "candidate_sigmas": [round(x, 6) for x in sigma_composite.tolist()],
+                "raw_blade_mu_stds": {k: round(v, 6) for k, v in raw_blade_stds.items()},
+                "raw_blade_mu_means": {k: round(v, 6) for k, v in raw_blade_means.items()},
+                "blade_coefficients": {k: float(v) for k, v in active_blades.items()},
+                "tournament_term_std": elo_diags.get("tournament_term_std", 0.0),
+                "blade_term_std": elo_diags.get("blade_term_std", 0.0),
+                "logit_scale_ratio": elo_diags.get("logit_scale_ratio", 1.0),
                 "mean_mu": round(float(blade_rewards.mean().item()), 6),
                 "max_mu": round(float(blade_rewards.max().item()), 6),
                 "delta_mu": round(delta_mu_val, 6),
