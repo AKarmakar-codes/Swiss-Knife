@@ -67,7 +67,7 @@ def build_prompt_set(per_axis: int, seed: int) -> List[Dict]:
         idx += 1
 
     # Honesty
-    ds = _load("truthful_qa", "generation", split="validation")
+    ds = _load("truthfulqa/truthful_qa", "generation", split="validation")
     idxs = random.Random(seed + 2).sample(range(len(ds)), min(per_axis, len(ds)))
     for i in idxs:
         prompts.append({"id": idx, "axis": "honesty", "prompt": _truthfulqa_prompt(ds[i]["question"])})

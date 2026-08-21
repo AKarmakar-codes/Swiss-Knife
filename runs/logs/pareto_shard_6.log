@@ -1,0 +1,179 @@
+2026-08-20 12:58:15,488 | INFO | HHHPareto | Methods: ['swiss', 'mod', 'rs', 'args', 'bon', 'base', 'swiss_no_cbn'] | Grid: symmetric7 (7 configs) | Shard 7/8
+2026-08-20 12:58:15,488 | INFO | HHHPareto | Evaluating 7 prompts (shard 7/8)
+2026-08-20 12:58:15,488 | INFO | Model_mechanics.models | Downloading base model from dataset repo: divyajot5005/ndna / SFT/Qwen_SFT_merged
+2026-08-20 12:58:15,755 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/revision/main "HTTP/1.1 200 OK"
+2026-08-20 12:58:15,998 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-08-20 12:58:16,245 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D "HTTP/1.1 200 OK"
+Fetching ... files: 0it [00:00, ?it/s]Fetching ... files: 14it [00:00, 131955.63it/s]
+2026-08-20 12:58:16,273 | INFO | Model_mechanics.models | Base model cached at: /root/.cache/huggingface/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+2026-08-20 12:58:16,274 | INFO | Model_mechanics.models | Loading tokenizer from: /root/.cache/huggingface/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged
+2026-08-20 12:58:17,142 | INFO | Model_mechanics.models | Loading base model (draft + ref): /root/.cache/huggingface/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/Qwen_SFT_merged  [dtype=torch.bfloat16, device=cuda]
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/339 [00:00<?, ?it/s]Loading weights:   0%|          | 1/339 [00:02<15:23,  2.73s/it]Loading weights:   5%|▍         | 16/339 [00:03<00:44,  7.20it/s]Loading weights:   6%|▌         | 20/339 [00:03<00:37,  8.59it/s]Loading weights:   8%|▊         | 28/339 [00:03<00:28, 10.82it/s]Loading weights:   9%|▉         | 31/339 [00:03<00:25, 12.10it/s]Loading weights:  12%|█▏        | 40/339 [00:04<00:17, 17.50it/s]Loading weights:  13%|█▎        | 43/339 [00:04<00:19, 15.33it/s]Loading weights:  15%|█▌        | 52/339 [00:04<00:16, 17.57it/s]Loading weights:  16%|█▌        | 55/339 [00:04<00:15, 18.57it/s]Loading weights:  19%|█▉        | 64/339 [00:05<00:15, 18.30it/s]Loading weights:  20%|█▉        | 67/339 [00:05<00:15, 17.85it/s]Loading weights:  22%|██▏       | 76/339 [00:06<00:14, 18.58it/s]Loading weights:  23%|██▎       | 78/339 [00:06<00:14, 18.17it/s]Loading weights:  26%|██▌       | 88/339 [00:06<00:11, 21.27it/s]Loading weights:  27%|██▋       | 91/339 [00:06<00:12, 20.61it/s]Loading weights:  29%|██▉       | 100/339 [00:06<00:09, 24.75it/s]Loading weights:  30%|███       | 103/339 [00:07<00:12, 19.27it/s]Loading weights:  32%|███▏      | 108/339 [00:07<00:11, 20.16it/s]Loading weights:  33%|███▎      | 112/339 [00:07<00:11, 19.96it/s]Loading weights:  34%|███▍      | 115/339 [00:07<00:12, 17.72it/s]Loading weights:  37%|███▋      | 124/339 [00:08<00:12, 17.41it/s]Loading weights:  40%|████      | 136/339 [00:08<00:09, 22.22it/s]Loading weights:  41%|████      | 139/339 [00:09<00:10, 19.11it/s]Loading weights:  44%|████▎     | 148/339 [00:09<00:08, 22.72it/s]Loading weights:  45%|████▍     | 151/339 [00:09<00:10, 17.13it/s]Loading weights:  47%|████▋     | 160/339 [00:10<00:07, 22.38it/s]Loading weights:  48%|████▊     | 163/339 [00:10<00:09, 18.51it/s]Loading weights:  51%|█████     | 172/339 [00:10<00:07, 22.74it/s]Loading weights:  52%|█████▏    | 175/339 [00:11<00:11, 13.82it/s]Loading weights:  54%|█████▍    | 184/339 [00:11<00:08, 17.60it/s]Loading weights:  55%|█████▌    | 187/339 [00:11<00:10, 15.18it/s]Loading weights:  58%|█████▊    | 196/339 [00:12<00:08, 16.04it/s]Loading weights:  61%|██████▏   | 208/339 [00:12<00:06, 21.06it/s]Loading weights:  62%|██████▏   | 211/339 [00:13<00:06, 18.44it/s]Loading weights:  65%|██████▍   | 220/339 [00:13<00:06, 17.59it/s]Loading weights:  68%|██████▊   | 232/339 [00:13<00:04, 23.13it/s]Loading weights:  69%|██████▉   | 235/339 [00:14<00:04, 21.31it/s]Loading weights:  72%|███████▏  | 244/339 [00:14<00:03, 25.34it/s]Loading weights:  73%|███████▎  | 247/339 [00:14<00:04, 22.20it/s]Loading weights:  76%|███████▌  | 256/339 [00:14<00:03, 26.59it/s]Loading weights:  76%|███████▋  | 259/339 [00:15<00:03, 23.08it/s]Loading weights:  79%|███████▉  | 268/339 [00:15<00:02, 26.76it/s]Loading weights:  80%|███████▉  | 271/339 [00:15<00:02, 24.03it/s]Loading weights:  83%|████████▎ | 280/339 [00:15<00:02, 25.30it/s]Loading weights:  83%|████████▎ | 283/339 [00:16<00:02, 23.33it/s]Loading weights:  86%|████████▌ | 292/339 [00:16<00:01, 31.39it/s]Loading weights:  87%|████████▋ | 296/339 [00:16<00:01, 29.80it/s]Loading weights:  90%|████████▉ | 304/339 [00:16<00:01, 24.73it/s]Loading weights:  93%|█████████▎| 316/339 [00:17<00:00, 27.51it/s]Loading weights:  94%|█████████▍| 319/339 [00:17<00:00, 25.36it/s]Loading weights:  97%|█████████▋| 328/339 [00:17<00:00, 24.98it/s]Loading weights: 100%|██████████| 339/339 [00:17<00:00, 19.10it/s]
+2026-08-20 12:58:37,337 | INFO | Model_mechanics.models | Base model loaded and frozen. Params: 7,615,616,512
+2026-08-20 12:58:37,338 | INFO | Model_mechanics.models | Using shared base model for blade 'helpfulness' [device=cuda]...
+2026-08-20 12:58:37,338 | INFO | Model_mechanics.models | Attaching LoRA adapter from model repo MGPGRAD/Swiss-Knife / dpo_out/hh_helpfulness/final_adapter ...
+2026-08-20 12:58:37,622 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-08-20 12:58:37,626 | WARNING | huggingface_hub.utils._http | Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-08-20 12:58:37,639 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/MGPGRAD/Swiss-Knife/46005ae68cad67650a494a7ab2507bf733545f13/dpo_out%2Fhh_helpfulness%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+2026-08-20 12:58:37,867 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-20 12:58:37,880 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/MGPGRAD/Swiss-Knife/46005ae68cad67650a494a7ab2507bf733545f13/dpo_out%2Fhh_helpfulness%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+2026-08-20 12:59:00,180 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+2026-08-20 12:59:00,394 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/MGPGRAD/Swiss-Knife/resolve/main/dpo_out/hh_helpfulness/final_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+2026-08-20 12:59:00,774 | INFO | Model_mechanics.models | Blade 'helpfulness' loaded. LoRA params: 40,370,176
+2026-08-20 12:59:00,775 | INFO | Model_mechanics.models | Using shared base model for blade 'honesty' [device=cuda]...
+2026-08-20 12:59:00,775 | INFO | Model_mechanics.models | Attaching LoRA adapter from model repo ShreyashDhoot/honesty_blade / dpo_out/honesty/final_adapter ...
+2026-08-20 12:59:00,982 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/ShreyashDhoot/honesty_blade/resolve/main/dpo_out/honesty/final_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-20 12:59:00,991 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/ShreyashDhoot/honesty_blade/c54cb58f82e5c1dcbe9d8a1367b0c3977d30d7f4/dpo_out%2Fhonesty%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+2026-08-20 12:59:01,228 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/ShreyashDhoot/honesty_blade/resolve/main/dpo_out/honesty/final_adapter/adapter_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-20 12:59:01,240 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/ShreyashDhoot/honesty_blade/c54cb58f82e5c1dcbe9d8a1367b0c3977d30d7f4/dpo_out%2Fhonesty%2Ffinal_adapter%2Fadapter_config.json "HTTP/1.1 200 OK"
+2026-08-20 12:59:18,327 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/ShreyashDhoot/honesty_blade/resolve/main/dpo_out/honesty/final_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+2026-08-20 12:59:18,538 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/ShreyashDhoot/honesty_blade/resolve/main/dpo_out/honesty/final_adapter/adapter_model.safetensors "HTTP/1.1 302 Found"
+2026-08-20 12:59:18,788 | INFO | Model_mechanics.models | Blade 'honesty' loaded. LoRA params: 80,740,352
+2026-08-20 12:59:18,788 | INFO | Model_mechanics.models | Using shared base model for blade 'harmlessness' [device=cuda]...
+2026-08-20 12:59:18,788 | INFO | Model_mechanics.models | Downloading dataset-hosted adapter divyajot5005/ndna / SFT/qwen25_dpo_output/final_dpo_adapter ...
+2026-08-20 12:59:19,019 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/revision/main "HTTP/1.1 200 OK"
+2026-08-20 12:59:19,282 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-08-20 12:59:19,556 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/datasets/divyajot5005/ndna/tree/main?expand=false&recursive=true&limit=1000&cursor=ZXlKbWFXeGxYMjVoYldVaU9pSnVaRzVoWDNCeVlXZDVZUzlqYjJ4c1lYQnpaVjl5ZFc1elgyMTFiSFJwTDJSbFpYQnpaV1ZyWDJ4c2JWOXlNVjlpWVhObEwyVjRjREV0TlRBd0xXUmxaWEJ6WldWclgySmhjMlV0WTNKdmMzTXZaMlZ1Tmk5dFpYUnlhV056TDNOd1pXTjBjbUZzWDJOMWNuWmhkSFZ5WlM1cWMyOXVJaXdpZEhKbFpWOXZhV1FpT2lKaFlUWmxZbU0wWm1aalltRXdNVGN6TkdVNVlqUTRZakk0T1RSaE5UTTJOR1ZpTXpWaVlqWmxJbjA9OjEwMDA%3D "HTTP/1.1 200 OK"
+Fetching ... files: 0it [00:00, ?it/s]Fetching ... files: 11it [00:00, 79822.39it/s]
+2026-08-20 12:59:19,568 | INFO | Model_mechanics.models | Attaching LoRA adapter from local path: /root/.cache/huggingface/hub/datasets--divyajot5005--ndna/snapshots/ef5534a2722c506a58218aff170efbc405093efe/SFT/qwen25_dpo_output/final_dpo_adapter
+2026-08-20 12:59:30,142 | INFO | Model_mechanics.models | Blade 'harmlessness' loaded. LoRA params: 121,110,528
+2026-08-20 12:59:30,142 | INFO | Model_mechanics.models | Loading drafter tokenizer from: Qwen/Qwen2.5-3B-Instruct
+2026-08-20 12:59:30,384 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-20 12:59:30,393 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-3B-Instruct/aa8e72537993ba99e69dfaafa59ed015b17504d1/config.json "HTTP/1.1 200 OK"
+2026-08-20 12:59:30,604 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-20 12:59:30,614 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-3B-Instruct/aa8e72537993ba99e69dfaafa59ed015b17504d1/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-08-20 12:59:30,821 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen2.5-3B-Instruct/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-08-20 12:59:31,031 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen2.5-3B-Instruct/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-08-20 12:59:31,712 | INFO | httpx | HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen2.5-3B-Instruct "HTTP/1.1 200 OK"
+2026-08-20 12:59:31,715 | INFO | Model_mechanics.models | Loading drafter model: Qwen/Qwen2.5-3B-Instruct  [dtype=torch.bfloat16, device=cuda]
+2026-08-20 12:59:31,921 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-20 12:59:31,931 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-3B-Instruct/aa8e72537993ba99e69dfaafa59ed015b17504d1/config.json "HTTP/1.1 200 OK"
+2026-08-20 12:59:32,138 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-20 12:59:32,148 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-3B-Instruct/aa8e72537993ba99e69dfaafa59ed015b17504d1/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/434 [00:00<?, ?it/s]Loading weights:   0%|          | 1/434 [00:00<00:57,  7.48it/s]Loading weights:   4%|▍         | 17/434 [00:00<00:05, 81.07it/s]Loading weights:   9%|▉         | 40/434 [00:00<00:02, 132.69it/s]Loading weights:  13%|█▎        | 57/434 [00:00<00:02, 144.74it/s]Loading weights:  17%|█▋        | 72/434 [00:00<00:02, 144.52it/s]Loading weights:  20%|██        | 87/434 [00:00<00:02, 137.98it/s]Loading weights:  26%|██▌       | 111/434 [00:00<00:01, 163.29it/s]Loading weights:  29%|██▉       | 128/434 [00:00<00:01, 154.87it/s]Loading weights:  34%|███▍      | 147/434 [00:01<00:01, 163.18it/s]Loading weights:  38%|███▊      | 164/434 [00:01<00:01, 156.15it/s]Loading weights:  42%|████▏     | 182/434 [00:01<00:01, 152.35it/s]Loading weights:  46%|████▋     | 201/434 [00:01<00:01, 162.22it/s]Loading weights:  50%|█████     | 219/434 [00:01<00:01, 165.90it/s]Loading weights:  54%|█████▍    | 236/434 [00:01<00:01, 156.79it/s]Loading weights:  59%|█████▉    | 255/434 [00:01<00:01, 158.32it/s]Loading weights:  62%|██████▏   | 271/434 [00:01<00:01, 148.63it/s]Loading weights:  67%|██████▋   | 291/434 [00:01<00:00, 156.68it/s]Loading weights:  71%|███████   | 307/434 [00:02<00:00, 150.88it/s]Loading weights:  75%|███████▌  | 327/434 [00:02<00:00, 160.40it/s]Loading weights:  79%|███████▉  | 344/434 [00:02<00:00, 151.95it/s]Loading weights:  83%|████████▎ | 362/434 [00:02<00:00, 157.26it/s]Loading weights:  87%|████████▋ | 378/434 [00:02<00:00, 150.45it/s]Loading weights:  92%|█████████▏| 399/434 [00:02<00:00, 154.19it/s]Loading weights:  96%|█████████▌| 417/434 [00:02<00:00, 159.74it/s]Loading weights: 100%|██████████| 434/434 [00:02<00:00, 152.83it/s]
+2026-08-20 12:59:35,509 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-08-20 12:59:35,522 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-3B-Instruct/aa8e72537993ba99e69dfaafa59ed015b17504d1/generation_config.json "HTTP/1.1 200 OK"
+2026-08-20 12:59:35,732 | INFO | httpx | HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/resolve/main/custom_generate/generate.py "HTTP/1.1 404 Not Found"
+2026-08-20 12:59:35,740 | INFO | Model_mechanics.elo_swiss | EloSwissGenerator initialized: n=7, α=0.50, β=0.100, elo_rounds=5, elo_temp=8.000, threshold=0.000, sigma_mode=min_entropy, probabilistic=True
+2026-08-20 12:59:35,740 | INFO | Model_mechanics.elo_swiss | EloSwissGenerator initialized: n=7, α=0.50, β=0.100, elo_rounds=5, elo_temp=8.000, threshold=0.000, sigma_mode=min_entropy, probabilistic=True
+2026-08-20 12:59:35,741 | INFO | benchmarking.strategies.mod | MODGenerator initialized with 3 models. Weights: [0.3333333333333333, 0.3333333333333333, 0.3333333333333333] | Blade names: ['helpfulness', 'honesty', 'harmlessness']
+2026-08-20 12:59:35,741 | INFO | benchmarking.strategies.args | ARGSGenerator initialized: alpha (steering)=0.10, dpo_beta=0.10
+2026-08-20 12:59:35,741 | INFO | benchmarking.strategies.bon | BestOfNGenerator initialized: N=7, temp=1.00, blades=['helpfulness', 'honesty', 'harmlessness']
+2026-08-20 12:59:35,741 | INFO | HHHPareto | [swiss] config w_help100_hone000_harm000 ...
+2026-08-20 13:38:09,502 | INFO | HHHPareto | [swiss] w_help100_hone000_harm000 → 7 responses written
+2026-08-20 13:38:09,503 | INFO | HHHPareto | [swiss] config w_help000_hone100_harm000 ...
+2026-08-20 14:10:43,329 | INFO | HHHPareto | [swiss] w_help000_hone100_harm000 → 7 responses written
+2026-08-20 14:10:43,329 | INFO | HHHPareto | [swiss] config w_help000_hone000_harm100 ...
+/LAB/Swiss-Knife/benchmarking/../Model_mechanics/elo_swiss_multi_blade_mode_b.py:253: UserWarning: std(): degrees of freedom is <= 0. Correction should be strictly less than the reduction factor (input numel divided by output numel). (Triggered internally at /pytorch/aten/src/ATen/native/ReduceOps.cpp:1858.)
+  std_mu = mu_k.std() + 1e-6
+/LAB/Swiss-Knife/benchmarking/../Model_mechanics/elo_swiss_multi_blade_mode_b.py:256: UserWarning: std(): degrees of freedom is <= 0. Correction should be strictly less than the reduction factor (input numel divided by output numel). (Triggered internally at /pytorch/aten/src/ATen/native/ReduceOps.cpp:1858.)
+  std_sigma = sigma_k.std() + 1e-6
+2026-08-20 14:48:33,399 | INFO | HHHPareto | [swiss] w_help000_hone000_harm100 → 7 responses written
+2026-08-20 14:48:33,400 | INFO | HHHPareto | [swiss] config w_help050_hone050_harm000 ...
+2026-08-20 15:12:56,923 | INFO | Model_mechanics.elo_swiss_multi_blade_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-20 15:24:43,072 | INFO | HHHPareto | [swiss] w_help050_hone050_harm000 → 7 responses written
+2026-08-20 15:24:43,072 | INFO | HHHPareto | [swiss] config w_help050_hone000_harm050 ...
+2026-08-20 15:29:50,554 | INFO | Model_mechanics.elo_swiss_multi_blade_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-20 15:51:19,183 | INFO | HHHPareto | [swiss] w_help050_hone000_harm050 → 7 responses written
+2026-08-20 15:51:19,183 | INFO | HHHPareto | [swiss] config w_help000_hone050_harm050 ...
+2026-08-20 16:05:09,866 | INFO | Model_mechanics.elo_swiss_multi_blade_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-20 16:25:36,117 | INFO | HHHPareto | [swiss] w_help000_hone050_harm050 → 7 responses written
+2026-08-20 16:25:36,118 | INFO | HHHPareto | [swiss] config w_help033_hone033_harm033 ...
+2026-08-20 17:00:10,639 | INFO | HHHPareto | [swiss] w_help033_hone033_harm033 → 7 responses written
+2026-08-20 17:00:10,639 | INFO | HHHPareto | [mod] config w_help100_hone000_harm000 ...
+2026-08-20 17:05:25,773 | INFO | HHHPareto | [mod] w_help100_hone000_harm000 → 7 responses written
+2026-08-20 17:05:25,773 | INFO | HHHPareto | [mod] config w_help000_hone100_harm000 ...
+2026-08-20 17:10:40,514 | INFO | HHHPareto | [mod] w_help000_hone100_harm000 → 7 responses written
+2026-08-20 17:10:40,514 | INFO | HHHPareto | [mod] config w_help000_hone000_harm100 ...
+2026-08-20 17:15:55,311 | INFO | HHHPareto | [mod] w_help000_hone000_harm100 → 7 responses written
+2026-08-20 17:15:55,311 | INFO | HHHPareto | [mod] config w_help050_hone050_harm000 ...
+2026-08-20 17:26:20,228 | INFO | HHHPareto | [mod] w_help050_hone050_harm000 → 7 responses written
+2026-08-20 17:26:20,228 | INFO | HHHPareto | [mod] config w_help050_hone000_harm050 ...
+2026-08-20 17:36:46,136 | INFO | HHHPareto | [mod] w_help050_hone000_harm050 → 7 responses written
+2026-08-20 17:36:46,136 | INFO | HHHPareto | [mod] config w_help000_hone050_harm050 ...
+2026-08-20 17:47:13,131 | INFO | HHHPareto | [mod] w_help000_hone050_harm050 → 7 responses written
+2026-08-20 17:47:13,132 | INFO | HHHPareto | [mod] config w_help033_hone033_harm033 ...
+2026-08-20 18:02:48,561 | INFO | HHHPareto | [mod] w_help033_hone033_harm033 → 7 responses written
+2026-08-20 18:02:48,561 | INFO | HHHPareto | [rs] config w_help100_hone000_harm000 ...
+2026-08-20 18:05:07,111 | INFO | HHHPareto | [rs] w_help100_hone000_harm000 → 7 responses written
+2026-08-20 18:05:07,111 | INFO | HHHPareto | [rs] config w_help000_hone100_harm000 ...
+2026-08-20 18:08:08,203 | INFO | HHHPareto | [rs] w_help000_hone100_harm000 → 7 responses written
+2026-08-20 18:08:08,203 | INFO | HHHPareto | [rs] config w_help000_hone000_harm100 ...
+2026-08-20 18:11:24,163 | INFO | HHHPareto | [rs] w_help000_hone000_harm100 → 7 responses written
+2026-08-20 18:11:24,163 | INFO | HHHPareto | [rs] config w_help050_hone050_harm000 ...
+2026-08-20 18:13:13,311 | INFO | HHHPareto | [rs] w_help050_hone050_harm000 → 7 responses written
+2026-08-20 18:13:13,312 | INFO | HHHPareto | [rs] config w_help050_hone000_harm050 ...
+/LAB/swiss-knife/lib/python3.12/site-packages/peft/tuners/tuners_utils.py:1596: UserWarning: Adapter _rs_merged was active which is now deleted. Setting active adapter to harmlessness.
+  warnings.warn(
+2026-08-20 18:14:24,548 | INFO | HHHPareto | [rs] w_help050_hone000_harm050 → 7 responses written
+2026-08-20 18:14:24,548 | INFO | HHHPareto | [rs] config w_help000_hone050_harm050 ...
+2026-08-20 18:18:10,237 | INFO | HHHPareto | [rs] w_help000_hone050_harm050 → 7 responses written
+2026-08-20 18:18:10,237 | INFO | HHHPareto | [rs] config w_help033_hone033_harm033 ...
+2026-08-20 18:20:46,173 | INFO | HHHPareto | [rs] w_help033_hone033_harm033 → 7 responses written
+2026-08-20 18:20:46,173 | INFO | HHHPareto | [args] config w_help100_hone000_harm000 ...
+2026-08-20 18:32:42,058 | INFO | HHHPareto | [args] w_help100_hone000_harm000 → 7 responses written
+2026-08-20 18:32:42,058 | INFO | HHHPareto | [args] config w_help000_hone100_harm000 ...
+2026-08-20 18:44:36,788 | INFO | HHHPareto | [args] w_help000_hone100_harm000 → 7 responses written
+2026-08-20 18:44:36,789 | INFO | HHHPareto | [args] config w_help000_hone000_harm100 ...
+2026-08-20 18:58:18,654 | INFO | HHHPareto | [args] w_help000_hone000_harm100 → 7 responses written
+2026-08-20 18:58:18,654 | INFO | HHHPareto | [args] config w_help050_hone050_harm000 ...
+2026-08-20 19:18:56,647 | INFO | HHHPareto | [args] w_help050_hone050_harm000 → 7 responses written
+2026-08-20 19:18:56,648 | INFO | HHHPareto | [args] config w_help050_hone000_harm050 ...
+2026-08-20 19:39:37,687 | INFO | HHHPareto | [args] w_help050_hone000_harm050 → 7 responses written
+2026-08-20 19:39:37,687 | INFO | HHHPareto | [args] config w_help000_hone050_harm050 ...
+2026-08-20 20:00:16,392 | INFO | HHHPareto | [args] w_help000_hone050_harm050 → 7 responses written
+2026-08-20 20:00:16,392 | INFO | HHHPareto | [args] config w_help033_hone033_harm033 ...
+2026-08-20 20:27:28,192 | INFO | HHHPareto | [args] w_help033_hone033_harm033 → 7 responses written
+2026-08-20 20:27:28,192 | INFO | HHHPareto | [bon] config w_help100_hone000_harm000 ...
+2026-08-20 20:30:39,089 | INFO | HHHPareto | [bon] w_help100_hone000_harm000 → 7 responses written
+2026-08-20 20:30:39,089 | INFO | HHHPareto | [bon] config w_help000_hone100_harm000 ...
+2026-08-20 20:33:49,831 | INFO | HHHPareto | [bon] w_help000_hone100_harm000 → 7 responses written
+2026-08-20 20:33:49,831 | INFO | HHHPareto | [bon] config w_help000_hone000_harm100 ...
+2026-08-20 20:37:00,629 | INFO | HHHPareto | [bon] w_help000_hone000_harm100 → 7 responses written
+2026-08-20 20:37:00,629 | INFO | HHHPareto | [bon] config w_help050_hone050_harm000 ...
+2026-08-20 20:40:19,655 | INFO | HHHPareto | [bon] w_help050_hone050_harm000 → 7 responses written
+2026-08-20 20:40:19,656 | INFO | HHHPareto | [bon] config w_help050_hone000_harm050 ...
+2026-08-20 20:43:41,439 | INFO | HHHPareto | [bon] w_help050_hone000_harm050 → 7 responses written
+2026-08-20 20:43:41,439 | INFO | HHHPareto | [bon] config w_help000_hone050_harm050 ...
+2026-08-20 20:47:08,645 | INFO | HHHPareto | [bon] w_help000_hone050_harm050 → 7 responses written
+2026-08-20 20:47:08,645 | INFO | HHHPareto | [bon] config w_help033_hone033_harm033 ...
+2026-08-20 20:50:39,720 | INFO | HHHPareto | [bon] w_help033_hone033_harm033 → 7 responses written
+2026-08-20 20:50:39,720 | INFO | HHHPareto | [base] config w_help100_hone000_harm000 ...
+2026-08-20 20:52:39,044 | INFO | HHHPareto | [base] w_help100_hone000_harm000 → 7 responses written
+2026-08-20 20:52:39,044 | INFO | HHHPareto | [base] config w_help000_hone100_harm000 ...
+2026-08-20 20:53:22,539 | INFO | HHHPareto | [base] w_help000_hone100_harm000 → 7 responses written
+2026-08-20 20:53:22,540 | INFO | HHHPareto | [base] config w_help000_hone000_harm100 ...
+2026-08-20 20:55:11,202 | INFO | HHHPareto | [base] w_help000_hone000_harm100 → 7 responses written
+2026-08-20 20:55:11,202 | INFO | HHHPareto | [base] config w_help050_hone050_harm000 ...
+2026-08-20 20:57:10,573 | INFO | HHHPareto | [base] w_help050_hone050_harm000 → 7 responses written
+2026-08-20 20:57:10,573 | INFO | HHHPareto | [base] config w_help050_hone000_harm050 ...
+2026-08-20 20:58:39,172 | INFO | HHHPareto | [base] w_help050_hone000_harm050 → 7 responses written
+2026-08-20 20:58:39,172 | INFO | HHHPareto | [base] config w_help000_hone050_harm050 ...
+2026-08-20 21:00:10,788 | INFO | HHHPareto | [base] w_help000_hone050_harm050 → 7 responses written
+2026-08-20 21:00:10,788 | INFO | HHHPareto | [base] config w_help033_hone033_harm033 ...
+2026-08-20 21:02:07,911 | INFO | HHHPareto | [base] w_help033_hone033_harm033 → 7 responses written
+2026-08-20 21:02:07,911 | INFO | HHHPareto | [swiss_no_cbn] config w_help100_hone000_harm000 ...
+2026-08-20 21:11:21,196 | INFO | Model_mechanics.elo_swiss_multi_blade_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-20 21:50:38,309 | INFO | HHHPareto | [swiss_no_cbn] w_help100_hone000_harm000 → 7 responses written
+2026-08-20 21:50:38,310 | INFO | HHHPareto | [swiss_no_cbn] config w_help000_hone100_harm000 ...
+2026-08-20 22:02:21,746 | INFO | Model_mechanics.elo_swiss_multi_blade_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-20 22:41:32,085 | INFO | HHHPareto | [swiss_no_cbn] w_help000_hone100_harm000 → 7 responses written
+2026-08-20 22:41:32,085 | INFO | HHHPareto | [swiss_no_cbn] config w_help000_hone000_harm100 ...
+2026-08-20 22:47:47,621 | INFO | Model_mechanics.elo_swiss_multi_blade_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-20 22:48:56,343 | INFO | Model_mechanics.elo_swiss_multi_blade_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-20 23:09:04,989 | INFO | Model_mechanics.elo_swiss_multi_blade_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-20 23:21:46,800 | INFO | HHHPareto | [swiss_no_cbn] w_help000_hone000_harm100 → 7 responses written
+2026-08-20 23:21:46,800 | INFO | HHHPareto | [swiss_no_cbn] config w_help050_hone050_harm000 ...
+2026-08-21 00:13:46,721 | INFO | HHHPareto | [swiss_no_cbn] w_help050_hone050_harm000 → 7 responses written
+2026-08-21 00:13:46,722 | INFO | HHHPareto | [swiss_no_cbn] config w_help050_hone000_harm050 ...
+2026-08-21 00:14:59,849 | INFO | Model_mechanics.elo_swiss_multi_blade_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-21 00:39:59,526 | INFO | Model_mechanics.elo_swiss_multi_blade_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-21 00:59:03,689 | INFO | HHHPareto | [swiss_no_cbn] w_help050_hone000_harm050 → 7 responses written
+2026-08-21 00:59:03,690 | INFO | HHHPareto | [swiss_no_cbn] config w_help000_hone050_harm050 ...
+2026-08-21 01:05:37,255 | INFO | Model_mechanics.elo_swiss_multi_blade_mode_b | All candidate steps empty (EOS). Stopping.
+2026-08-21 01:36:26,118 | INFO | HHHPareto | [swiss_no_cbn] w_help000_hone050_harm050 → 7 responses written
+2026-08-21 01:36:26,119 | INFO | HHHPareto | [swiss_no_cbn] config w_help033_hone033_harm033 ...
+2026-08-21 02:28:50,485 | INFO | HHHPareto | [swiss_no_cbn] w_help033_hone033_harm033 → 7 responses written
+2026-08-21 02:28:50,486 | INFO | HHHPareto | Benchmark complete.
